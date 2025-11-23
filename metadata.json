@@ -1,0 +1,9 @@
+{
+  "name": "UrbanTrans WhatsApp Clone",
+  "description": "A WhatsApp-style chat application for urban transport connecting clients and drivers.",
+  "requestFramePermissions": [
+    "microphone",
+    "camera",
+    "geolocation"
+  ]
+}
