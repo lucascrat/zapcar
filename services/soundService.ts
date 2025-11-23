@@ -1,4 +1,5 @@
 
+
 // Simple Sound Service using Base64 to avoid external dependencies and ensure offline capability
 
 // Short "Pop" sound for outgoing messages
@@ -16,6 +17,7 @@ class SoundService {
   private sentAudio: HTMLAudioElement;
   private receivedAudio: HTMLAudioElement;
   private callAudio: HTMLAudioElement;
+  private hasNotificationPermission: boolean = false;
 
   constructor() {
     this.sentAudio = new Audio(SENT_URL);
@@ -27,6 +29,48 @@ class SoundService {
     this.sentAudio.load();
     this.receivedAudio.load();
     this.callAudio.load();
+  }
+
+  // Solicita permissão para notificações do sistema (Pop-up/Banner)
+  async requestPermission() {
+    if (!("Notification" in window)) {
+      console.warn("Este navegador não suporta notificações de desktop");
+      return;
+    }
+
+    if (Notification.permission === "granted") {
+      this.hasNotificationPermission = true;
+      return;
+    }
+
+    const permission = await Notification.requestPermission();
+    this.hasNotificationPermission = permission === "granted";
+  }
+
+  // Envia notificação que aparece sobre outros apps
+  sendNotification(title: string, body: string, icon?: string) {
+    if (this.hasNotificationPermission && document.hidden) {
+      try {
+        // Tentar vibrar dispositivo se suportado (Mobile)
+        if (navigator.vibrate) {
+            navigator.vibrate([200, 100, 200]);
+        }
+
+        const notification = new Notification(title, {
+          body: body,
+          icon: icon || 'https://cdn-icons-png.flaticon.com/512/733/733585.png',
+          vibrate: [200, 100, 200],
+          tag: 'urban-trans-msg' // Substitui notificações antigas para não acumular
+        } as any);
+
+        notification.onclick = function() {
+          window.focus();
+          notification.close();
+        };
+      } catch (e) {
+        console.error("Erro ao enviar notificação:", e);
+      }
+    }
   }
 
   playSent() {

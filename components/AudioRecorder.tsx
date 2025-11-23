@@ -1,3 +1,4 @@
+
 import React, { useState, useRef } from 'react';
 
 interface AudioRecorderProps {
@@ -12,9 +13,10 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({ onAudioReady, isRe
 
   // Detect supported mime type
   const getSupportedMimeType = () => {
+    // Safari e iOS preferem mp4/aac. Chrome/Android preferem webm/opus.
     const types = [
-      'audio/mp4',             // Safari/iOS preferido
-      'audio/webm;codecs=opus', // Chrome/Firefox preferido
+      'audio/mp4',             
+      'audio/webm;codecs=opus', 
       'audio/webm',
       'audio/ogg;codecs=opus',
       'audio/wav'
@@ -49,7 +51,7 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({ onAudioReady, isRe
         const blob = new Blob(chunksRef.current, { type });
         onAudioReady(blob, type);
         
-        // Parar todos os tracks para liberar o microfone (importante para mobile)
+        // Parar todos os tracks para liberar o microfone (importante para mobile e evitar bolinha verde presa)
         stream.getTracks().forEach(track => track.stop());
       };
 
@@ -71,10 +73,10 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({ onAudioReady, isRe
   return (
     <button
       onClick={isRecording ? stopRecording : startRecording}
-      className={`p-2 rounded-full transition-all ${isRecording ? 'bg-red-500 animate-pulse' : 'hover:bg-gray-700'}`}
+      className={`p-2 rounded-full transition-all ${isRecording ? 'bg-red-500 animate-pulse text-white' : 'hover:bg-gray-700 text-gray-400'}`}
       title={isRecording ? "Parar gravação" : "Gravar áudio"}
     >
-      <span className="material-icons text-gray-400 text-xl">
+      <span className="material-icons text-xl">
         {isRecording ? 'stop' : 'mic'}
       </span>
     </button>

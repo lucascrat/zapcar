@@ -1,7 +1,8 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { Message, UserProfile, UserRole } from '../types';
 import { AudioRecorder } from './AudioRecorder';
-import { sendMessage, generateUUID, uploadFile, supabase } from '../services/supabaseClient';
+import { sendMessage, generateUUID, uploadFile, supabase, updateUserLocation } from '../services/supabaseClient';
 import { generateSmartReply, analyzeImage } from '../services/geminiService';
 import { soundService } from '../services/soundService';
 
@@ -17,6 +18,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ currentUser, chatPartner
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessingAI, setIsProcessingAI] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [isGettingLocation, setIsGettingLocation] = useState(false);
   
   // WebRTC & Call State
   const [callStatus, setCallStatus] = useState<'idle' | 'calling' | 'incoming' | 'connected'>('idle');
@@ -191,12 +193,13 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ currentUser, chatPartner
     soundService.playRingtone(); // Play outgoing ringtone
 
     try {
-      // Request audio with constraints for better quality
+      // Configuração para evitar eco e ruído (Modo Real)
       const stream = await navigator.mediaDevices.getUserMedia({ 
           audio: {
               echoCancellation: true,
               noiseSuppression: true,
-              autoGainControl: true
+              autoGainControl: true,
+              sampleRate: 48000
           } 
       });
       localStream.current = stream;
@@ -225,7 +228,8 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ currentUser, chatPartner
             audio: {
                 echoCancellation: true,
                 noiseSuppression: true,
-                autoGainControl: true
+                autoGainControl: true,
+                sampleRate: 48000
             } 
         });
         localStream.current = stream;
@@ -301,6 +305,19 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ currentUser, chatPartner
   const handleSendText = async () => {
     if (!inputText.trim() || !chatPartner) return;
 
+    // Background: Update user location if client (Silent Update)
+    if (currentUser.role === UserRole.CLIENT) {
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(
+                (pos) => {
+                    updateUserLocation(currentUser.id, pos.coords.latitude, pos.coords.longitude);
+                },
+                (err) => console.warn("GPS silencioso falhou (permissão negada?)", err),
+                { enableHighAccuracy: true, timeout: 5000 }
+            );
+        }
+    }
+
     const newMessage: Message = {
       id: generateUUID(),
       sender_id: currentUser.id,
@@ -320,6 +337,48 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ currentUser, chatPartner
     } catch (e) {
       console.error("Failed to send message to DB", e);
     }
+  };
+
+  const handleSendLocation = async () => {
+    if (!chatPartner) return;
+    setIsGettingLocation(true);
+
+    if (!navigator.geolocation) {
+        alert("Geolocalização não suportada pelo seu navegador.");
+        setIsGettingLocation(false);
+        return;
+    }
+
+    navigator.geolocation.getCurrentPosition(async (position) => {
+        const { latitude, longitude } = position.coords;
+        const googleMapsUrl = `https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}`;
+        
+        // Também atualiza o perfil (garantia dupla)
+        updateUserLocation(currentUser.id, latitude, longitude);
+
+        const newMessage: Message = {
+            id: generateUUID(),
+            sender_id: currentUser.id,
+            receiver_id: chatPartner.id,
+            content: "📍 Localização Atual",
+            media_url: googleMapsUrl,
+            media_type: 'location',
+            created_at: new Date().toISOString(),
+            is_read: false
+        };
+
+        onSendMessage(newMessage);
+        soundService.playSent();
+        await sendMessage(newMessage);
+        setIsGettingLocation(false);
+    }, (error) => {
+        console.error("Erro GPS:", error);
+        alert("Não foi possível obter sua localização. Verifique as permissões do navegador.");
+        setIsGettingLocation(false);
+    }, {
+        enableHighAccuracy: true,
+        timeout: 10000
+    });
   };
 
   const handleAudioReady = async (audioBlob: Blob, mimeType: string) => {
@@ -473,7 +532,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ currentUser, chatPartner
             <span className="text-xs text-gray-400 truncate w-32 lg:w-auto">
               {chatPartner.role === UserRole.DRIVER 
                  ? (chatPartner.status === 'available' ? 'Online' : 'Ocupado')
-                 : 'Toque para dados do contato'
+                 : `Tel: ${chatPartner.phone || 'N/A'}`
               }
             </span>
           </div>
@@ -534,8 +593,25 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ currentUser, chatPartner
                      </div>
                   )}
 
+                  {msg.media_type === 'location' && msg.media_url && (
+                      <div className="min-w-[200px] cursor-pointer" onClick={() => window.open(msg.media_url, '_blank')}>
+                         <div className="bg-[#2a3942] rounded-lg overflow-hidden relative">
+                             {/* Map Mock Graphic */}
+                             <div className="h-32 bg-gray-700 opacity-80 flex items-center justify-center bg-[url('https://maps.googleapis.com/maps/api/staticmap?center=0,0&zoom=1&size=200x150&sensor=false')] bg-cover">
+                                 <div className="w-8 h-8 rounded-full bg-red-500/90 border-2 border-white flex items-center justify-center shadow-lg animate-bounce">
+                                     <span className="material-icons text-white text-xs">place</span>
+                                 </div>
+                             </div>
+                             <div className="p-2 flex items-center gap-2 bg-[#202c33]">
+                                 <span className="material-icons text-red-400">location_on</span>
+                                 <span className="text-blue-300 text-sm hover:underline">Ver localização em tempo real</span>
+                             </div>
+                         </div>
+                      </div>
+                  )}
+
                   {/* Text Content */}
-                  {msg.content !== 'Imagem' && msg.content !== 'Mensagem de voz' && (
+                  {msg.media_type === 'text' && (
                      <p className="px-1 pb-1 leading-relaxed break-words text-[15px] md:text-[14px]">{msg.content}</p>
                   )}
                   
@@ -565,6 +641,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ currentUser, chatPartner
             onClick={() => fileInputRef.current?.click()}
             className="p-2 text-gray-400 hover:bg-gray-700 rounded-full transition active:scale-90"
             disabled={isUploading}
+            title="Enviar Foto"
             >
             <span className="material-icons transform rotate-45">attach_file</span>
             </button>
@@ -575,6 +652,16 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ currentUser, chatPartner
             accept="image/*" 
             onChange={handleImageUpload} 
             />
+
+            {/* Location Button */}
+            <button 
+            onClick={handleSendLocation}
+            className={`p-2 text-gray-400 hover:bg-gray-700 rounded-full transition active:scale-90 ${isGettingLocation ? 'text-green-500 animate-pulse' : ''}`}
+            disabled={isUploading || isGettingLocation}
+            title="Enviar Localização Atual"
+            >
+            <span className="material-icons">location_on</span>
+            </button>
         </div>
 
         {/* AI Suggestion for Drivers */}
@@ -595,8 +682,8 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ currentUser, chatPartner
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleSendText()}
-            placeholder={isUploading ? "Enviando arquivo..." : "Mensagem"}
-            disabled={isUploading}
+            placeholder={isUploading ? "Enviando arquivo..." : isGettingLocation ? "Obtendo GPS..." : "Mensagem"}
+            disabled={isUploading || isGettingLocation}
             className="flex-1 bg-transparent border-none outline-none text-white placeholder-gray-400 text-[16px] md:text-sm max-h-20 overflow-y-auto disabled:opacity-50"
           />
         </div>

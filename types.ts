@@ -3,8 +3,7 @@
 // ESTE É UM ARQUIVO TYPESCRIPT (.ts) PARA A APLICAÇÃO REACT.
 // ⚠️ NÃO COPIE ESTE CÓDIGO PARA O SUPABASE SQL EDITOR. ⚠️
 //
-// O CÓDIGO CORRETO PARA O SUPABASE ESTÁ NO ARQUIVO 'supabase_setup.sql'.
-// POR FAVOR, LEIA O ARQUIVO 'supabase_setup.sql'.
+// O CÓDIGO CORRETO PARA O SUPABASE ESTÁ NO ARQUIVO 'supabase_setup.sql' (supa.ts).
 
 export enum UserRole {
   CLIENT = 'client',
@@ -21,6 +20,7 @@ export enum DriverStatus {
 export interface UserProfile {
   id: string;
   username: string;
+  phone?: string; // Novo campo
   role: UserRole;
   status: DriverStatus;
   avatar_url?: string;
@@ -38,7 +38,7 @@ export interface Message {
   receiver_id: string;
   content: string;
   media_url?: string;
-  media_type: 'text' | 'audio' | 'image';
+  media_type: 'text' | 'audio' | 'image' | 'location';
   created_at: string;
   is_read: boolean;
 }

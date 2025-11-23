@@ -1,5 +1,4 @@
 
-
 export const SUPABASE_SETUP_SQL = `
 -- =================================================================================
 -- RESET COMPLETO E RECRIACÃO DO BANCO DE DADOS + STORAGE
@@ -18,6 +17,7 @@ CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 CREATE TABLE public.profiles (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     username TEXT NOT NULL,
+    phone TEXT, 
     role TEXT NOT NULL CHECK (role IN ('client', 'driver', 'admin')),
     status TEXT NOT NULL DEFAULT 'available',
     avatar_url TEXT,
@@ -37,7 +37,7 @@ CREATE TABLE public.messages (
     receiver_id UUID NOT NULL,
     content TEXT,
     media_url TEXT,
-    media_type TEXT CHECK (media_type IN ('text', 'audio', 'image')),
+    media_type TEXT CHECK (media_type IN ('text', 'audio', 'image', 'location')),
     is_read BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );

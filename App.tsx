@@ -1,9 +1,10 @@
 
-import React, { useState, useEffect } from 'react';
+
+import React, { useState, useEffect, useRef } from 'react';
 import { ChatWindow } from './components/ChatWindow';
 import { AdminDashboard } from './components/AdminDashboard';
 import { 
-  registerTempClient, 
+  registerClientWithPhoto, 
   fetchOnlineDrivers, 
   subscribeToMessages, 
   subscribeToProfiles,
@@ -27,11 +28,18 @@ export default function App() {
   const [loginMode, setLoginMode] = useState<'client' | 'driver' | 'admin'>('client'); 
   const [isRegisteringDriver, setIsRegisteringDriver] = useState(false);
   const [entryName, setEntryName] = useState('');
+  const [entryPhone, setEntryPhone] = useState('');
+  const [entryAvatarFile, setEntryAvatarFile] = useState<File | null>(null);
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  
   const [authPassword, setAuthPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
   // Mobile View State
   const [showChatOnMobile, setShowChatOnMobile] = useState(false);
+
+  // Refs
+  const avatarInputRef = useRef<HTMLInputElement>(null);
 
   // --- Lifecycle ---
 
@@ -57,7 +65,6 @@ export default function App() {
     loadContacts();
     
     // Subscribe to profile changes (e.g. new driver online, driver status change)
-    // This makes the list update in real-time
     const profileSub = subscribeToProfiles(() => {
         loadContacts();
     });
@@ -82,16 +89,25 @@ export default function App() {
 
     // 2. Subscribe to new messages
     const sub = subscribeToMessages(currentUser.id, (newMsg) => {
-      // Play sound for incoming messages
+      // Logic for received messages
       if (newMsg.sender_id !== currentUser.id) {
         soundService.playReceived();
         
+        // System Notification Logic (Background/Overlay)
+        // If app is hidden OR if user is a driver (to ensure they don't miss it even if app is open but they looked away)
+        if (document.hidden || currentUser.role === UserRole.DRIVER) {
+             const senderName = contactList.find(c => c.id === newMsg.sender_id)?.username || "Novo Cliente";
+             soundService.sendNotification(
+                 `Nova mensagem de ${senderName}`, 
+                 newMsg.media_type === 'text' ? newMsg.content : 'Enviou um arquivo de mídia'
+             );
+        }
+
         // If a driver receives a message from a NEW client, we need to refresh the contact list
         if (currentUser.role === UserRole.DRIVER) {
             setContactList(prev => {
                 const exists = prev.some(c => c.id === newMsg.sender_id);
                 if (!exists) {
-                    // Ideally we fetch just that user, but reloading list is safe for now
                     fetchMyClients(currentUser.id).then(setContactList);
                 }
                 return prev;
@@ -101,7 +117,6 @@ export default function App() {
 
       // If this message belongs to the active chat, append it
       if (activeContact && (newMsg.sender_id === activeContact.id || newMsg.receiver_id === activeContact.id)) {
-          // Check to avoid duplicates (Supabase realtime might sometimes race with local optimistic update if not handled carefully)
           setMessages(prev => {
               if (prev.some(m => m.id === newMsg.id)) return prev;
               return [...prev, newMsg];
@@ -112,9 +127,17 @@ export default function App() {
     return () => {
       sub.unsubscribe();
     };
-  }, [currentUser, activeContact]);
+  }, [currentUser, activeContact, contactList]); // Added contactList to dependency to help with notification naming
 
   // --- Handlers ---
+
+  const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+        setEntryAvatarFile(file);
+        setAvatarPreview(URL.createObjectURL(file));
+    }
+  };
 
   const handleLogin = async () => {
     if (!entryName.trim()) return;
@@ -122,7 +145,13 @@ export default function App() {
 
     try {
       if (loginMode === 'client') {
-        const user = await registerTempClient(entryName);
+        if (!entryPhone.trim()) {
+            alert("Por favor, insira seu telefone.");
+            setIsLoading(false);
+            return;
+        }
+        // Registra ou Loga Cliente com Foto e Telefone
+        const user = await registerClientWithPhoto(entryName, entryPhone, entryAvatarFile || undefined);
         if (user) {
           setCurrentUser(user);
         }
@@ -130,16 +159,18 @@ export default function App() {
       else if (loginMode === 'driver') {
         if (isRegisteringDriver) {
           const user = await registerDriver(entryName);
-          if (user) setCurrentUser(user);
+          if (user) {
+              setCurrentUser(user);
+              soundService.requestPermission(); // Ask permission immediately on signup
+          }
         } else {
           // Login
           const user = await loginDriver(entryName);
           if (user) {
             setCurrentUser(user);
+            soundService.requestPermission(); // Ask permission on login
           } else {
-             // Only alert if we didn't just crash (user is null)
-             // We check the console for details, but tell user generic message
-             alert("Motorista não encontrado ou erro de conexão. Verifique o nome ou cadastre-se.");
+             alert("Motorista não encontrado. Verifique o nome ou cadastre-se.");
           }
         }
       }
@@ -158,7 +189,7 @@ export default function App() {
       }
     } catch (e) {
       console.error("Login Error", e);
-      alert("Ocorreu um erro inesperado ao tentar entrar. Tente novamente.");
+      alert("Ocorreu um erro inesperado. Tente novamente.");
     } finally {
       setIsLoading(false);
     }
@@ -206,7 +237,7 @@ export default function App() {
           
           {loginMode !== 'client' && (
             <button 
-              onClick={() => { setLoginMode('client'); setEntryName(''); }}
+              onClick={() => { setLoginMode('client'); setEntryName(''); setEntryPhone(''); setAvatarPreview(null); }}
               className="p-3 bg-white text-gray-400 shadow-lg rounded-full hover:text-whatsapp-green"
               title="Voltar para Cliente"
             >
@@ -216,12 +247,35 @@ export default function App() {
         </div>
 
         <div className="bg-white p-8 rounded-xl shadow-xl w-[90%] max-w-md text-center z-10">
-          <div className="mb-6 flex justify-center">
-             <div className={`w-20 h-20 rounded-full flex items-center justify-center shadow-lg ${loginMode === 'admin' ? 'bg-blue-600' : 'bg-whatsapp-green'}`}>
-               <span className="material-icons text-4xl text-white">
-                 {loginMode === 'client' ? 'person' : loginMode === 'driver' ? 'directions_car' : 'security'}
-               </span>
-             </div>
+          <div className="mb-6 flex flex-col items-center">
+             {/* Avatar Picker for Client */}
+             {loginMode === 'client' ? (
+                 <div className="relative cursor-pointer group" onClick={() => avatarInputRef.current?.click()}>
+                    <div className="w-24 h-24 rounded-full bg-gray-200 border-4 border-white shadow-lg overflow-hidden flex items-center justify-center">
+                        {avatarPreview ? (
+                            <img src={avatarPreview} alt="Preview" className="w-full h-full object-cover" />
+                        ) : (
+                            <span className="material-icons text-5xl text-gray-400">add_a_photo</span>
+                        )}
+                    </div>
+                    <div className="absolute bottom-0 right-0 bg-whatsapp-green p-2 rounded-full text-white shadow-sm transform scale-75">
+                        <span className="material-icons text-sm">edit</span>
+                    </div>
+                    <input 
+                        type="file" 
+                        ref={avatarInputRef} 
+                        className="hidden" 
+                        accept="image/*" 
+                        onChange={handleAvatarChange}
+                    />
+                 </div>
+             ) : (
+                 <div className={`w-20 h-20 rounded-full flex items-center justify-center shadow-lg ${loginMode === 'admin' ? 'bg-blue-600' : 'bg-whatsapp-green'}`}>
+                    <span className="material-icons text-4xl text-white">
+                        {loginMode === 'driver' ? 'directions_car' : 'security'}
+                    </span>
+                 </div>
+             )}
           </div>
           
           <h2 className="text-2xl font-bold text-whatsapp-dark mb-2">
@@ -229,27 +283,37 @@ export default function App() {
           </h2>
           <p className="text-gray-500 mb-6 text-sm">
             {loginMode === 'client' 
-              ? 'Informe seu nome para começar.' 
+              ? 'Preencha seus dados para começar.' 
               : loginMode === 'driver'
-                ? (isRegisteringDriver ? 'Preencha seus dados para trabalhar conosco.' : 'Entre com seu nome para ver solicitações.')
-                : 'Gerencie a frota de motoristas.'}
+                ? (isRegisteringDriver ? 'Cadastro de parceiro.' : 'Entre para ver solicitações.')
+                : 'Acesso restrito.'}
           </p>
 
           <div className="space-y-3">
             <input
               type="text"
-              placeholder={loginMode === 'client' ? "Seu Nome" : loginMode === 'admin' ? "Usuário Admin" : "Nome do Motorista"}
+              placeholder={loginMode === 'client' ? "Seu Nome Completo" : "Nome de Usuário"}
               value={entryName}
               onChange={e => setEntryName(e.target.value)}
-              disabled={loginMode === 'admin' || isLoading}
-              onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
+              disabled={isLoading}
               className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:border-whatsapp-green transition bg-gray-50"
             />
+
+            {loginMode === 'client' && (
+                <input
+                    type="tel"
+                    placeholder="Seu Telefone (Whatsapp)"
+                    value={entryPhone}
+                    onChange={e => setEntryPhone(e.target.value)}
+                    disabled={isLoading}
+                    className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:border-whatsapp-green transition bg-gray-50"
+                />
+            )}
 
             {(loginMode === 'driver' || loginMode === 'admin') && (
               <input
                 type="password"
-                placeholder={loginMode === 'admin' ? "Senha Admin" : isRegisteringDriver ? "Crie uma Senha (Opcional)" : "Senha (não verificado no demo)"}
+                placeholder={loginMode === 'admin' ? "Senha Admin" : isRegisteringDriver ? "Senha (Opcional)" : "Senha"}
                 value={authPassword}
                 onChange={e => setAuthPassword(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
@@ -268,7 +332,7 @@ export default function App() {
               {isLoading ? (
                   <span className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
               ) : (
-                  isRegisteringDriver ? 'CADASTRAR' : 'ENTRAR'
+                  loginMode === 'client' ? 'INICIAR ATENDIMENTO' : (isRegisteringDriver ? 'CADASTRAR' : 'ENTRAR')
               )}
             </button>
           </div>
@@ -298,7 +362,7 @@ export default function App() {
         {/* My Profile Header */}
         <div className="h-16 px-4 flex items-center justify-between shrink-0 bg-whatsapp-panel shadow-sm z-10">
           <div className="flex items-center gap-3">
-             <img src={currentUser.avatar_url || 'https://via.placeholder.com/40'} alt="Me" className="w-10 h-10 rounded-full border border-gray-600" />
+             <img src={currentUser.avatar_url || 'https://via.placeholder.com/40'} alt="Me" className="w-10 h-10 rounded-full border border-gray-600 object-cover" />
              <div>
                <p className="text-gray-200 font-medium truncate max-w-[150px]">{currentUser.username}</p>
                <span className="text-xs text-gray-400 uppercase font-bold tracking-wider">
@@ -353,7 +417,7 @@ export default function App() {
                   <p className="text-gray-400 text-sm truncate">
                     {contact.role === UserRole.DRIVER 
                         ? (contact.status === DriverStatus.AVAILABLE ? "Disponível - Toque para conversar" : "Ocupado no momento") 
-                        : "Cliente - Toque para responder"}
+                        : `Tel: ${contact.phone || 'Sem telefone'}`}
                   </p>
                 </div>
               </div>
@@ -385,10 +449,14 @@ export default function App() {
                   <span className="material-icons">arrow_back</span>
                 </button>
                 <div className="flex items-center flex-1" onClick={() => {/* Show Contact Info */}}>
-                   <img src={activeContact.avatar_url} className="w-9 h-9 rounded-full mr-3" alt="" />
+                   <img src={activeContact.avatar_url || 'https://via.placeholder.com/40'} className="w-9 h-9 rounded-full mr-3 object-cover" alt="" />
                    <div className="flex flex-col">
                      <span className="text-white font-medium text-base leading-tight">{activeContact.username}</span>
-                     <span className="text-xs text-gray-400">Toque para dados</span>
+                     <span className="text-xs text-gray-400 truncate">
+                        {activeContact.role === UserRole.DRIVER 
+                            ? (activeContact.status === 'available' ? 'Online' : 'Ocupado') 
+                            : activeContact.phone || 'Detalhes'}
+                     </span>
                    </div>
                 </div>
                 <div className="flex gap-3 pr-2">
@@ -412,7 +480,7 @@ export default function App() {
               <h1 className="text-3xl font-light text-gray-200 mb-4">{APP_NAME}</h1>
               <p className="text-gray-400 text-sm max-w-md">
                 Envie e receba mensagens sem precisar manter seu celular conectado.<br/>
-                Use o UrbanTrans em até 4 aparelhos e 1 celular.
+                Otimizado para comunicação rápida entre motoristas e passageiros.
               </p>
               <div className="mt-8 flex items-center gap-2 text-gray-500 text-xs">
                  <span className="material-icons text-[12px]">lock</span>

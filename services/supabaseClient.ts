@@ -1,3 +1,4 @@
+
 import { createClient } from '@supabase/supabase-js';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from '../constants';
 import { Message, UserProfile, UserRole, DriverStatus } from '../types';
@@ -79,6 +80,20 @@ export const updateDriverStatus = async (driverId: string, status: DriverStatus)
     return false;
   }
   return true;
+};
+
+export const updateUserLocation = async (userId: string, lat: number, lng: number): Promise<boolean> => {
+    const { error } = await supabase
+        .from('profiles')
+        .update({ lat, lng })
+        .eq('id', userId);
+
+    if (error) {
+        // Silent fail for location updates usually
+        console.warn("Location update failed", error);
+        return false;
+    }
+    return true;
 };
 
 export const updateDriverVehicle = async (driverId: string, vehicleData: { vehicle_model?: string, vehicle_plate?: string, vehicle_color?: string }): Promise<boolean> => {
@@ -180,9 +195,12 @@ export const uploadFile = async (file: Blob, folder: 'audio' | 'images', extensi
     try {
         let fileExt = extension;
         
-        // Fallback defaults
+        // Fallback defaults if no extension provided
         if (!fileExt) {
-             fileExt = folder === 'audio' ? 'webm' : 'jpg';
+             if (file.type === 'image/jpeg') fileExt = 'jpg';
+             else if (file.type === 'image/png') fileExt = 'png';
+             else if (file.type.includes('audio')) fileExt = 'webm'; // Default legacy
+             else fileExt = 'bin';
         }
         
         // Sanitize extension (remove leading dot if exists)
@@ -190,7 +208,7 @@ export const uploadFile = async (file: Blob, folder: 'audio' | 'images', extensi
 
         const fileName = `${folder}/${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
 
-        // Ensure we pass the correct content type if possible, though Supabase usually detects it
+        // Ensure we pass the correct content type if possible
         const options: any = {
             cacheControl: '3600',
             upsert: false
@@ -244,7 +262,6 @@ export const subscribeToMessages = (
     .subscribe();
 };
 
-// New function to listen for profile changes (drivers going online/offline)
 export const subscribeToProfiles = (
   onUpdate: () => void
 ) => {
@@ -260,32 +277,62 @@ export const subscribeToProfiles = (
     .subscribe();
 }
 
-export const registerTempClient = async (username: string): Promise<UserProfile | null> => {
+// Updated Client Registration/Login
+export const registerClientWithPhoto = async (username: string, phone: string, avatarFile?: File): Promise<UserProfile | null> => {
   try {
+    // 1. Tentar encontrar usuário pelo telefone
+    const { data: existing, error: findError } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('phone', phone)
+      .eq('role', UserRole.CLIENT)
+      .maybeSingle();
+
+    if (existing) {
+       return existing as UserProfile;
+    }
+
+    // 2. Se não existe, fazer upload da foto (se houver)
+    let avatar_url = `https://ui-avatars.com/api/?name=${encodeURIComponent(username)}&background=25D366&color=fff`;
+    
+    if (avatarFile) {
+        // Detectar extensão simples
+        const ext = avatarFile.name.split('.').pop() || 'jpg';
+        const url = await uploadFile(avatarFile, 'images', ext);
+        if (url) avatar_url = url;
+    }
+
+    // 3. Criar perfil
     const profileInsert = {
       username,
+      phone,
       role: UserRole.CLIENT,
       status: DriverStatus.AVAILABLE,
-      avatar_url: `https://i.pravatar.cc/150?u=${Math.random()}` 
+      avatar_url
     };
 
     const { data, error } = await supabase
       .from('profiles')
       .insert([profileInsert])
-      .select() // Return the created row with the generated ID
+      .select()
       .single();
     
     if (error) {
-      handleDbError(error, "registerTempClient");
+      handleDbError(error, "registerClientWithPhoto");
       return null;
     }
     
     return data as UserProfile;
   } catch (err: any) {
     console.error("Exceção no cadastro cliente:", err);
-    alert(`Erro ao cadastrar cliente: ${err?.message || 'Erro desconhecido'}`);
+    alert(`Erro ao processar: ${err?.message || 'Erro desconhecido'}`);
     return null;
   }
+};
+
+// Mantido para compatibilidade, mas redireciona para o novo
+export const registerTempClient = async (username: string): Promise<UserProfile | null> => {
+  return registerClientWithPhoto(username, "00000000");
 };
 
 export const registerDriver = async (username: string): Promise<UserProfile | null> => {
