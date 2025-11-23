@@ -1,5 +1,4 @@
 
-
 import React, { useEffect, useState, useRef } from 'react';
 import { fetchAllDriversForAdmin, deleteDriver, updateDriverStatus, updateDriverVehicle } from '../services/supabaseClient';
 import { UserProfile, DriverStatus, CallRecord } from '../types';
@@ -25,7 +24,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onL
   const [showDetailMobile, setShowDetailMobile] = useState(false);
 
   // Vehicle Form State
-  const [vehicleForm, setVehicleForm] = useState({ model: '', plate: '', color: '' });
+  const [vehicleForm, setVehicleForm] = useState({ model: '', plate: '', color: '', type: 'car' as 'car' | 'motorcycle' });
   const [isSavingVehicle, setIsSavingVehicle] = useState(false);
 
   // Audio Simulation State
@@ -59,7 +58,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onL
       setVehicleForm({
         model: selectedDriver.vehicle_model || '',
         plate: selectedDriver.vehicle_plate || '',
-        color: selectedDriver.vehicle_color || ''
+        color: selectedDriver.vehicle_color || '',
+        type: selectedDriver.vehicle_type || 'car'
       });
       setIsPlayingAudio(false);
       setActiveTab('details'); // Reset tab on new selection
@@ -134,7 +134,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onL
         }).addTo(mapInstanceRef.current);
 
         const customIcon = L.icon({
-          iconUrl: 'https://cdn-icons-png.flaticon.com/512/3097/3097180.png', // Car icon
+          iconUrl: selectedDriver?.vehicle_type === 'motorcycle' 
+            ? 'https://cdn-icons-png.flaticon.com/512/3097/3097136.png' // Moto
+            : 'https://cdn-icons-png.flaticon.com/512/3097/3097180.png', // Car
           iconSize: [40, 40],
           iconAnchor: [20, 20],
           popupAnchor: [0, -20]
@@ -221,7 +223,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onL
     const success = await updateDriverVehicle(selectedDriver.id, {
         vehicle_model: vehicleForm.model,
         vehicle_plate: vehicleForm.plate,
-        vehicle_color: vehicleForm.color
+        vehicle_color: vehicleForm.color,
+        vehicle_type: vehicleForm.type
     });
     
     if (success) {
@@ -229,13 +232,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onL
             ...d, 
             vehicle_model: vehicleForm.model,
             vehicle_plate: vehicleForm.plate,
-            vehicle_color: vehicleForm.color
+            vehicle_color: vehicleForm.color,
+            vehicle_type: vehicleForm.type
         } : d));
         setSelectedDriver(prev => prev ? { 
             ...prev, 
             vehicle_model: vehicleForm.model,
             vehicle_plate: vehicleForm.plate,
-            vehicle_color: vehicleForm.color
+            vehicle_color: vehicleForm.color,
+            vehicle_type: vehicleForm.type
         } : null);
         alert("Veículo atualizado!");
     }
@@ -319,14 +324,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onL
                     className={`absolute bottom-0 right-0 w-4 h-4 rounded-full border-2 border-white ${
                     driver.status === 'available' ? 'bg-green-500' : driver.status === 'busy' ? 'bg-red-500' : 'bg-gray-400'
                   }`}></span>
-                  
-                  {/* Tooltip for status on hover */}
-                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-black text-white text-xs rounded opacity-0 group-hover:opacity-100 transition pointer-events-none whitespace-nowrap z-20">
-                    {driver.status === DriverStatus.AVAILABLE ? 'Disponível' : driver.status === DriverStatus.BUSY ? 'Ocupado' : 'Offline'}
-                  </div>
                 </div>
-                <div className="flex-1">
-                  <h3 className="text-sm font-semibold text-gray-800">{driver.username}</h3>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1">
+                    <h3 className="text-sm font-semibold text-gray-800 truncate">{driver.username}</h3>
+                    <span 
+                        className={`material-icons text-xs ${driver.vehicle_type === 'motorcycle' ? 'text-orange-400' : 'text-blue-400'}`}
+                        title={driver.vehicle_type === 'motorcycle' ? 'Moto' : 'Carro'}
+                    >
+                        {driver.vehicle_type === 'motorcycle' ? 'two_wheeler' : 'directions_car'}
+                    </span>
+                  </div>
                   <p className="text-xs text-gray-500">ID: {driver.id.slice(0, 8)}...</p>
                 </div>
                 <span className="material-icons text-gray-300 text-sm">chevron_right</span>
@@ -365,7 +373,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onL
             <div className="pt-12 md:pt-16 px-6 md:px-8 pb-2 shrink-0 bg-white">
                <div className="flex flex-col md:flex-row md:justify-between md:items-start gap-4 mb-4">
                  <div>
-                   <h2 className="text-2xl font-bold text-gray-800">{selectedDriver.username}</h2>
+                   <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
+                       {selectedDriver.username}
+                       <span 
+                            className={`material-icons text-lg ${selectedDriver.vehicle_type === 'motorcycle' ? 'text-orange-500' : 'text-blue-500'}`}
+                            title={selectedDriver.vehicle_type === 'motorcycle' ? 'Moto' : 'Carro'}
+                        >
+                            {selectedDriver.vehicle_type === 'motorcycle' ? 'two_wheeler' : 'directions_car'}
+                        </span>
+                   </h2>
                    <div className="flex items-center gap-2 mt-1">
                      <span className={`px-2 py-0.5 rounded text-xs font-medium uppercase ${
                         selectedDriver.status === 'available' ? 'bg-green-100 text-green-800' :
@@ -494,7 +510,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onL
                                 <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider">Dados do Veículo</h3>
                                 <span className="material-icons text-gray-300">directions_car</span>
                             </div>
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-xs text-gray-500 mb-1">Tipo de Veículo</label>
+                                    <select 
+                                        value={vehicleForm.type}
+                                        onChange={e => setVehicleForm({...vehicleForm, type: e.target.value as any})}
+                                        className="w-full p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 ring-whatsapp-green/20 outline-none bg-white"
+                                    >
+                                        <option value="car">Carro</option>
+                                        <option value="motorcycle">Moto</option>
+                                    </select>
+                                </div>
                                 <div>
                                     <label className="block text-xs text-gray-500 mb-1">Modelo</label>
                                     <input 

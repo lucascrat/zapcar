@@ -1,6 +1,6 @@
 {
-  "name": "UrbanTrans WhatsApp Clone",
-  "description": "A WhatsApp-style chat application for urban transport connecting clients and drivers.",
+  "name": "chegoja",
+  "description": "O melhor aplicativo de mobilidade urbana do Brasil",
   "requestFramePermissions": [
     "microphone",
     "camera",

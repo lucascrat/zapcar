@@ -96,7 +96,15 @@ export const updateUserLocation = async (userId: string, lat: number, lng: numbe
     return true;
 };
 
-export const updateDriverVehicle = async (driverId: string, vehicleData: { vehicle_model?: string, vehicle_plate?: string, vehicle_color?: string }): Promise<boolean> => {
+export const updateDriverVehicle = async (
+  driverId: string, 
+  vehicleData: { 
+    vehicle_model?: string, 
+    vehicle_plate?: string, 
+    vehicle_color?: string,
+    vehicle_type?: 'car' | 'motorcycle' 
+  }
+): Promise<boolean> => {
   const { error } = await supabase
     .from('profiles')
     .update(vehicleData)

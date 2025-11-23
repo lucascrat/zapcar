@@ -468,7 +468,7 @@ export default function App() {
                       <h3 className="text-gray-100 font-medium truncate text-[16px]">{contact.username}</h3>
                       {contact.role === UserRole.DRIVER && (
                           <span 
-                            className="material-icons text-gray-400 text-sm ml-1" 
+                            className={`material-icons text-sm ml-1 ${contact.vehicle_type === 'motorcycle' ? 'text-orange-400' : 'text-blue-400'}`}
                             title={contact.vehicle_type === 'motorcycle' ? 'Moto' : 'Carro'}
                           >
                              {contact.vehicle_type === 'motorcycle' ? 'two_wheeler' : 'directions_car'}
@@ -520,7 +520,7 @@ export default function App() {
                      <span className="text-white font-medium text-base leading-tight flex items-center gap-1">
                         {activeContact.username}
                         {activeContact.role === UserRole.DRIVER && (
-                          <span className="material-icons text-gray-400 text-xs">
+                          <span className={`material-icons text-xs ${activeContact.vehicle_type === 'motorcycle' ? 'text-orange-400' : 'text-blue-400'}`}>
                              {activeContact.vehicle_type === 'motorcycle' ? 'two_wheeler' : 'directions_car'}
                           </span>
                         )}

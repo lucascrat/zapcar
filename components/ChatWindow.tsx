@@ -528,7 +528,17 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ currentUser, chatPartner
             )}
           </div>
           <div className="flex flex-col">
-            <span className="text-gray-100 font-medium text-base">{chatPartner.username}</span>
+            <span className="text-gray-100 font-medium text-base flex items-center gap-2">
+                {chatPartner.username}
+                {chatPartner.role === UserRole.DRIVER && (
+                    <span 
+                        className={`material-icons text-sm ${chatPartner.vehicle_type === 'motorcycle' ? 'text-orange-400' : 'text-blue-400'}`}
+                        title={chatPartner.vehicle_type === 'motorcycle' ? 'Moto' : 'Carro'}
+                    >
+                        {chatPartner.vehicle_type === 'motorcycle' ? 'two_wheeler' : 'directions_car'}
+                    </span>
+                )}
+            </span>
             <span className="text-xs text-gray-400 truncate w-32 lg:w-auto">
               {chatPartner.role === UserRole.DRIVER 
                  ? (chatPartner.status === 'available' ? 'Online' : 'Ocupado')
