@@ -1,5 +1,4 @@
 
-
 import React, { useState, useEffect, useRef } from 'react';
 import { ChatWindow } from './components/ChatWindow';
 import { AdminDashboard } from './components/AdminDashboard';
@@ -31,6 +30,7 @@ export default function App() {
   const [entryPhone, setEntryPhone] = useState('');
   const [entryAvatarFile, setEntryAvatarFile] = useState<File | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  const [entryVehicleType, setEntryVehicleType] = useState<'car' | 'motorcycle'>('car');
   
   const [authPassword, setAuthPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -40,8 +40,44 @@ export default function App() {
 
   // Refs
   const avatarInputRef = useRef<HTMLInputElement>(null);
+  const wakeLockRef = useRef<any>(null);
 
   // --- Lifecycle ---
+
+  // Wake Lock for Drivers (Keep Screen On)
+  useEffect(() => {
+    if (currentUser?.role === UserRole.DRIVER) {
+      const requestWakeLock = async () => {
+        try {
+          if ('wakeLock' in navigator) {
+            wakeLockRef.current = await (navigator as any).wakeLock.request('screen');
+            console.log("Wake Lock is active");
+          }
+        } catch (err) {
+          console.warn("Wake Lock request failed:", err);
+        }
+      };
+
+      requestWakeLock();
+
+      // Re-request wake lock if visibility changes (e.g. user switches tabs and comes back)
+      const handleVisibilityChange = () => {
+        if (document.visibilityState === 'visible' && currentUser?.role === UserRole.DRIVER) {
+          requestWakeLock();
+        }
+      };
+
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+      
+      return () => {
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
+        if (wakeLockRef.current) {
+          wakeLockRef.current.release();
+          wakeLockRef.current = null;
+        }
+      };
+    }
+  }, [currentUser]);
 
   // Load Contacts based on Role and Listen for changes
   useEffect(() => {
@@ -158,7 +194,8 @@ export default function App() {
       } 
       else if (loginMode === 'driver') {
         if (isRegisteringDriver) {
-          const user = await registerDriver(entryName);
+          // Pass vehicle type
+          const user = await registerDriver(entryName, entryVehicleType);
           if (user) {
               setCurrentUser(user);
               soundService.requestPermission(); // Ask permission immediately on signup
@@ -310,6 +347,25 @@ export default function App() {
                 />
             )}
 
+            {loginMode === 'driver' && isRegisteringDriver && (
+                <div className="flex gap-2">
+                    <button 
+                        onClick={() => setEntryVehicleType('car')}
+                        className={`flex-1 p-2 rounded-lg border flex items-center justify-center gap-2 transition ${entryVehicleType === 'car' ? 'bg-whatsapp-green text-white border-whatsapp-green' : 'bg-gray-50 text-gray-500 border-gray-300'}`}
+                    >
+                        <span className="material-icons text-sm">directions_car</span>
+                        Carro
+                    </button>
+                    <button 
+                        onClick={() => setEntryVehicleType('motorcycle')}
+                        className={`flex-1 p-2 rounded-lg border flex items-center justify-center gap-2 transition ${entryVehicleType === 'motorcycle' ? 'bg-whatsapp-green text-white border-whatsapp-green' : 'bg-gray-50 text-gray-500 border-gray-300'}`}
+                    >
+                        <span className="material-icons text-sm">two_wheeler</span>
+                        Moto
+                    </button>
+                </div>
+            )}
+
             {(loginMode === 'driver' || loginMode === 'admin') && (
               <input
                 type="password"
@@ -408,7 +464,17 @@ export default function App() {
               
               <div className="flex-1 min-w-0 flex flex-col justify-center">
                 <div className="flex justify-between items-center mb-1">
-                  <h3 className="text-gray-100 font-medium truncate text-[16px]">{contact.username}</h3>
+                  <div className="flex items-center gap-1">
+                      <h3 className="text-gray-100 font-medium truncate text-[16px]">{contact.username}</h3>
+                      {contact.role === UserRole.DRIVER && (
+                          <span 
+                            className="material-icons text-gray-400 text-sm ml-1" 
+                            title={contact.vehicle_type === 'motorcycle' ? 'Moto' : 'Carro'}
+                          >
+                             {contact.vehicle_type === 'motorcycle' ? 'two_wheeler' : 'directions_car'}
+                          </span>
+                      )}
+                  </div>
                   <span className="text-xs text-gray-500">
                      {contact.role === UserRole.DRIVER && contact.status === DriverStatus.AVAILABLE ? "Online" : "Agora"}
                   </span>
@@ -451,7 +517,14 @@ export default function App() {
                 <div className="flex items-center flex-1" onClick={() => {/* Show Contact Info */}}>
                    <img src={activeContact.avatar_url || 'https://via.placeholder.com/40'} className="w-9 h-9 rounded-full mr-3 object-cover" alt="" />
                    <div className="flex flex-col">
-                     <span className="text-white font-medium text-base leading-tight">{activeContact.username}</span>
+                     <span className="text-white font-medium text-base leading-tight flex items-center gap-1">
+                        {activeContact.username}
+                        {activeContact.role === UserRole.DRIVER && (
+                          <span className="material-icons text-gray-400 text-xs">
+                             {activeContact.vehicle_type === 'motorcycle' ? 'two_wheeler' : 'directions_car'}
+                          </span>
+                        )}
+                     </span>
                      <span className="text-xs text-gray-400 truncate">
                         {activeContact.role === UserRole.DRIVER 
                             ? (activeContact.status === 'available' ? 'Online' : 'Ocupado') 

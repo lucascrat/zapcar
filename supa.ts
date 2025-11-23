@@ -24,6 +24,7 @@ CREATE TABLE public.profiles (
     vehicle_model TEXT,
     vehicle_plate TEXT,
     vehicle_color TEXT,
+    vehicle_type TEXT CHECK (vehicle_type IN ('car', 'motorcycle')),
     lat FLOAT,
     lng FLOAT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL

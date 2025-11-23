@@ -28,6 +28,7 @@ export interface UserProfile {
   vehicle_model?: string;
   vehicle_plate?: string;
   vehicle_color?: string;
+  vehicle_type?: 'car' | 'motorcycle'; // Novo campo para tipo de veículo
   lat?: number;
   lng?: number;
 }

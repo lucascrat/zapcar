@@ -4,6 +4,7 @@
   "requestFramePermissions": [
     "microphone",
     "camera",
-    "geolocation"
+    "geolocation",
+    "clipboard-read"
   ]
 }

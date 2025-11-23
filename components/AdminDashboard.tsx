@@ -1,4 +1,5 @@
 
+
 import React, { useEffect, useState, useRef } from 'react';
 import { fetchAllDriversForAdmin, deleteDriver, updateDriverStatus, updateDriverVehicle } from '../services/supabaseClient';
 import { UserProfile, DriverStatus, CallRecord } from '../types';
@@ -45,7 +46,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onL
     loadDrivers();
   }, []);
 
-  // Cleanup on unmount
+  // Cleanup on unmount - Stop Ringtone!
   useEffect(() => {
       return () => {
           soundService.stopRingtone();
@@ -62,8 +63,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onL
       });
       setIsPlayingAudio(false);
       setActiveTab('details'); // Reset tab on new selection
-      setIsCalling(false); // Reset call state
-      soundService.stopRingtone(); // Stop any active ringtone
+      
+      // Reset call state on driver switch
+      setIsCalling(false); 
+      setCallDuration(0);
+      soundService.stopRingtone(); 
       
       // Initialize mock location if none exists
       if (selectedDriver.lat && selectedDriver.lng) {
@@ -99,6 +103,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onL
           soundService.stopRingtone();
       } else {
           setIsCalling(true);
+          // Play loop sound
           soundService.playRingtone();
       }
   };
@@ -385,10 +390,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onL
                    
                    <button 
                      onClick={toggleCall}
-                     className={`flex items-center gap-2 px-3 py-2 rounded-lg transition whitespace-nowrap ${isCalling ? 'bg-red-500 text-white animate-pulse' : 'bg-blue-600 text-white hover:bg-blue-700'}`}
+                     className={`flex items-center gap-2 px-3 py-2 rounded-lg transition whitespace-nowrap shadow-md ${
+                         isCalling 
+                         ? 'bg-red-500 text-white animate-pulse ring-4 ring-red-200' 
+                         : 'bg-blue-600 text-white hover:bg-blue-700'
+                     }`}
                    >
-                     <span className="material-icons text-sm">{isCalling ? 'call_end' : 'call'}</span>
-                     <span className="text-sm font-medium">{isCalling ? formatDuration(callDuration) : 'Ligar'}</span>
+                     <span className={`material-icons text-sm ${isCalling ? 'animate-bounce' : ''}`}>
+                         {isCalling ? 'call_end' : 'call'}
+                     </span>
+                     <span className="text-sm font-medium">
+                         {isCalling ? `Em Chamada (${formatDuration(callDuration)})` : 'Ligar'}
+                     </span>
                    </button>
                  </div>
                </div>

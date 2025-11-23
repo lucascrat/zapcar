@@ -335,7 +335,7 @@ export const registerTempClient = async (username: string): Promise<UserProfile 
   return registerClientWithPhoto(username, "00000000");
 };
 
-export const registerDriver = async (username: string): Promise<UserProfile | null> => {
+export const registerDriver = async (username: string, vehicleType: 'car' | 'motorcycle' = 'car'): Promise<UserProfile | null> => {
   try {
     // Check if username exists
     const { data: existing, error: checkError } = await supabase
@@ -359,6 +359,7 @@ export const registerDriver = async (username: string): Promise<UserProfile | nu
       username,
       role: UserRole.DRIVER,
       status: DriverStatus.AVAILABLE,
+      vehicle_type: vehicleType,
       avatar_url: `https://i.pravatar.cc/150?u=${Math.random()}`
     };
 

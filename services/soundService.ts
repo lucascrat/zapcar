@@ -8,8 +8,8 @@ const SENT_SOUND = 'data:audio/mp3;base64,//NExAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqq
 // Soft "Ping" for incoming messages
 const RECEIVED_SOUND = 'data:audio/mp3;base64,//NExAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//NExAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//NExAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//NExAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//NExAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq';
 
-// Digital Phone Ring (short loop)
-const CALL_SOUND = 'https://assets.mixkit.co/active_storage/sfx/1359/1359-preview.mp3'; // Using CDN for longer audio to keep file size small, fallback handled below.
+// Classic Office Phone Ring (looping capable)
+const CALL_SOUND = 'https://assets.mixkit.co/active_storage/sfx/28/28-preview.mp3'; 
 const SENT_URL = 'https://assets.mixkit.co/active_storage/sfx/2354/2354-preview.mp3';
 const RECEIVED_URL = 'https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3';
 
@@ -23,7 +23,10 @@ class SoundService {
     this.sentAudio = new Audio(SENT_URL);
     this.receivedAudio = new Audio(RECEIVED_URL);
     this.callAudio = new Audio(CALL_SOUND);
+    
+    // Configura o loop para o ringtone
     this.callAudio.loop = true;
+    this.callAudio.volume = 1.0; 
 
     // Preload
     this.sentAudio.load();
@@ -43,19 +46,29 @@ class SoundService {
       return;
     }
 
-    const permission = await Notification.requestPermission();
-    this.hasNotificationPermission = permission === "granted";
+    try {
+      const permission = await Notification.requestPermission();
+      this.hasNotificationPermission = permission === "granted";
+    } catch (e) {
+      console.error("Erro solicitando permissão notificação:", e);
+    }
   }
 
   // Envia notificação que aparece sobre outros apps
   sendNotification(title: string, body: string, icon?: string) {
+    if (document.hidden) {
+       // Tentar vibrar dispositivo se suportado (Mobile) mesmo sem notificação visual garantida
+       if (navigator.vibrate) {
+           try {
+             navigator.vibrate([200, 100, 200]);
+           } catch(e) {
+             console.log("Vibration blocked or not supported");
+           }
+       }
+    }
+
     if (this.hasNotificationPermission && document.hidden) {
       try {
-        // Tentar vibrar dispositivo se suportado (Mobile)
-        if (navigator.vibrate) {
-            navigator.vibrate([200, 100, 200]);
-        }
-
         const notification = new Notification(title, {
           body: body,
           icon: icon || 'https://cdn-icons-png.flaticon.com/512/733/733585.png',
@@ -85,12 +98,22 @@ class SoundService {
 
   playRingtone() {
     this.callAudio.currentTime = 0;
-    this.callAudio.play().catch(e => console.log("Audio blocked:", e));
+    // Garante que o loop está ativado toda vez que toca
+    this.callAudio.loop = true;
+    this.callAudio.play().catch(e => console.log("Ringtone blocked (user interaction needed):", e));
+    
+    if (navigator.vibrate) {
+        // Continuous vibration pattern for ringing
+        navigator.vibrate([1000, 500, 1000, 500, 1000, 500]);
+    }
   }
 
   stopRingtone() {
     this.callAudio.pause();
     this.callAudio.currentTime = 0;
+    if (navigator.vibrate) {
+        navigator.vibrate(0); // Stop vibration
+    }
   }
 }
 
