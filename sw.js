@@ -1,5 +1,5 @@
 
-const CACHE_NAME = 'chegoja-v4-overlay';
+const CACHE_NAME = 'chegoja-v5-production';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
@@ -56,25 +56,20 @@ self.addEventListener('fetch', (event) => {
 });
 
 // LÓGICA DE SOBREPOSIÇÃO (OVERLAY)
-// Quando o usuário clica na notificação (ex: "Nova Chamada"),
-// o navegador força o foco na janela do ChegoJá, saindo do Waze/Maps.
 self.addEventListener('notificationclick', function(event) {
-  event.notification.close(); // Fecha o alerta visual
+  event.notification.close();
 
   event.waitUntil(
     clients.matchAll({
       type: 'window',
       includeUncontrolled: true 
     }).then(function(windowClients) {
-      // 1. Procura se o app já está aberto (mesmo que em segundo plano)
       for (var i = 0; i < windowClients.length; i++) {
         var client = windowClients[i];
-        // Verifica se é a nossa URL e se podemos focar
         if (client.url.includes(self.registration.scope) && 'focus' in client) {
-          return client.focus(); // <--- O MÁGICO ACONTECE AQUI: TRAZ O APP PRA FRENTE
+          return client.focus();
         }
       }
-      // 2. Se não estiver aberto, abre uma nova janela
       if (clients.openWindow) {
         return clients.openWindow('/');
       }

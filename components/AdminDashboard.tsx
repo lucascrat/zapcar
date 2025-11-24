@@ -289,6 +289,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onL
     }
     const matchesStatus = filterStatus === 'all' || d.status === filterStatus;
     return matchesSearch && matchesStatus;
+  }).sort((a, b) => {
+     // Always show unapproved drivers first
+     if (a.is_approved === false && b.is_approved !== false) return -1;
+     if (a.is_approved !== false && b.is_approved === false) return 1;
+     return 0;
   });
 
   const formatDuration = (sec: number) => {

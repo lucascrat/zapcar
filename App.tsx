@@ -17,6 +17,8 @@ import { UserProfile, UserRole, DriverStatus, Message } from './types';
 import { APP_NAME } from './constants';
 import { soundService } from './services/soundService';
 
+const APP_VERSION = "2.1 (Prod)";
+
 export default function App() {
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
   const [activeContact, setActiveContact] = useState<UserProfile | null>(null);
@@ -225,11 +227,7 @@ export default function App() {
       await soundService.requestPermission();
 
       // 2. Microfone e Câmera (Isso aciona o prompt do navegador)
-      // Necessário pedir ambos para garantir funcionalidade total de chamadas e envio de fotos
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
-      
-      // Parar as faixas imediatamente para não deixar a luz da câmera/mic acesa desnecessariamente
-      // O objetivo é apenas obter a permissão persistente
       stream.getTracks().forEach(track => track.stop());
 
       // 3. Geolocalização
@@ -243,7 +241,6 @@ export default function App() {
 
     } catch (e) {
       console.warn("Algumas permissões foram negadas pelo motorista:", e);
-      // Não alertamos agressivamente aqui para não atrapalhar o fluxo automático
     }
   };
 
@@ -392,7 +389,7 @@ export default function App() {
                   
                   <div className="space-y-4">
                       <a 
-                        href="https://wa.me/5500000000000" // Replace with actual admin number
+                        href="https://wa.me/5581999999999" // TODO: Update with real admin number
                         target="_blank"
                         rel="noreferrer" 
                         className="w-full bg-green-500 hover:bg-green-600 text-white font-bold py-3 rounded-lg flex items-center justify-center gap-2 transition shadow-md"
@@ -596,6 +593,11 @@ export default function App() {
             </div>
           )}
         </div>
+        
+        {/* Version Indicator */}
+        <div className="absolute bottom-2 text-xs text-gray-400 opacity-50 font-mono">
+            {APP_NAME} {APP_VERSION}
+        </div>
       </div>
     );
   }
@@ -620,29 +622,29 @@ export default function App() {
           <div className="flex gap-2 text-gray-400 items-center">
              {currentUser.role === UserRole.DRIVER && (
                  <>
-                    {/* Status Toggle Button */}
+                    {/* Status Toggle Button - HIGHLIGHTED */}
                     <button 
                         onClick={handleStatusToggle}
-                        className={`px-3 py-1.5 rounded-full text-xs font-bold transition flex items-center gap-1 ${
+                        className={`px-4 py-2 rounded-full text-xs font-bold transition flex items-center gap-2 shadow-sm ${
                             currentUser.status === DriverStatus.AVAILABLE 
-                            ? 'bg-green-600 text-white hover:bg-green-700' 
-                            : 'bg-red-600 text-white hover:bg-red-700'
+                            ? 'bg-green-600 text-white hover:bg-green-500 ring-2 ring-green-600/30' 
+                            : 'bg-red-600 text-white hover:bg-red-500 ring-2 ring-red-600/30'
                         }`}
-                        title="Mudar status (Livre/Ocupado)"
+                        title="Toque para mudar status"
                     >
                         <span className="material-icons text-sm">{currentUser.status === DriverStatus.AVAILABLE ? 'lock_open' : 'lock'}</span>
                         {currentUser.status === DriverStatus.AVAILABLE ? 'LIVRE' : 'OCUPADO'}
                     </button>
                     
-                    {/* Admin Contact Button */}
+                    {/* Admin Contact Button - HIGHLIGHTED */}
                     <a 
-                        href="https://wa.me/5500000000000" // Replace with Admin number
+                        href="https://wa.me/5581999999999" // TODO: Update admin number
                         target="_blank"
                         rel="noreferrer"
-                        className="p-2 rounded-full hover:bg-gray-700 transition text-gray-400 hover:text-green-500" 
-                        title="Falar com Admin"
+                        className="bg-gray-700 hover:bg-gray-600 text-gray-200 p-2 rounded-full transition flex items-center justify-center" 
+                        title="Falar com Suporte/Admin"
                     >
-                        <span className="material-icons">support_agent</span>
+                        <span className="material-icons text-sm">support_agent</span>
                     </a>
                  </>
              )}
