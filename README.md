@@ -14,19 +14,20 @@ O **ChegoJá** é uma plataforma de mobilidade urbana moderna, focada na comunic
 
 ## 🌐 Como colocar seu site no ar (Deploy)
 
-Você tem 3 ótimas opções para tirar o site do endereço de testes e usar seu domínio próprio.
+### ⚠️ Passo Obrigatório na Vercel (Configuração de Ambiente)
+Para evitar a **Tela Preta** e garantir que a Inteligência Artificial funcione, você deve configurar a chave da API:
 
-### ⚠️ Importante para Vercel (Correção de Erro)
-Se você encontrou o erro `parse5 error code misplaced-doctype`, certifique-se de que o arquivo `index.html` começa exatamente com `<!DOCTYPE html>` na primeira linha. A versão atual deste repositório já contém essa correção. Faça o **Push** das alterações para o GitHub para corrigir o deploy.
+1.  Vá no Dashboard do seu projeto na **Vercel**.
+2.  Clique na aba **Settings** e depois em **Environment Variables**.
+3.  Adicione uma nova variável:
+    *   **Key**: `VITE_API_KEY`
+    *   **Value**: Sua chave da API do Google Gemini (pegue em aistudio.google.com).
+4.  Faça um **Redeploy** (ou um novo push no GitHub) para que a alteração tenha efeito.
+
+---
 
 ### Opção 1: Vercel (Recomendado - Mais Fácil)
 A Vercel é excelente para projetos React.
-
-**Via Vercel CLI (Linha de Comando):**
-1.  Instale a CLI: `npm i -g vercel`
-2.  Na pasta do projeto, digite: `vercel`
-3.  Responda as perguntas (pode aceitar os padrões pressionando Enter).
-4.  Quando estiver pronto para o domínio final, digite: `vercel --prod`
 
 **Via GitHub:**
 1.  Suba seu código para um repositório no GitHub.
@@ -47,12 +48,6 @@ Se você prefere continuar no ecossistema Google.
 3.  Inicialize: `firebase init` (Escolha Hosting)
 4.  Gere a versão final: `npm run build`
 5.  Envie: `firebase deploy`
-
-### Opção 3: Google Cloud Run (Atual)
-O endereço atual (`.run.app`) é temporário. Para mudar:
-1.  Acesse o [Google Cloud Console](https://console.cloud.google.com/run).
-2.  Vá em **Gerenciar Domínios Personalizados**.
-3.  Adicione o mapeamento do seu domínio.
 
 ## 🛠️ Configuração do Backend (Obrigatório)
 

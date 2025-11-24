@@ -44,6 +44,27 @@ export default function App() {
 
   // --- Lifecycle ---
 
+  // 1. PERSISTÊNCIA DE DADOS (LOCAL STORAGE)
+  // Verifica se há usuário salvo na memória do aparelho ao iniciar
+  useEffect(() => {
+    const savedUser = localStorage.getItem('chegoja_user');
+    if (savedUser) {
+      try {
+        const user = JSON.parse(savedUser);
+        console.log("Login automático via memória do aparelho:", user.username);
+        setCurrentUser(user);
+        
+        // Se for motorista, tenta reativar o Wake Lock e permissões
+        if (user.role === UserRole.DRIVER) {
+           setTimeout(() => requestDriverPermissions(), 1000);
+        }
+      } catch (e) {
+        console.error("Erro ao restaurar sessão:", e);
+        localStorage.removeItem('chegoja_user');
+      }
+    }
+  }, []);
+
   // Wake Lock for Drivers (Keep Screen On)
   useEffect(() => {
     if (currentUser?.role === UserRole.DRIVER) {
@@ -123,16 +144,20 @@ export default function App() {
         loadHistory();
     }
 
-    // 2. Subscribe to new messages
+    // 2. Subscribe to new messages (Background Aware)
     const sub = subscribeToMessages(currentUser.id, (newMsg) => {
       // Logic for received messages
       if (newMsg.sender_id !== currentUser.id) {
+        // Toca som interno do app
         soundService.playReceived();
         
-        // System Notification Logic (Background/Overlay)
-        // If app is hidden OR if user is a driver (to ensure they don't miss it even if app is open but they looked away)
-        if (document.hidden || currentUser.role === UserRole.DRIVER) {
+        // --- LÓGICA DE SEGUNDO PLANO ---
+        // Se o documento estiver oculto OU o usuário for motorista (prioridade máxima),
+        // envia notificação de sistema persistente
+        if (document.visibilityState === 'hidden' || currentUser.role === UserRole.DRIVER) {
              const senderName = contactList.find(c => c.id === newMsg.sender_id)?.username || "Novo Cliente";
+             
+             // Envia notificação de sistema (aparece na barra de status do Android/PC)
              soundService.sendNotification(
                  `Nova mensagem de ${senderName}`, 
                  newMsg.media_type === 'text' ? newMsg.content : 'Enviou um arquivo de mídia'
@@ -175,11 +200,41 @@ export default function App() {
     }
   };
 
+  const requestDriverPermissions = async () => {
+    try {
+      // 1. Notificações (Som e Pop-up)
+      await soundService.requestPermission();
+
+      // 2. Microfone e Câmera (Isso aciona o prompt do navegador)
+      // Necessário pedir ambos para garantir funcionalidade total de chamadas e envio de fotos
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+      
+      // Parar as faixas imediatamente para não deixar a luz da câmera/mic acesa desnecessariamente
+      // O objetivo é apenas obter a permissão persistente
+      stream.getTracks().forEach(track => track.stop());
+
+      // 3. Geolocalização
+      if ('geolocation' in navigator) {
+        navigator.geolocation.getCurrentPosition(
+          (pos) => console.log("GPS Ativo e Permitido"),
+          (err) => console.warn("GPS Negado ou Erro", err),
+          { enableHighAccuracy: true }
+        );
+      }
+
+    } catch (e) {
+      console.warn("Algumas permissões foram negadas pelo motorista:", e);
+      // Não alertamos agressivamente aqui para não atrapalhar o fluxo automático
+    }
+  };
+
   const handleLogin = async () => {
     if (!entryName.trim()) return;
     setIsLoading(true);
 
     try {
+      let user: UserProfile | null = null;
+
       if (loginMode === 'client') {
         if (!entryPhone.trim()) {
             alert("Por favor, insira seu telefone.");
@@ -187,49 +242,55 @@ export default function App() {
             return;
         }
         // Registra ou Loga Cliente com Foto e Telefone
-        const user = await registerClientWithPhoto(entryName, entryPhone, entryAvatarFile || undefined);
-        if (user) {
-          setCurrentUser(user);
-        }
+        user = await registerClientWithPhoto(entryName, entryPhone, entryAvatarFile || undefined);
       } 
       else if (loginMode === 'driver') {
         if (isRegisteringDriver) {
           // Pass vehicle type
-          const user = await registerDriver(entryName, entryVehicleType);
-          if (user) {
-              setCurrentUser(user);
-              soundService.requestPermission(); // Ask permission immediately on signup
-          }
+          user = await registerDriver(entryName, entryVehicleType);
+          if (user) await requestDriverPermissions();
         } else {
           // Login
-          const user = await loginDriver(entryName);
-          if (user) {
-            setCurrentUser(user);
-            soundService.requestPermission(); // Ask permission on login
-          } else {
-             alert("Motorista não encontrado. Verifique o nome ou cadastre-se.");
-          }
+          user = await loginDriver(entryName);
+          if (user) await requestDriverPermissions();
+          else alert("Motorista não encontrado. Verifique o nome ou cadastre-se.");
         }
       }
       else if (loginMode === 'admin') {
         if (authPassword === 'admin123') { // Hardcoded admin password
-          setCurrentUser({
+          user = {
             id: 'admin-master',
             username: 'Administrador',
             role: UserRole.ADMIN,
             status: DriverStatus.AVAILABLE,
             avatar_url: 'https://ui-avatars.com/api/?name=Admin&background=0D8ABC&color=fff'
-          });
+          };
         } else {
           alert("Senha de administrador incorreta.");
         }
       }
+
+      if (user) {
+        // SALVA NA MEMÓRIA DO APARELHO (PERSISTÊNCIA)
+        localStorage.setItem('chegoja_user', JSON.stringify(user));
+        setCurrentUser(user);
+      }
+
     } catch (e) {
       console.error("Login Error", e);
       alert("Ocorreu um erro inesperado. Tente novamente.");
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleLogout = () => {
+      // LIMPA MEMÓRIA DO APARELHO
+      localStorage.removeItem('chegoja_user');
+      setCurrentUser(null);
+      setContactList([]);
+      setMessages([]);
+      setActiveContact(null);
   };
 
   const handleContactSelect = (contact: UserProfile) => {
@@ -247,7 +308,7 @@ export default function App() {
 
   // --- Render: Admin Dashboard (Dedicated Page) ---
   if (currentUser && currentUser.role === UserRole.ADMIN) {
-    return <AdminDashboard currentUser={currentUser} onLogout={() => setCurrentUser(null)} />;
+    return <AdminDashboard currentUser={currentUser} onLogout={handleLogout} />;
   }
 
   // --- Render: Login Screen ---
@@ -428,7 +489,7 @@ export default function App() {
           </div>
           <div className="flex gap-2 text-gray-400">
             <button className="p-2 rounded-full hover:bg-gray-700 transition" title="Configurações"><span className="material-icons">settings</span></button>
-            <button className="p-2 rounded-full hover:bg-red-900/30 hover:text-red-400 transition" title="Sair" onClick={() => setCurrentUser(null)}><span className="material-icons">logout</span></button>
+            <button className="p-2 rounded-full hover:bg-red-900/30 hover:text-red-400 transition" title="Sair" onClick={handleLogout}><span className="material-icons">logout</span></button>
           </div>
         </div>
 

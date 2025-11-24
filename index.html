@@ -6,6 +6,22 @@
     <meta name="theme-color" content="#111b21" />
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="ChegoJá">
+    
+    <!-- Polyfill for process.env to prevent crash on Vercel/Vite -->
+    <script>
+      window.process = window.process || { env: { API_KEY: '' } };
+    </script>
+    <script type="module">
+      try {
+        if (import.meta.env && import.meta.env.VITE_API_KEY) {
+           window.process.env.API_KEY = import.meta.env.VITE_API_KEY;
+        }
+      } catch (e) {
+        console.log("Environment variable bridge skipped");
+      }
+    </script>
+
     <script type="importmap">
     {
       "imports": {
@@ -17,7 +33,11 @@
       }
     }
     </script>
-    <link rel="manifest" href="data:application/json;base64,eyJuYW1lIjoiQ2hlZ29Kw6EiLCJzaG9ydF9uYW1lIjoiQ2hlZ29Kw6EiLCJzdGFydF91cmwiOiIuIiwiZGlzcGxheSI6InN0YW5kYWxvbmUiLCJiYWNrZ3JvdW5kX2NvbG9yIjoiIzExMWIyMSIsInRoZW1lX2NvbG9yIjoiIzAwYTg4NCIsImRlc2NyaXB0aW9uIjoiTyBtZWxob3IgYXBsaWNhdGl2byBkZSBtb2JpbGlkYWRlIHVyYmFuYSBkbyBCcmFzaWwiLCJpY29ucyI6W3sic3JjIjoiaHR0cHM6Ly9jZG4taWNvbnMtcG5nLmZxhdGljb24uY29tLzUxMi8zMDk3LzMwOTcxODAucG5nIiwic2l6ZXMiOiIxOTJ4MTkyIiwidHlwZSI6ImltYWdlL3BuZyIsInB1cnBvc2UiOiJhbnkgbWFza2FibGUifSx7InNyYyI6Imh0dHBzOi8vY2RuLWljb25zLXBuZy5mbGF0aWNvbi5jb20vNTEyLzMwOTcvMzA5NzE4MC5wbmciLCJzaXplcyI6IjUxMng1MTIiLCJ0eXBlIjoiaW1hZ2UvcG5nIn1dfQ==" />
+    
+    <!-- PWA Manifest & Icons -->
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/3097/3097180.png">
+    
     <title>ChegoJá - Mobilidade Urbana</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>

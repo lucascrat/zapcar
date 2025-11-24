@@ -1,5 +1,4 @@
 
-
 // Simple Sound Service using Base64 to avoid external dependencies and ensure offline capability
 
 // Short "Pop" sound for outgoing messages
@@ -18,6 +17,7 @@ class SoundService {
   private receivedAudio: HTMLAudioElement;
   private callAudio: HTMLAudioElement;
   private hasNotificationPermission: boolean = false;
+  private activeNotification: Notification | null = null;
 
   constructor() {
     this.sentAudio = new Audio(SENT_URL);
@@ -54,35 +54,53 @@ class SoundService {
     }
   }
 
-  // Envia notificação que aparece sobre outros apps
-  sendNotification(title: string, body: string, icon?: string) {
-    if (document.hidden) {
-       // Tentar vibrar dispositivo se suportado (Mobile) mesmo sem notificação visual garantida
-       if (navigator.vibrate) {
-           try {
-             navigator.vibrate([200, 100, 200]);
-           } catch(e) {
-             console.log("Vibration blocked or not supported");
-           }
-       }
-    }
-
-    if (this.hasNotificationPermission && document.hidden) {
+  // Envia notificação que aparece sobre outros apps e toca som do sistema
+  sendNotification(title: string, body: string, isCall: boolean = false) {
+    if (this.hasNotificationPermission) {
       try {
+        if (this.activeNotification) {
+          this.activeNotification.close();
+        }
+
+        // CONFIGURAÇÃO PARA "FURAR" O MODO SILENCIOSO E APARECER NA TELA
         const notification = new Notification(title, {
           body: body,
-          icon: icon || 'https://cdn-icons-png.flaticon.com/512/733/733585.png',
-          vibrate: [200, 100, 200],
-          tag: 'urban-trans-msg' // Substitui notificações antigas para não acumular
+          icon: 'https://cdn-icons-png.flaticon.com/512/3097/3097180.png',
+          
+          // Vibração Agressiva: Longa para chamadas, curta para mensagens
+          vibrate: isCall ? [1000, 500, 1000, 500, 1000] : [200, 100, 200],
+          
+          tag: isCall ? 'incoming-call' : 'new-message', 
+          
+          // CRÍTICO: Faz o celular vibrar/tocar de novo mesmo se já tiver notificação
+          renotify: true, 
+          
+          // CRÍTICO: Notificação não some sozinha (User precisa clicar ou dispensar)
+          requireInteraction: true 
         } as any);
 
         notification.onclick = function() {
-          window.focus();
+          window.focus(); // Força o app a abrir
           notification.close();
         };
+
+        this.activeNotification = notification;
+
+        // Tentar tocar som HTML5 como fallback
+        if (!isCall) {
+           this.receivedAudio.play().catch(() => {});
+        }
+
       } catch (e) {
-        console.error("Erro ao enviar notificação:", e);
+        console.error("Erro ao enviar notificação de sistema:", e);
       }
+    }
+    
+    // Fallback de vibração via navegador
+    if (navigator.vibrate) {
+        try {
+            navigator.vibrate(isCall ? [1000, 500, 1000] : [200, 100, 200]);
+        } catch(e) { }
     }
   }
 
@@ -98,19 +116,21 @@ class SoundService {
 
   playRingtone() {
     this.callAudio.currentTime = 0;
-    // Garante que o loop está ativado toda vez que toca
     this.callAudio.loop = true;
     this.callAudio.play().catch(e => console.log("Ringtone blocked (user interaction needed):", e));
     
-    if (navigator.vibrate) {
-        // Continuous vibration pattern for ringing
-        navigator.vibrate([1000, 500, 1000, 500, 1000, 500]);
-    }
+    // NOTIFICAÇÃO DE CHAMADA (SIMULA O SOBREPOR APPS)
+    // Dispara notificação de sistema persistente
+    this.sendNotification("📞 CHAMADA RECEBIDA", "Toque aqui para ATENDER AGORA!", true);
   }
 
   stopRingtone() {
     this.callAudio.pause();
     this.callAudio.currentTime = 0;
+    if (this.activeNotification) {
+        this.activeNotification.close();
+        this.activeNotification = null;
+    }
     if (navigator.vibrate) {
         navigator.vibrate(0); // Stop vibration
     }

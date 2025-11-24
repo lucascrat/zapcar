@@ -1,7 +1,5 @@
 import { GoogleGenAI } from "@google/genai";
 
-// Initialize the client
-// Note: In a real production app, API calls should be proxied through a backend to protect the key.
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 export const generateSmartReply = async (
@@ -30,7 +28,7 @@ export const generateSmartReply = async (
     return response.text || "Olá, como posso ajudar?";
   } catch (error) {
     console.error("Gemini API Error:", error);
-    return "";
+    return "Olá, estou dirigindo no momento.";
   }
 };
 
