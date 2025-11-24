@@ -5,6 +5,7 @@ import { AudioRecorder } from './AudioRecorder';
 import { sendMessage, generateUUID, uploadFile, supabase, updateUserLocation } from '../services/supabaseClient';
 import { generateSmartReply, analyzeImage } from '../services/geminiService';
 import { soundService } from '../services/soundService';
+import { Taximeter } from './Taximeter';
 
 interface ChatWindowProps {
   currentUser: UserProfile;
@@ -20,6 +21,9 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ currentUser, chatPartner
   const [isUploading, setIsUploading] = useState(false);
   const [isGettingLocation, setIsGettingLocation] = useState(false);
   
+  // Taximeter State
+  const [showTaximeter, setShowTaximeter] = useState(false);
+
   // WebRTC & Call State
   const [callStatus, setCallStatus] = useState<'idle' | 'calling' | 'incoming' | 'connected'>('idle');
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
@@ -302,8 +306,9 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ currentUser, chatPartner
 
   // --- Messaging Functions ---
 
-  const handleSendText = async () => {
-    if (!inputText.trim() || !chatPartner) return;
+  const handleSendText = async (textOverride?: string) => {
+    const textToSend = textOverride || inputText;
+    if (!textToSend.trim() || !chatPartner) return;
 
     // Background: Update user location if client (Silent Update)
     if (currentUser.role === UserRole.CLIENT) {
@@ -322,7 +327,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ currentUser, chatPartner
       id: generateUUID(),
       sender_id: currentUser.id,
       receiver_id: chatPartner.id,
-      content: inputText,
+      content: textToSend,
       media_type: 'text',
       created_at: new Date().toISOString(),
       is_read: false
@@ -337,6 +342,10 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ currentUser, chatPartner
     } catch (e) {
       console.error("Failed to send message to DB", e);
     }
+  };
+
+  const handleRequestLocation = () => {
+      handleSendText("📍 Por favor, envie sua localização atual clicando no botão de localização.");
   };
 
   const handleSendLocation = async () => {
@@ -463,6 +472,11 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ currentUser, chatPartner
       {/* Hidden Audio Element for WebRTC */}
       <audio ref={remoteAudioRef} autoPlay playsInline />
 
+      {/* Taximeter Overlay */}
+      {showTaximeter && (
+          <Taximeter currentUser={currentUser} onClose={() => setShowTaximeter(false)} />
+      )}
+
       {/* Call Overlay */}
       {callStatus !== 'idle' && (
         <div className="absolute inset-0 z-50 bg-black/90 flex flex-col items-center justify-center text-white animate-fade-in">
@@ -517,7 +531,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ currentUser, chatPartner
         </div>
       )}
 
-      {/* Desktop Header - Hidden on Mobile (handled by App.tsx for back button logic) */}
+      {/* Desktop Header */}
       <div className="h-16 bg-whatsapp-panel hidden md:flex items-center px-4 justify-between z-10 shadow-sm shrink-0">
         <div className="flex items-center cursor-pointer">
           <div className="w-10 h-10 rounded-full bg-gray-500 flex items-center justify-center mr-3 overflow-hidden">
@@ -547,12 +561,60 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ currentUser, chatPartner
             </span>
           </div>
         </div>
-        <div className="flex gap-4 text-gray-400">
-          <button onClick={startCall} className="p-2 rounded-full hover:bg-gray-700/50 active:scale-90 transition"><span className="material-icons">videocam</span></button>
-          <button onClick={startCall} className="p-2 rounded-full hover:bg-gray-700/50 active:scale-90 transition"><span className="material-icons">call</span></button>
+        <div className="flex gap-4 text-gray-400 items-center">
+          {currentUser.role === UserRole.DRIVER && (
+              <>
+                <button 
+                    onClick={() => setShowTaximeter(true)}
+                    className="px-3 py-1.5 rounded-full bg-gray-700 hover:bg-gray-600 text-green-400 text-xs font-bold uppercase tracking-wide border border-green-400/30 flex items-center gap-2"
+                >
+                    <span className="material-icons text-sm">local_taxi</span> Taxímetro
+                </button>
+                
+                <button 
+                    onClick={handleRequestLocation}
+                    className="px-3 py-1.5 rounded-full bg-blue-900/40 hover:bg-blue-900/60 text-blue-400 text-xs font-bold uppercase tracking-wide border border-blue-400/30 flex items-center gap-2"
+                    title="Pedir Localização ao Cliente"
+                >
+                    <span className="material-icons text-sm">place</span> Pedir Loc.
+                </button>
+              </>
+          )}
           <div className="w-[1px] h-6 bg-gray-600 mx-1 hidden lg:block"></div>
-          <button className="p-2 rounded-full hover:bg-gray-700/50 active:scale-90 transition"><span className="material-icons">search</span></button>
+          <button onClick={startCall} className="p-2 rounded-full hover:bg-gray-700/50 active:scale-90 transition"><span className="material-icons">call</span></button>
           <button className="p-2 rounded-full hover:bg-gray-700/50 active:scale-90 transition"><span className="material-icons">more_vert</span></button>
+        </div>
+      </div>
+
+      {/* Mobile Header (Now includes Driver Buttons) */}
+      <div className="md:hidden bg-whatsapp-panel h-16 flex items-center px-2 border-b border-gray-700 shadow-sm shrink-0 z-20">
+        <button onClick={() => {/* Handle Back in parent */}} className="text-gray-300 p-2 rounded-full hover:bg-gray-700 mr-1 active:scale-95 transition">
+             {/* Back button logic handled by parent, this is just placeholder visual if needed, currently parent passes nothing to close specifically here but visual consistency maintained */}
+             <span className="material-icons">arrow_back</span>
+        </button>
+        <div className="flex items-center flex-1 overflow-hidden" onClick={() => {/* Show Info */}}>
+            <img src={chatPartner.avatar_url || 'https://via.placeholder.com/40'} className="w-9 h-9 rounded-full mr-2 object-cover shrink-0" alt="" />
+            <div className="flex flex-col min-w-0">
+                <span className="text-white font-medium text-base leading-tight flex items-center gap-1 truncate">
+                {chatPartner.username}
+                </span>
+                <span className="text-xs text-gray-400 truncate">
+                {chatPartner.role === UserRole.DRIVER ? (chatPartner.status === 'available' ? 'Online' : 'Ocupado') : 'Toque p/ dados'}
+                </span>
+            </div>
+        </div>
+        <div className="flex items-center gap-1 pr-1">
+             {currentUser.role === UserRole.DRIVER && (
+                 <>
+                    <button onClick={() => setShowTaximeter(true)} className="p-2 text-green-400 active:bg-gray-700 rounded-full" title="Taxímetro">
+                        <span className="material-icons">local_taxi</span>
+                    </button>
+                    <button onClick={handleRequestLocation} className="p-2 text-blue-400 active:bg-gray-700 rounded-full" title="Pedir Localização">
+                        <span className="material-icons">place</span>
+                    </button>
+                 </>
+             )}
+            <button onClick={startCall} className="p-2 text-whatsapp-green active:bg-gray-700 rounded-full"><span className="material-icons">call</span></button>
         </div>
       </div>
 
@@ -701,7 +763,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ currentUser, chatPartner
         <div className="pb-1">
             {inputText.trim() ? (
             <button 
-                onClick={handleSendText}
+                onClick={() => handleSendText()}
                 className="p-3 text-white bg-whatsapp-green rounded-full hover:bg-emerald-600 active:scale-90 transition shadow-md flex items-center justify-center"
             >
                 <span className="material-icons text-lg">send</span>

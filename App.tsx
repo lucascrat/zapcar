@@ -11,6 +11,7 @@ import {
   registerDriver,
   loginDriver,
   fetchMessages,
+  updateDriverStatus, // Import for status toggle
 } from './services/supabaseClient';
 import { UserProfile, UserRole, DriverStatus, Message } from './types';
 import { APP_NAME } from './constants';
@@ -30,8 +31,13 @@ export default function App() {
   const [entryPhone, setEntryPhone] = useState('');
   const [entryAvatarFile, setEntryAvatarFile] = useState<File | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
-  const [entryVehicleType, setEntryVehicleType] = useState<'car' | 'motorcycle'>('car');
   
+  // New Driver Registration States
+  const [entryVehicleType, setEntryVehicleType] = useState<'car' | 'motorcycle'>('car');
+  const [entryVehicleModel, setEntryVehicleModel] = useState('');
+  const [entryVehiclePlate, setEntryVehiclePlate] = useState('');
+  const [entryVehicleColor, setEntryVehicleColor] = useState('');
+
   const [authPassword, setAuthPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
@@ -107,6 +113,12 @@ export default function App() {
     // Admin handles its own data fetching in the AdminDashboard component
     if (currentUser.role === UserRole.ADMIN) return;
 
+    // Check approval status immediately (if driver)
+    if (currentUser.role === UserRole.DRIVER && currentUser.is_approved === false) {
+       // Do not load contacts if not approved
+       return;
+    }
+
     const loadContacts = async () => {
       if (currentUser.role === UserRole.CLIENT) {
         // Clients see Drivers
@@ -123,6 +135,10 @@ export default function App() {
     
     // Subscribe to profile changes (e.g. new driver online, driver status change)
     const profileSub = subscribeToProfiles(() => {
+        // Refresh local user data just in case status changed externally
+        if (currentUser.role === UserRole.DRIVER) {
+            // Note: In a full app we would fetch the user profile again here to sync state
+        }
         loadContacts();
     });
 
@@ -134,6 +150,9 @@ export default function App() {
   // Load History and Subscribe to Messages
   useEffect(() => {
     if (!currentUser || currentUser.role === UserRole.ADMIN) return;
+
+    // Approval Gate
+    if (currentUser.role === UserRole.DRIVER && !currentUser.is_approved) return;
 
     // 1. Load History if a contact is active
     if (activeContact) {
@@ -246,27 +265,48 @@ export default function App() {
       } 
       else if (loginMode === 'driver') {
         if (isRegisteringDriver) {
-          // Pass vehicle type
-          user = await registerDriver(entryName, entryVehicleType);
+          // Validação básica
+          if (!entryVehicleModel || !entryVehiclePlate) {
+              alert("Por favor, preencha o modelo e a placa do veículo.");
+              setIsLoading(false);
+              return;
+          }
+          // Pass extended info
+          user = await registerDriver(
+              entryName, 
+              entryVehicleType, 
+              entryVehicleModel, 
+              entryVehiclePlate, 
+              entryVehicleColor,
+              entryAvatarFile || undefined
+          );
           if (user) await requestDriverPermissions();
         } else {
           // Login
           user = await loginDriver(entryName);
-          if (user) await requestDriverPermissions();
-          else alert("Motorista não encontrado. Verifique o nome ou cadastre-se.");
+          if (user) {
+            await requestDriverPermissions();
+          } else {
+            // Lógica de Redirecionamento Automático
+            alert(`Motorista "${entryName}" não encontrado.\n\nRedirecionando para a tela de cadastro. Por favor, complete os dados do seu veículo e foto.`);
+            setIsRegisteringDriver(true);
+            setIsLoading(false);
+            return; // Interrompe para que o usuário veja a tela de cadastro
+          }
         }
       }
       else if (loginMode === 'admin') {
-        if (authPassword === 'admin123') { // Hardcoded admin password
+        // Credenciais atualizadas
+        if (entryName === 'Holanda2025' && authPassword === '01Deus02@@@@') { 
           user = {
             id: 'admin-master',
-            username: 'Administrador',
+            username: 'Holanda2025',
             role: UserRole.ADMIN,
             status: DriverStatus.AVAILABLE,
             avatar_url: 'https://ui-avatars.com/api/?name=Admin&background=0D8ABC&color=fff'
           };
         } else {
-          alert("Senha de administrador incorreta.");
+          alert("Credenciais de administrador incorretas.");
         }
       }
 
@@ -306,9 +346,71 @@ export default function App() {
     setActiveContact(null);
   };
 
+  const handleStatusToggle = async () => {
+    if (!currentUser || currentUser.role !== UserRole.DRIVER) return;
+    
+    const newStatus = currentUser.status === DriverStatus.AVAILABLE ? DriverStatus.BUSY : DriverStatus.AVAILABLE;
+    
+    // Optimistic Update
+    const updatedUser = { ...currentUser, status: newStatus };
+    setCurrentUser(updatedUser);
+    localStorage.setItem('chegoja_user', JSON.stringify(updatedUser));
+    
+    // Update DB
+    await updateDriverStatus(currentUser.id, newStatus);
+  };
+
+  const resetForm = () => {
+      setEntryName('');
+      setEntryPhone('');
+      setAvatarPreview(null);
+      setEntryAvatarFile(null);
+      setAuthPassword('');
+      setEntryVehicleModel('');
+      setEntryVehiclePlate('');
+      setEntryVehicleColor('');
+  };
+
   // --- Render: Admin Dashboard (Dedicated Page) ---
   if (currentUser && currentUser.role === UserRole.ADMIN) {
     return <AdminDashboard currentUser={currentUser} onLogout={handleLogout} />;
+  }
+
+  // --- Render: Pending Approval Screen (Drivers) ---
+  if (currentUser && currentUser.role === UserRole.DRIVER && currentUser.is_approved === false) {
+      return (
+          <div className="h-[100dvh] w-full bg-gray-100 flex items-center justify-center p-6 text-center">
+              <div className="bg-white p-8 rounded-2xl shadow-xl max-w-md w-full">
+                  <div className="w-20 h-20 bg-yellow-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                      <span className="material-icons text-4xl text-yellow-600">hourglass_empty</span>
+                  </div>
+                  <h2 className="text-2xl font-bold text-gray-800 mb-2">Cadastro em Análise</h2>
+                  <p className="text-gray-500 mb-8">
+                      Olá, <b>{currentUser.username}</b>. Seu cadastro foi recebido e está aguardando aprovação da administração.
+                      Você será notificado assim que sua conta for ativada.
+                  </p>
+                  
+                  <div className="space-y-4">
+                      <a 
+                        href="https://wa.me/5500000000000" // Replace with actual admin number
+                        target="_blank"
+                        rel="noreferrer" 
+                        className="w-full bg-green-500 hover:bg-green-600 text-white font-bold py-3 rounded-lg flex items-center justify-center gap-2 transition shadow-md"
+                      >
+                          <img src="https://upload.wikimedia.org/wikipedia/commons/6/6b/WhatsApp.svg" alt="WA" className="w-5 h-5 filter brightness-0 invert" />
+                          Falar com Suporte
+                      </a>
+                      
+                      <button 
+                          onClick={handleLogout}
+                          className="w-full bg-gray-100 hover:bg-gray-200 text-gray-600 font-medium py-3 rounded-lg transition"
+                      >
+                          Sair / Voltar
+                      </button>
+                  </div>
+              </div>
+          </div>
+      );
   }
 
   // --- Render: Login Screen ---
@@ -318,7 +420,7 @@ export default function App() {
         {/* Top Right Controls */}
         <div className="absolute top-4 right-4 flex flex-col gap-2 z-20">
           <button 
-            onClick={() => { setLoginMode('driver'); setIsRegisteringDriver(false); setEntryName(''); setAuthPassword(''); }}
+            onClick={() => { setLoginMode('driver'); setIsRegisteringDriver(false); resetForm(); }}
             className={`p-3 rounded-full transition shadow-lg ${loginMode === 'driver' ? 'bg-whatsapp-green text-white transform scale-110' : 'bg-white text-gray-400'}`}
             title="Acesso Motorista"
           >
@@ -326,7 +428,7 @@ export default function App() {
           </button>
           
           <button 
-            onClick={() => { setLoginMode('admin'); setEntryName('Admin'); setAuthPassword(''); }}
+            onClick={() => { setLoginMode('admin'); setEntryName(''); setAuthPassword(''); }}
             className={`p-3 rounded-full transition shadow-lg ${loginMode === 'admin' ? 'bg-blue-600 text-white transform scale-110' : 'bg-white text-gray-400'}`}
             title="Acesso Admin"
           >
@@ -335,7 +437,7 @@ export default function App() {
           
           {loginMode !== 'client' && (
             <button 
-              onClick={() => { setLoginMode('client'); setEntryName(''); setEntryPhone(''); setAvatarPreview(null); }}
+              onClick={() => { setLoginMode('client'); resetForm(); }}
               className="p-3 bg-white text-gray-400 shadow-lg rounded-full hover:text-whatsapp-green"
               title="Voltar para Cliente"
             >
@@ -344,10 +446,10 @@ export default function App() {
           )}
         </div>
 
-        <div className="bg-white p-8 rounded-xl shadow-xl w-[90%] max-w-md text-center z-10">
+        <div className="bg-white p-8 rounded-xl shadow-xl w-[90%] max-w-md text-center z-10 max-h-[90vh] overflow-y-auto">
           <div className="mb-6 flex flex-col items-center">
-             {/* Avatar Picker for Client */}
-             {loginMode === 'client' ? (
+             {/* Avatar Picker for Client OR Driver Registration */}
+             {(loginMode === 'client' || (loginMode === 'driver' && isRegisteringDriver)) ? (
                  <div className="relative cursor-pointer group" onClick={() => avatarInputRef.current?.click()}>
                     <div className="w-24 h-24 rounded-full bg-gray-200 border-4 border-white shadow-lg overflow-hidden flex items-center justify-center">
                         {avatarPreview ? (
@@ -383,7 +485,7 @@ export default function App() {
             {loginMode === 'client' 
               ? 'Preencha seus dados para começar.' 
               : loginMode === 'driver'
-                ? (isRegisteringDriver ? 'Cadastro de parceiro.' : 'Entre para ver solicitações.')
+                ? (isRegisteringDriver ? 'Complete seu cadastro com foto e dados do veículo.' : 'Entre para ver solicitações.')
                 : 'Acesso restrito.'}
           </p>
 
@@ -409,34 +511,62 @@ export default function App() {
             )}
 
             {loginMode === 'driver' && isRegisteringDriver && (
-                <div className="flex gap-2">
-                    <button 
-                        onClick={() => setEntryVehicleType('car')}
-                        className={`flex-1 p-2 rounded-lg border flex items-center justify-center gap-2 transition ${entryVehicleType === 'car' ? 'bg-whatsapp-green text-white border-whatsapp-green' : 'bg-gray-50 text-gray-500 border-gray-300'}`}
-                    >
-                        <span className="material-icons text-sm">directions_car</span>
-                        Carro
-                    </button>
-                    <button 
-                        onClick={() => setEntryVehicleType('motorcycle')}
-                        className={`flex-1 p-2 rounded-lg border flex items-center justify-center gap-2 transition ${entryVehicleType === 'motorcycle' ? 'bg-whatsapp-green text-white border-whatsapp-green' : 'bg-gray-50 text-gray-500 border-gray-300'}`}
-                    >
-                        <span className="material-icons text-sm">two_wheeler</span>
-                        Moto
-                    </button>
-                </div>
+                <>
+                    <div className="flex gap-2">
+                        <button 
+                            onClick={() => setEntryVehicleType('car')}
+                            className={`flex-1 p-2 rounded-lg border flex items-center justify-center gap-2 transition ${entryVehicleType === 'car' ? 'bg-whatsapp-green text-white border-whatsapp-green' : 'bg-gray-50 text-gray-500 border-gray-300'}`}
+                        >
+                            <span className="material-icons text-sm">directions_car</span>
+                            Carro
+                        </button>
+                        <button 
+                            onClick={() => setEntryVehicleType('motorcycle')}
+                            className={`flex-1 p-2 rounded-lg border flex items-center justify-center gap-2 transition ${entryVehicleType === 'motorcycle' ? 'bg-whatsapp-green text-white border-whatsapp-green' : 'bg-gray-50 text-gray-500 border-gray-300'}`}
+                        >
+                            <span className="material-icons text-sm">two_wheeler</span>
+                            Moto
+                        </button>
+                    </div>
+                    
+                    <div className="grid grid-cols-2 gap-2">
+                        <input
+                            type="text"
+                            placeholder="Modelo (Ex: Civic)"
+                            value={entryVehicleModel}
+                            onChange={e => setEntryVehicleModel(e.target.value)}
+                            className="col-span-2 p-3 border border-gray-300 rounded-lg focus:outline-none focus:border-whatsapp-green transition bg-gray-50"
+                        />
+                         <input
+                            type="text"
+                            placeholder="Placa"
+                            value={entryVehiclePlate}
+                            onChange={e => setEntryVehiclePlate(e.target.value)}
+                            className="p-3 border border-gray-300 rounded-lg focus:outline-none focus:border-whatsapp-green transition bg-gray-50 uppercase"
+                        />
+                         <input
+                            type="text"
+                            placeholder="Cor"
+                            value={entryVehicleColor}
+                            onChange={e => setEntryVehicleColor(e.target.value)}
+                            className="p-3 border border-gray-300 rounded-lg focus:outline-none focus:border-whatsapp-green transition bg-gray-50"
+                        />
+                    </div>
+                </>
             )}
 
-            {(loginMode === 'driver' || loginMode === 'admin') && (
-              <input
-                type="password"
-                placeholder={loginMode === 'admin' ? "Senha Admin" : isRegisteringDriver ? "Senha (Opcional)" : "Senha"}
-                value={authPassword}
-                onChange={e => setAuthPassword(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
-                disabled={isLoading}
-                className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:border-whatsapp-green transition bg-gray-50"
-              />
+            {(loginMode === 'driver' || loginMode === 'admin') && !isRegisteringDriver && (
+              <div>
+                  <input
+                    type="password"
+                    placeholder={loginMode === 'admin' ? "Senha Admin" : "Senha"}
+                    value={authPassword}
+                    onChange={e => setAuthPassword(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
+                    disabled={isLoading}
+                    className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:border-whatsapp-green transition bg-gray-50"
+                  />
+              </div>
             )}
 
             <button
@@ -449,7 +579,7 @@ export default function App() {
               {isLoading ? (
                   <span className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
               ) : (
-                  loginMode === 'client' ? 'INICIAR ATENDIMENTO' : (isRegisteringDriver ? 'CADASTRAR' : 'ENTRAR')
+                  loginMode === 'client' ? 'INICIAR ATENDIMENTO' : (isRegisteringDriver ? 'FINALIZAR CADASTRO' : 'ENTRAR')
               )}
             </button>
           </div>
@@ -457,7 +587,7 @@ export default function App() {
           {loginMode === 'driver' && (
             <div className="mt-4 text-sm">
               <button 
-                onClick={() => setIsRegisteringDriver(!isRegisteringDriver)}
+                onClick={() => { setIsRegisteringDriver(!isRegisteringDriver); resetForm(); }}
                 className="text-whatsapp-green hover:underline font-medium p-2"
                 disabled={isLoading}
               >
@@ -487,7 +617,35 @@ export default function App() {
                </span>
              </div>
           </div>
-          <div className="flex gap-2 text-gray-400">
+          <div className="flex gap-2 text-gray-400 items-center">
+             {currentUser.role === UserRole.DRIVER && (
+                 <>
+                    {/* Status Toggle Button */}
+                    <button 
+                        onClick={handleStatusToggle}
+                        className={`px-3 py-1.5 rounded-full text-xs font-bold transition flex items-center gap-1 ${
+                            currentUser.status === DriverStatus.AVAILABLE 
+                            ? 'bg-green-600 text-white hover:bg-green-700' 
+                            : 'bg-red-600 text-white hover:bg-red-700'
+                        }`}
+                        title="Mudar status (Livre/Ocupado)"
+                    >
+                        <span className="material-icons text-sm">{currentUser.status === DriverStatus.AVAILABLE ? 'lock_open' : 'lock'}</span>
+                        {currentUser.status === DriverStatus.AVAILABLE ? 'LIVRE' : 'OCUPADO'}
+                    </button>
+                    
+                    {/* Admin Contact Button */}
+                    <a 
+                        href="https://wa.me/5500000000000" // Replace with Admin number
+                        target="_blank"
+                        rel="noreferrer"
+                        className="p-2 rounded-full hover:bg-gray-700 transition text-gray-400 hover:text-green-500" 
+                        title="Falar com Admin"
+                    >
+                        <span className="material-icons">support_agent</span>
+                    </a>
+                 </>
+             )}
             <button className="p-2 rounded-full hover:bg-gray-700 transition" title="Configurações"><span className="material-icons">settings</span></button>
             <button className="p-2 rounded-full hover:bg-red-900/30 hover:text-red-400 transition" title="Sair" onClick={handleLogout}><span className="material-icons">logout</span></button>
           </div>

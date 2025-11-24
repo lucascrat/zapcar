@@ -1,7 +1,7 @@
 
 import React, { useEffect, useState, useRef } from 'react';
-import { fetchAllDriversForAdmin, deleteDriver, updateDriverStatus, updateDriverVehicle } from '../services/supabaseClient';
-import { UserProfile, DriverStatus, CallRecord } from '../types';
+import { fetchAllDriversForAdmin, deleteDriver, updateDriverStatus, updateDriverVehicle, fetchAppSettings, updateAppSettings, approveDriver } from '../services/supabaseClient';
+import { UserProfile, DriverStatus, CallRecord, AppSettings } from '../types';
 import { soundService } from '../services/soundService';
 
 // Declare Leaflet globally since it's imported via CDN
@@ -16,9 +16,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onL
   const [drivers, setDrivers] = useState<UserProfile[]>([]);
   const [selectedDriver, setSelectedDriver] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [filterStatus, setFilterStatus] = useState<DriverStatus | 'all'>('all');
+  const [filterStatus, setFilterStatus] = useState<DriverStatus | 'all' | 'pending'>('all');
   const [searchTerm, setSearchTerm] = useState('');
-  const [activeTab, setActiveTab] = useState<'details' | 'map' | 'history'>('details');
+  const [activeTab, setActiveTab] = useState<'details' | 'map' | 'history' | 'settings'>('details');
   
   // Mobile Responsive State
   const [showDetailMobile, setShowDetailMobile] = useState(false);
@@ -26,6 +26,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onL
   // Vehicle Form State
   const [vehicleForm, setVehicleForm] = useState({ model: '', plate: '', color: '', type: 'car' as 'car' | 'motorcycle' });
   const [isSavingVehicle, setIsSavingVehicle] = useState(false);
+
+  // Settings State
+  const [appSettings, setAppSettings] = useState<AppSettings>({
+      car_base_price: 0, car_price_km: 0, car_price_min: 0, car_start_distance_limit: 0,
+      moto_base_price: 0, moto_price_km: 0, moto_price_min: 0, moto_start_distance_limit: 0
+  });
+  const [isSavingSettings, setIsSavingSettings] = useState(false);
 
   // Audio Simulation State
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
@@ -43,6 +50,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onL
 
   useEffect(() => {
     loadDrivers();
+    loadSettings();
   }, []);
 
   // Cleanup on unmount - Stop Ringtone!
@@ -192,6 +200,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onL
     setIsLoading(false);
   };
 
+  const loadSettings = async () => {
+      const settings = await fetchAppSettings();
+      setAppSettings(settings);
+  };
+
+  const handleSaveSettings = async () => {
+      setIsSavingSettings(true);
+      await updateAppSettings(appSettings);
+      alert("Configurações atualizadas!");
+      setIsSavingSettings(false);
+  };
+
   const handleDelete = async (id: string) => {
     if (confirm("Tem certeza que deseja remover este motorista permanentemente?")) {
         const success = await deleteDriver(id);
@@ -204,6 +224,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onL
         } else {
             alert("Erro ao deletar motorista.");
         }
+    }
+  };
+
+  const handleApprove = async (id: string) => {
+    if (confirm("Deseja aprovar este motorista? Ele terá acesso imediato ao aplicativo.")) {
+       const success = await approveDriver(id);
+       if (success) {
+           setDrivers(prev => prev.map(d => d.id === id ? { ...d, is_approved: true } : d));
+           if (selectedDriver?.id === id) {
+               setSelectedDriver(prev => prev ? { ...prev, is_approved: true } : null);
+           }
+           alert("Motorista aprovado com sucesso!");
+       } else {
+           alert("Erro ao aprovar motorista.");
+       }
     }
   };
 
@@ -249,6 +284,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onL
 
   const filteredDrivers = drivers.filter(d => {
     const matchesSearch = d.username.toLowerCase().includes(searchTerm.toLowerCase());
+    if (filterStatus === 'pending') {
+        return matchesSearch && d.is_approved === false;
+    }
     const matchesStatus = filterStatus === 'all' || d.status === filterStatus;
     return matchesSearch && matchesStatus;
   });
@@ -291,21 +329,35 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onL
             />
            </div>
 
-           <div className="flex gap-2 overflow-x-auto pb-1">
-             {['all', DriverStatus.AVAILABLE, DriverStatus.BUSY, DriverStatus.OFFLINE].map(st => (
-               <button
-                 key={st}
-                 onClick={() => setFilterStatus(st as any)}
+           <div className="flex gap-2 overflow-x-auto pb-1 mb-2">
+             <button
+                 onClick={() => setFilterStatus('all')}
                  className={`px-3 py-1.5 text-xs rounded-full capitalize border transition whitespace-nowrap ${
-                    filterStatus === st 
-                    ? 'bg-whatsapp-green text-white border-whatsapp-green shadow-sm' 
-                    : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
+                    filterStatus === 'all' ? 'bg-whatsapp-green text-white border-whatsapp-green shadow-sm' : 'bg-white text-gray-600 border-gray-300'
                  }`}
-               >
-                 {st === 'all' ? 'Todos' : st === 'available' ? 'Livre' : st === 'busy' ? 'Ocup' : 'Off'}
-               </button>
-             ))}
+             >
+                 Todos
+             </button>
+             <button
+                 onClick={() => setFilterStatus('pending')}
+                 className={`px-3 py-1.5 text-xs rounded-full capitalize border transition whitespace-nowrap flex items-center gap-1 ${
+                    filterStatus === 'pending' ? 'bg-yellow-500 text-white border-yellow-500 shadow-sm' : 'bg-white text-gray-600 border-gray-300'
+                 }`}
+             >
+                 Pendentes
+                 {drivers.filter(d => !d.is_approved).length > 0 && (
+                     <span className="bg-red-500 text-white text-[9px] px-1 rounded-full">{drivers.filter(d => !d.is_approved).length}</span>
+                 )}
+             </button>
+             {/* Outros filtros */}
            </div>
+           
+           <button 
+             onClick={() => { setActiveTab('settings'); setSelectedDriver(null); setShowDetailMobile(true); }}
+             className="w-full py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm font-medium text-gray-700 flex items-center justify-center gap-2"
+           >
+               <span className="material-icons text-sm">settings</span> Configurações Gerais
+           </button>
         </div>
 
         <div className="flex-1 overflow-y-auto custom-scrollbar">
@@ -316,10 +368,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onL
               <div 
                 key={driver.id}
                 onClick={() => handleDriverClick(driver)}
-                className={`p-4 flex items-center cursor-pointer border-b border-gray-50 hover:bg-gray-50 transition ${selectedDriver?.id === driver.id ? 'bg-blue-50 border-l-4 border-l-blue-500' : ''}`}
+                className={`p-4 flex items-center cursor-pointer border-b border-gray-50 hover:bg-gray-50 transition relative ${selectedDriver?.id === driver.id ? 'bg-blue-50 border-l-4 border-l-blue-500' : ''}`}
               >
-                <div className="relative w-12 h-12 mr-4 group">
-                  <img src={driver.avatar_url || 'https://via.placeholder.com/40'} alt={driver.username} className="w-full h-full rounded-full object-cover shadow-sm" />
+                {!driver.is_approved && (
+                    <div className="absolute top-0 right-0 bg-yellow-400 text-xs font-bold px-2 py-0.5 rounded-bl-lg text-white shadow-sm">
+                        PENDENTE
+                    </div>
+                )}
+
+                <div className="relative w-12 h-12 mr-4 group shrink-0">
+                  <img src={driver.avatar_url || 'https://via.placeholder.com/40'} alt={driver.username} className={`w-full h-full rounded-full object-cover shadow-sm ${!driver.is_approved ? 'grayscale opacity-70' : ''}`} />
                   <span 
                     className={`absolute bottom-0 right-0 w-4 h-4 rounded-full border-2 border-white ${
                     driver.status === 'available' ? 'bg-green-500' : driver.status === 'busy' ? 'bg-red-500' : 'bg-gray-400'
@@ -346,7 +404,90 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onL
 
       {/* Main Content (Detail View) */}
       <div className={`flex-1 bg-gray-50 overflow-y-auto ${showDetailMobile ? 'block absolute inset-0 z-20 bg-white' : 'hidden md:block static'}`}>
-        {selectedDriver ? (
+        
+        {/* SETTINGS VIEW */}
+        {activeTab === 'settings' && !selectedDriver ? (
+            <div className="max-w-4xl mx-auto p-8">
+                 <div className="md:hidden mb-4">
+                    <button onClick={handleBackToList} className="flex items-center text-gray-600"><span className="material-icons mr-2">arrow_back</span> Voltar</button>
+                 </div>
+                 <h2 className="text-2xl font-bold text-gray-800 mb-6 flex items-center gap-2">
+                     <span className="material-icons">settings</span> Configurações do Aplicativo
+                 </h2>
+                 
+                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                     {/* Car Rates */}
+                     <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+                         <div className="flex items-center gap-2 mb-4 text-blue-600 font-bold border-b pb-2">
+                             <span className="material-icons">directions_car</span> Tarifas Carro
+                         </div>
+                         <div className="space-y-4">
+                             <div>
+                                 <label className="block text-sm font-medium text-gray-700 mb-1">Bandeirada (R$)</label>
+                                 <input type="number" step="0.10" value={appSettings.car_base_price} onChange={e => setAppSettings({...appSettings, car_base_price: parseFloat(e.target.value)})} className="w-full p-2 border rounded" />
+                             </div>
+                             <div>
+                                 <label className="block text-sm font-medium text-gray-700 mb-1">Preço por KM (R$)</label>
+                                 <input type="number" step="0.10" value={appSettings.car_price_km} onChange={e => setAppSettings({...appSettings, car_price_km: parseFloat(e.target.value)})} className="w-full p-2 border rounded" />
+                             </div>
+                             <div>
+                                 <label className="block text-sm font-medium text-gray-700 mb-1">Preço por Minuto (R$)</label>
+                                 <input type="number" step="0.10" value={appSettings.car_price_min} onChange={e => setAppSettings({...appSettings, car_price_min: parseFloat(e.target.value)})} className="w-full p-2 border rounded" />
+                             </div>
+                             <div className="pt-2 border-t border-gray-100">
+                                 <label className="block text-sm font-bold text-gray-700 mb-1">Distância Inicial (Inclusa na Bandeirada)</label>
+                                 <div className="flex items-center">
+                                    <input type="number" step="0.10" value={appSettings.car_start_distance_limit} onChange={e => setAppSettings({...appSettings, car_start_distance_limit: parseFloat(e.target.value)})} className="flex-1 p-2 border rounded" />
+                                    <span className="ml-2 text-sm text-gray-500">km</span>
+                                 </div>
+                                 <p className="text-xs text-gray-400 mt-1">Ex: Se colocar 2, só cobra por KM após 2km rodados.</p>
+                             </div>
+                         </div>
+                     </div>
+
+                     {/* Moto Rates */}
+                     <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+                         <div className="flex items-center gap-2 mb-4 text-orange-600 font-bold border-b pb-2">
+                             <span className="material-icons">two_wheeler</span> Tarifas Moto
+                         </div>
+                         <div className="space-y-4">
+                             <div>
+                                 <label className="block text-sm font-medium text-gray-700 mb-1">Bandeirada (R$)</label>
+                                 <input type="number" step="0.10" value={appSettings.moto_base_price} onChange={e => setAppSettings({...appSettings, moto_base_price: parseFloat(e.target.value)})} className="w-full p-2 border rounded" />
+                             </div>
+                             <div>
+                                 <label className="block text-sm font-medium text-gray-700 mb-1">Preço por KM (R$)</label>
+                                 <input type="number" step="0.10" value={appSettings.moto_price_km} onChange={e => setAppSettings({...appSettings, moto_price_km: parseFloat(e.target.value)})} className="w-full p-2 border rounded" />
+                             </div>
+                             <div>
+                                 <label className="block text-sm font-medium text-gray-700 mb-1">Preço por Minuto (R$)</label>
+                                 <input type="number" step="0.10" value={appSettings.moto_price_min} onChange={e => setAppSettings({...appSettings, moto_price_min: parseFloat(e.target.value)})} className="w-full p-2 border rounded" />
+                             </div>
+                             <div className="pt-2 border-t border-gray-100">
+                                 <label className="block text-sm font-bold text-gray-700 mb-1">Distância Inicial (Inclusa na Bandeirada)</label>
+                                 <div className="flex items-center">
+                                    <input type="number" step="0.10" value={appSettings.moto_start_distance_limit} onChange={e => setAppSettings({...appSettings, moto_start_distance_limit: parseFloat(e.target.value)})} className="flex-1 p-2 border rounded" />
+                                    <span className="ml-2 text-sm text-gray-500">km</span>
+                                 </div>
+                                 <p className="text-xs text-gray-400 mt-1">Ex: Se colocar 2, só cobra por KM após 2km rodados.</p>
+                             </div>
+                         </div>
+                     </div>
+                 </div>
+
+                 <div className="mt-8 flex justify-end">
+                     <button 
+                        onClick={handleSaveSettings} 
+                        disabled={isSavingSettings}
+                        className="bg-green-600 text-white px-6 py-3 rounded-lg font-bold shadow-md hover:bg-green-700 flex items-center gap-2"
+                     >
+                         {isSavingSettings ? 'Salvando...' : 'Salvar Alterações'}
+                         <span className="material-icons">save</span>
+                     </button>
+                 </div>
+            </div>
+        ) : (
+        selectedDriver ? (
           <div className="h-full flex flex-col">
             {/* Mobile Back Button Header */}
             <div className="md:hidden bg-white p-2 border-b flex items-center shadow-sm">
@@ -360,7 +501,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onL
             <div className="h-32 md:h-40 bg-gradient-to-r from-blue-600 to-indigo-600 relative shrink-0">
                <div className="absolute -bottom-10 md:-bottom-12 left-6 md:left-8">
                  <div className="w-20 h-20 md:w-24 md:h-24 rounded-full border-4 border-white bg-white overflow-hidden shadow-md">
-                   <img src={selectedDriver.avatar_url} alt={selectedDriver.username} className="w-full h-full object-cover" />
+                   <img src={selectedDriver.avatar_url} alt={selectedDriver.username} className={`w-full h-full object-cover ${!selectedDriver.is_approved ? 'grayscale' : ''}`} />
                  </div>
                </div>
                <div className="absolute top-4 right-4 flex gap-2">
@@ -382,20 +523,37 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onL
                             {selectedDriver.vehicle_type === 'motorcycle' ? 'two_wheeler' : 'directions_car'}
                         </span>
                    </h2>
-                   <div className="flex items-center gap-2 mt-1">
-                     <span className={`px-2 py-0.5 rounded text-xs font-medium uppercase ${
-                        selectedDriver.status === 'available' ? 'bg-green-100 text-green-800' :
-                        selectedDriver.status === 'busy' ? 'bg-red-100 text-red-800' : 'bg-gray-100 text-gray-800'
-                     }`}>
-                       {selectedDriver.status}
-                     </span>
-                     <span className="text-gray-400 text-sm">•</span>
-                     <span className="text-gray-500 text-sm">Motorista</span>
-                   </div>
+                   {!selectedDriver.is_approved ? (
+                        <div className="mt-2 inline-flex items-center gap-2 bg-yellow-100 text-yellow-800 px-3 py-1 rounded-full text-sm font-bold border border-yellow-200">
+                            <span className="material-icons text-sm">warning</span>
+                            Aprovação Pendente
+                        </div>
+                   ) : (
+                        <div className="flex items-center gap-2 mt-1">
+                            <span className={`px-2 py-0.5 rounded text-xs font-medium uppercase ${
+                                selectedDriver.status === 'available' ? 'bg-green-100 text-green-800' :
+                                selectedDriver.status === 'busy' ? 'bg-red-100 text-red-800' : 'bg-gray-100 text-gray-800'
+                            }`}>
+                            {selectedDriver.status}
+                            </span>
+                            <span className="text-gray-400 text-sm">•</span>
+                            <span className="text-gray-500 text-sm">Motorista Aprovado</span>
+                        </div>
+                   )}
                  </div>
                  
                  {/* Quick Actions */}
                  <div className="flex gap-2 overflow-x-auto pb-2 md:pb-0">
+                   {!selectedDriver.is_approved && (
+                       <button
+                           onClick={() => handleApprove(selectedDriver.id)}
+                           className="flex items-center gap-2 px-4 py-2 rounded-lg bg-green-600 text-white hover:bg-green-700 shadow-md animate-pulse"
+                       >
+                           <span className="material-icons text-sm">check_circle</span>
+                           <span className="text-sm font-bold">APROVAR AGORA</span>
+                       </button>
+                   )}
+
                    <button 
                      onClick={() => setIsPlayingAudio(!isPlayingAudio)}
                      className={`flex items-center gap-2 px-3 py-2 rounded-lg transition whitespace-nowrap ${isPlayingAudio ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
@@ -620,9 +778,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onL
         ) : (
           <div className="h-full flex flex-col items-center justify-center text-gray-400 p-8">
             <span className="material-icons text-6xl mb-4 text-gray-300">directions_car</span>
-            <p className="text-lg">Selecione um motorista para ver detalhes.</p>
+            <p className="text-lg">Selecione um motorista para ver detalhes ou acesse as Configurações.</p>
           </div>
-        )}
+        )
+      )}
       </div>
     </div>
   );

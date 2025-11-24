@@ -1,16 +1,15 @@
 
-// Simple Sound Service using Base64 to avoid external dependencies and ensure offline capability
+// Sounds Service
+// Sons mais altos e distintos para simular apps de transporte (99/Uber)
 
-// Short "Pop" sound for outgoing messages
-const SENT_SOUND = 'data:audio/mp3;base64,//NExAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//NExAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//NExAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//NExAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//NExAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//NExAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq';
+// Alarme de chamada (Siren style)
+const CALL_SOUND_URL = 'https://assets.mixkit.co/active_storage/sfx/2859/2859-preview.mp3'; 
 
-// Soft "Ping" for incoming messages
-const RECEIVED_SOUND = 'data:audio/mp3;base64,//NExAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//NExAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//NExAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//NExAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//NExAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq';
+// Notificação recebida (Clear distinct ping)
+const RECEIVED_URL = 'https://assets.mixkit.co/active_storage/sfx/1862/1862-preview.mp3';
 
-// Classic Office Phone Ring (looping capable)
-const CALL_SOUND = 'https://assets.mixkit.co/active_storage/sfx/28/28-preview.mp3'; 
+// Som de envio (Swoosh)
 const SENT_URL = 'https://assets.mixkit.co/active_storage/sfx/2354/2354-preview.mp3';
-const RECEIVED_URL = 'https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3';
 
 class SoundService {
   private sentAudio: HTMLAudioElement;
@@ -22,11 +21,14 @@ class SoundService {
   constructor() {
     this.sentAudio = new Audio(SENT_URL);
     this.receivedAudio = new Audio(RECEIVED_URL);
-    this.callAudio = new Audio(CALL_SOUND);
+    this.callAudio = new Audio(CALL_SOUND_URL);
     
-    // Configura o loop para o ringtone
+    // Configura volume máximo para chamadas
     this.callAudio.loop = true;
     this.callAudio.volume = 1.0; 
+    
+    // Configura volume para mensagens
+    this.receivedAudio.volume = 1.0;
 
     // Preload
     this.sentAudio.load();
@@ -68,7 +70,7 @@ class SoundService {
           icon: 'https://cdn-icons-png.flaticon.com/512/3097/3097180.png',
           
           // Vibração Agressiva: Longa para chamadas, curta para mensagens
-          vibrate: isCall ? [1000, 500, 1000, 500, 1000] : [200, 100, 200],
+          vibrate: isCall ? [2000, 500, 2000, 500, 2000] : [200, 100, 200],
           
           tag: isCall ? 'incoming-call' : 'new-message', 
           
@@ -86,7 +88,7 @@ class SoundService {
 
         this.activeNotification = notification;
 
-        // Tentar tocar som HTML5 como fallback
+        // Se for mensagem, toca o som também (para garantir em mobile)
         if (!isCall) {
            this.receivedAudio.play().catch(() => {});
         }
@@ -99,7 +101,7 @@ class SoundService {
     // Fallback de vibração via navegador
     if (navigator.vibrate) {
         try {
-            navigator.vibrate(isCall ? [1000, 500, 1000] : [200, 100, 200]);
+            navigator.vibrate(isCall ? [2000, 1000, 2000, 1000, 2000] : [200, 100, 200]);
         } catch(e) { }
     }
   }
@@ -120,8 +122,7 @@ class SoundService {
     this.callAudio.play().catch(e => console.log("Ringtone blocked (user interaction needed):", e));
     
     // NOTIFICAÇÃO DE CHAMADA (SIMULA O SOBREPOR APPS)
-    // Dispara notificação de sistema persistente
-    this.sendNotification("📞 CHAMADA RECEBIDA", "Toque aqui para ATENDER AGORA!", true);
+    this.sendNotification("📞 NOVA CORRIDA / CHAMADA", "Toque aqui para ATENDER AGORA!", true);
   }
 
   stopRingtone() {

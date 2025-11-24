@@ -23,6 +23,7 @@ export interface UserProfile {
   phone?: string; // Novo campo
   role: UserRole;
   status: DriverStatus;
+  is_approved?: boolean; // Novo campo para aprovação
   avatar_url?: string;
   created_at?: string;
   vehicle_model?: string;
@@ -59,6 +60,18 @@ export interface CallRecord {
   clientName: string;
 }
 
+export interface AppSettings {
+  id?: string;
+  car_base_price: number;
+  car_price_km: number;
+  car_price_min: number;
+  car_start_distance_limit: number; // Distância (km) incluída na bandeirada
+  moto_base_price: number;
+  moto_price_km: number;
+  moto_price_min: number;
+  moto_start_distance_limit: number; // Distância (km) incluída na bandeirada
+}
+
 // Helper types for Supabase Generic usage
 export type Json =
   | string
@@ -80,6 +93,11 @@ export interface Database {
         Row: Message
         Insert: Message
         Update: Partial<Message>
+      }
+      app_settings: {
+        Row: AppSettings
+        Insert: AppSettings
+        Update: Partial<AppSettings>
       }
     }
   }

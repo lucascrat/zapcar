@@ -1,7 +1,7 @@
 
 import { createClient } from '@supabase/supabase-js';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from '../constants';
-import { Message, UserProfile, UserRole, DriverStatus } from '../types';
+import { Message, UserProfile, UserRole, DriverStatus, AppSettings } from '../types';
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
@@ -32,6 +32,7 @@ export const fetchOnlineDrivers = async (): Promise<UserProfile[]> => {
     .from('profiles')
     .select('*')
     .eq('role', UserRole.DRIVER)
+    .eq('is_approved', true) // Only approved drivers
     .neq('status', DriverStatus.OFFLINE)
     .order('status', { ascending: true }); // Disponíveis primeiro
   
@@ -67,6 +68,19 @@ export const deleteDriver = async (driverId: string): Promise<boolean> => {
     return false;
   }
   return true;
+};
+
+export const approveDriver = async (driverId: string): Promise<boolean> => {
+    const { error } = await supabase
+      .from('profiles')
+      .update({ is_approved: true })
+      .eq('id', driverId);
+  
+    if (error) {
+      handleDbError(error, "approveDriver");
+      return false;
+    }
+    return true;
 };
 
 export const updateDriverStatus = async (driverId: string, status: DriverStatus): Promise<boolean> => {
@@ -197,6 +211,63 @@ export const sendMessage = async (message: Partial<Message>) => {
   return data as Message;
 };
 
+// --- Settings Functions (Taximeter) ---
+
+export const fetchAppSettings = async (): Promise<AppSettings> => {
+  const { data, error } = await supabase
+    .from('app_settings')
+    .select('*')
+    .limit(1)
+    .single();
+
+  if (error || !data) {
+    // Return defaults if not found
+    return {
+      car_base_price: 5.0,
+      car_price_km: 2.5,
+      car_price_min: 0.5,
+      car_start_distance_limit: 0,
+      moto_base_price: 3.5,
+      moto_price_km: 1.8,
+      moto_price_min: 0.3,
+      moto_start_distance_limit: 0
+    };
+  }
+  
+  // Ensure new fields exist even if DB record is old
+  return {
+      ...data,
+      car_start_distance_limit: data.car_start_distance_limit || 0,
+      moto_start_distance_limit: data.moto_start_distance_limit || 0
+  } as AppSettings;
+};
+
+export const updateAppSettings = async (settings: AppSettings): Promise<boolean> => {
+  // Check if exists row, if not insert, else update
+  const { data: existing } = await supabase.from('app_settings').select('id').limit(1);
+  
+  let error;
+  
+  if (existing && existing.length > 0) {
+     const { error: upError } = await supabase
+       .from('app_settings')
+       .update(settings)
+       .eq('id', existing[0].id);
+     error = upError;
+  } else {
+     const { error: inError } = await supabase
+       .from('app_settings')
+       .insert([settings]);
+     error = inError;
+  }
+
+  if (error) {
+    handleDbError(error, "updateAppSettings");
+    return false;
+  }
+  return true;
+};
+
 // --- Storage Functions ---
 
 export const uploadFile = async (file: Blob, folder: 'audio' | 'images', extension?: string): Promise<string | null> => {
@@ -316,6 +387,7 @@ export const registerClientWithPhoto = async (username: string, phone: string, a
       phone,
       role: UserRole.CLIENT,
       status: DriverStatus.AVAILABLE,
+      is_approved: true, // CLIENTES JÁ NASCEM APROVADOS
       avatar_url
     };
 
@@ -343,7 +415,14 @@ export const registerTempClient = async (username: string): Promise<UserProfile 
   return registerClientWithPhoto(username, "00000000");
 };
 
-export const registerDriver = async (username: string, vehicleType: 'car' | 'motorcycle' = 'car'): Promise<UserProfile | null> => {
+export const registerDriver = async (
+  username: string, 
+  vehicleType: 'car' | 'motorcycle',
+  vehicleModel?: string,
+  vehiclePlate?: string,
+  vehicleColor?: string,
+  avatarFile?: File
+): Promise<UserProfile | null> => {
   try {
     // Check if username exists
     const { data: existing, error: checkError } = await supabase
@@ -363,12 +442,24 @@ export const registerDriver = async (username: string, vehicleType: 'car' | 'mot
       return null;
     }
 
+    // Upload Avatar if provided
+    let avatar_url = `https://ui-avatars.com/api/?name=${encodeURIComponent(username)}&background=00a884&color=fff`;
+    if (avatarFile) {
+        const ext = avatarFile.name.split('.').pop() || 'jpg';
+        const url = await uploadFile(avatarFile, 'images', ext);
+        if (url) avatar_url = url;
+    }
+
     const profileInsert = {
       username,
       role: UserRole.DRIVER,
       status: DriverStatus.AVAILABLE,
+      is_approved: false, // MOTORISTA PRECISA DE APROVAÇÃO
       vehicle_type: vehicleType,
-      avatar_url: `https://i.pravatar.cc/150?u=${Math.random()}`
+      vehicle_model: vehicleModel || '',
+      vehicle_plate: vehiclePlate || '',
+      vehicle_color: vehicleColor || '',
+      avatar_url
     };
 
     const { data, error } = await supabase
@@ -404,12 +495,15 @@ export const loginDriver = async (username: string): Promise<UserProfile | null>
     } 
 
     if (data) {
-      // If logging in, ensure they are set to available
-      updateDriverStatus(data.id, DriverStatus.AVAILABLE).catch(e => 
-          console.warn("Non-critical: Failed to update status on login", e)
-      );
+      // If logging in, ensure they are set to available IF approved
+      if (data.is_approved) {
+          updateDriverStatus(data.id, DriverStatus.AVAILABLE).catch(e => 
+            console.warn("Non-critical: Failed to update status on login", e)
+          );
+          return { ...data, status: DriverStatus.AVAILABLE } as UserProfile;
+      }
       
-      return { ...data, status: DriverStatus.AVAILABLE } as UserProfile;
+      return data as UserProfile;
     }
     
     return null;

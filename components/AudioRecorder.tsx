@@ -1,5 +1,5 @@
 
-import React, { useState, useRef } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 
 interface AudioRecorderProps {
   onAudioReady: (blob: Blob, mimeType: string) => void;
@@ -10,14 +10,23 @@ interface AudioRecorderProps {
 export const AudioRecorder: React.FC<AudioRecorderProps> = ({ onAudioReady, isRecording, setIsRecording }) => {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<BlobPart[]>([]);
+  const [permissionGranted, setPermissionGranted] = useState(false);
+
+  // Solicita permissão ao montar (opcional, ou na primeira interação)
+  useEffect(() => {
+    navigator.mediaDevices.getUserMedia({ audio: true })
+      .then(() => setPermissionGranted(true))
+      .catch((err) => {
+          console.log("Mic permission not yet granted or denied", err);
+      });
+  }, []);
 
   // Detect supported mime type
   const getSupportedMimeType = () => {
-    // Safari e iOS preferem mp4/aac. Chrome/Android preferem webm/opus.
     const types = [
-      'audio/mp4',             
       'audio/webm;codecs=opus', 
       'audio/webm',
+      'audio/mp4',
       'audio/ogg;codecs=opus',
       'audio/wav'
     ];
@@ -26,7 +35,7 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({ onAudioReady, isRe
         return type;
       }
     }
-    return ''; // Browser default
+    return '';
   };
 
   const startRecording = async () => {
@@ -48,36 +57,67 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({ onAudioReady, isRe
 
       mediaRecorder.onstop = () => {
         const type = mimeType || 'audio/webm';
-        const blob = new Blob(chunksRef.current, { type });
-        onAudioReady(blob, type);
-        
-        // Parar todos os tracks para liberar o microfone (importante para mobile e evitar bolinha verde presa)
+        if (chunksRef.current.length > 0) {
+            const blob = new Blob(chunksRef.current, { type });
+            // Pequeno delay para garantir que o usuário realmente quis enviar
+            onAudioReady(blob, type);
+        }
         stream.getTracks().forEach(track => track.stop());
       };
 
       mediaRecorder.start();
       setIsRecording(true);
+      
+      // Feedback vibração
+      if (navigator.vibrate) navigator.vibrate(50);
+
     } catch (err) {
       console.error("Error accessing microphone:", err);
       alert("Erro ao acessar microfone. Verifique as permissões.");
-    }
-  };
-
-  const stopRecording = () => {
-    if (mediaRecorderRef.current && isRecording) {
-      mediaRecorderRef.current.stop();
       setIsRecording(false);
     }
   };
 
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
+       // Feedback vibração
+      if (navigator.vibrate) navigator.vibrate(50);
+    }
+  };
+
+  // Event Handlers for Hold-to-Record
+  const handlePointerDown = (e: React.PointerEvent) => {
+    e.preventDefault(); // Prevents selection/scrolling
+    startRecording();
+  };
+
+  const handlePointerUp = (e: React.PointerEvent) => {
+    e.preventDefault();
+    stopRecording();
+  };
+
+  const handlePointerLeave = (e: React.PointerEvent) => {
+     // If user slides finger away, cancel? For now, we just send.
+     if (isRecording) stopRecording();
+  };
+
   return (
     <button
-      onClick={isRecording ? stopRecording : startRecording}
-      className={`p-2 rounded-full transition-all ${isRecording ? 'bg-red-500 animate-pulse text-white' : 'hover:bg-gray-700 text-gray-400'}`}
-      title={isRecording ? "Parar gravação" : "Gravar áudio"}
+      onPointerDown={handlePointerDown}
+      onPointerUp={handlePointerUp}
+      onPointerLeave={handlePointerLeave}
+      className={`p-3 rounded-full transition-all duration-200 select-none touch-none flex items-center justify-center shadow-md ${
+        isRecording 
+          ? 'bg-red-500 scale-125 text-white ring-4 ring-red-200' 
+          : 'bg-whatsapp-green text-white hover:bg-emerald-600'
+      }`}
+      title="Segure para gravar"
+      style={{ minWidth: '44px', minHeight: '44px' }}
     >
-      <span className="material-icons text-xl">
-        {isRecording ? 'stop' : 'mic'}
+      <span className={`material-icons text-xl ${isRecording ? 'animate-pulse' : ''}`}>
+        mic
       </span>
     </button>
   );

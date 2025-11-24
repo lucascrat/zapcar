@@ -8,6 +8,7 @@ export const SUPABASE_SETUP_SQL = `
 -- 1. LIMPEZA (CUIDADO: ISSO APAGA TODOS OS DADOS)
 DROP TABLE IF EXISTS public.messages CASCADE;
 DROP TABLE IF EXISTS public.profiles CASCADE;
+DROP TABLE IF EXISTS public.app_settings CASCADE;
 
 -- 2. Habilitar extensão para UUIDs (se necessário)
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
@@ -20,6 +21,7 @@ CREATE TABLE public.profiles (
     phone TEXT, 
     role TEXT NOT NULL CHECK (role IN ('client', 'driver', 'admin')),
     status TEXT NOT NULL DEFAULT 'available',
+    is_approved BOOLEAN DEFAULT TRUE, -- Clientes nascem aprovados, motoristas mudamos no insert
     avatar_url TEXT,
     vehicle_model TEXT,
     vehicle_plate TEXT,
@@ -43,7 +45,26 @@ CREATE TABLE public.messages (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- Adicionar chaves estrangeiras
+-- =================================================================================
+-- 5. Criar Tabela de Configurações do App (Taxímetro)
+CREATE TABLE public.app_settings (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    car_base_price FLOAT DEFAULT 5.0,
+    car_price_km FLOAT DEFAULT 2.5,
+    car_price_min FLOAT DEFAULT 0.5,
+    car_start_distance_limit FLOAT DEFAULT 0.0,
+    moto_base_price FLOAT DEFAULT 3.5,
+    moto_price_km FLOAT DEFAULT 1.8,
+    moto_price_min FLOAT DEFAULT 0.3,
+    moto_start_distance_limit FLOAT DEFAULT 0.0
+);
+
+-- Inserir configuração padrão
+INSERT INTO public.app_settings (car_base_price, car_price_km, car_price_min, car_start_distance_limit, moto_base_price, moto_price_km, moto_price_min, moto_start_distance_limit)
+VALUES (5.0, 2.5, 0.5, 0.0, 3.5, 1.8, 0.3, 0.0);
+
+-- =================================================================================
+-- 6. Adicionar chaves estrangeiras
 ALTER TABLE public.messages 
 ADD CONSTRAINT messages_sender_id_fkey 
 FOREIGN KEY (sender_id) REFERENCES public.profiles(id) ON DELETE CASCADE;
@@ -53,30 +74,30 @@ ADD CONSTRAINT messages_receiver_id_fkey
 FOREIGN KEY (receiver_id) REFERENCES public.profiles(id) ON DELETE CASCADE;
 
 -- =================================================================================
--- 5. STORAGE (Arquivos de mídia)
--- Criação do Bucket para armazenar áudios e imagens
+-- 7. STORAGE (Arquivos de mídia)
 
 INSERT INTO storage.buckets (id, name, public) 
 VALUES ('chat-media', 'chat-media', true)
 ON CONFLICT (id) DO NOTHING;
 
--- Políticas de Storage (Permissiva para demonstração)
 CREATE POLICY "Permitir upload publico" ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'chat-media');
 CREATE POLICY "Permitir leitura publica" ON storage.objects FOR SELECT USING (bucket_id = 'chat-media');
 
 -- =================================================================================
--- 6. Configurar Segurança (RLS)
+-- 8. Configurar Segurança (RLS)
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.messages ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.app_settings ENABLE ROW LEVEL SECURITY;
 
--- Políticas permissivas para facilitar o funcionamento do demo
+-- Políticas permissivas
 CREATE POLICY "Acesso total perfis" ON public.profiles FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Acesso total mensagens" ON public.messages FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Acesso total settings" ON public.app_settings FOR ALL USING (true) WITH CHECK (true);
 
 -- =================================================================================
--- 7. Configurar Realtime
+-- 9. Configurar Realtime
 DROP PUBLICATION IF EXISTS supabase_realtime;
-CREATE PUBLICATION supabase_realtime FOR TABLE messages, profiles;
+CREATE PUBLICATION supabase_realtime FOR TABLE messages, profiles, app_settings;
 
 -- FIM DO SCRIPT
 `;
