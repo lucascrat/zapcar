@@ -57,6 +57,19 @@ export const fetchAllDriversForAdmin = async (): Promise<UserProfile[]> => {
   return data as UserProfile[];
 };
 
+export const fetchAdminContact = async (): Promise<UserProfile | null> => {
+    // Busca o primeiro admin disponível para o chat de suporte
+    const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('role', UserRole.ADMIN)
+        .limit(1)
+        .maybeSingle();
+
+    if (error) return null;
+    return data as UserProfile;
+};
+
 export const deleteDriver = async (driverId: string): Promise<boolean> => {
   const { error } = await supabase
     .from('profiles')
@@ -417,6 +430,7 @@ export const registerTempClient = async (username: string): Promise<UserProfile 
 
 export const registerDriver = async (
   username: string, 
+  password: string,
   vehicleType: 'car' | 'motorcycle',
   vehicleModel?: string,
   vehiclePlate?: string,
@@ -452,6 +466,7 @@ export const registerDriver = async (
 
     const profileInsert = {
       username,
+      password, // Save password
       role: UserRole.DRIVER,
       status: DriverStatus.AVAILABLE,
       is_approved: false, // MOTORISTA PRECISA DE APROVAÇÃO
@@ -480,14 +495,19 @@ export const registerDriver = async (
   }
 };
 
-export const loginDriver = async (username: string): Promise<UserProfile | null> => {
+export const loginDriver = async (username: string, password?: string): Promise<UserProfile | null> => {
   try {
-    const { data, error } = await supabase
+    let query = supabase
       .from('profiles')
       .select('*')
       .eq('username', username)
-      .eq('role', UserRole.DRIVER)
-      .maybeSingle();
+      .eq('role', UserRole.DRIVER);
+
+    if (password) {
+        query = query.eq('password', password);
+    }
+      
+    const { data, error } = await query.maybeSingle();
 
     if (error) {
       handleDbError(error, "loginDriver");

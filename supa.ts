@@ -19,6 +19,7 @@ CREATE TABLE public.profiles (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     username TEXT NOT NULL,
     phone TEXT, 
+    password TEXT, -- Senha simples para login (ideal seria hash, mas para protótipo usamos texto)
     role TEXT NOT NULL CHECK (role IN ('client', 'driver', 'admin')),
     status TEXT NOT NULL DEFAULT 'available',
     is_approved BOOLEAN DEFAULT TRUE, -- Clientes nascem aprovados, motoristas mudamos no insert
@@ -30,6 +31,17 @@ CREATE TABLE public.profiles (
     lat FLOAT,
     lng FLOAT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- Inserir um ADMIN PADRÃO para que o chat de suporte funcione
+INSERT INTO public.profiles (id, username, password, role, is_approved, avatar_url)
+VALUES (
+    'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11', -- ID fixo para facilitar
+    'Suporte ChegoJá', 
+    'admin123', 
+    'admin', 
+    true, 
+    'https://ui-avatars.com/api/?name=Suporte&background=0D8ABC&color=fff'
 );
 
 -- =================================================================================

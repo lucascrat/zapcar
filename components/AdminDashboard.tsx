@@ -1,8 +1,9 @@
 
 import React, { useEffect, useState, useRef } from 'react';
-import { fetchAllDriversForAdmin, deleteDriver, updateDriverStatus, updateDriverVehicle, fetchAppSettings, updateAppSettings, approveDriver } from '../services/supabaseClient';
-import { UserProfile, DriverStatus, CallRecord, AppSettings } from '../types';
+import { fetchAllDriversForAdmin, deleteDriver, updateDriverStatus, updateDriverVehicle, fetchAppSettings, updateAppSettings, approveDriver, fetchMessages, subscribeToMessages } from '../services/supabaseClient';
+import { UserProfile, DriverStatus, CallRecord, AppSettings, Message } from '../types';
 import { soundService } from '../services/soundService';
+import { ChatWindow } from './ChatWindow'; // Importar ChatWindow
 
 // Declare Leaflet globally since it's imported via CDN
 declare const L: any;
@@ -12,16 +13,21 @@ interface AdminDashboardProps {
   onLogout: () => void;
 }
 
+type AdminTab = 'details' | 'map' | 'history' | 'settings' | 'chat';
+
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onLogout }) => {
   const [drivers, setDrivers] = useState<UserProfile[]>([]);
   const [selectedDriver, setSelectedDriver] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [filterStatus, setFilterStatus] = useState<DriverStatus | 'all' | 'pending'>('all');
   const [searchTerm, setSearchTerm] = useState('');
-  const [activeTab, setActiveTab] = useState<'details' | 'map' | 'history' | 'settings'>('details');
+  const [activeTab, setActiveTab] = useState<AdminTab>('details');
   
   // Mobile Responsive State
   const [showDetailMobile, setShowDetailMobile] = useState(false);
+
+  // Chat State inside Admin
+  const [driverMessages, setDriverMessages] = useState<Message[]>([]);
 
   // Vehicle Form State
   const [vehicleForm, setVehicleForm] = useState({ model: '', plate: '', color: '', type: 'car' as 'car' | 'motorcycle' });
@@ -60,7 +66,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onL
       }
   }, []);
 
-  // Sync vehicle form when selected driver changes & Generate Mock History
+  // Sync vehicle form when selected driver changes & Generate Mock History & Load Messages
   useEffect(() => {
     if (selectedDriver) {
       setVehicleForm({
@@ -70,7 +76,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onL
         type: selectedDriver.vehicle_type || 'car'
       });
       setIsPlayingAudio(false);
-      setActiveTab('details'); // Reset tab on new selection
+      
+      // If we clicked on a driver, assume we want to see details first, unless we specifically went to chat from a notification (logic to be added later)
+      // For now, if driver changes, default to details
+      if (activeTab === 'chat') {
+           loadDriverMessages(selectedDriver.id);
+      } else {
+           setActiveTab('details');
+      }
       
       // Reset call state on driver switch
       setIsCalling(false); 
@@ -104,6 +117,32 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onL
       setCallHistory(mockHistory);
     }
   }, [selectedDriver]);
+
+  // Load Messages when entering Chat Tab
+  useEffect(() => {
+      if (activeTab === 'chat' && selectedDriver) {
+          loadDriverMessages(selectedDriver.id);
+          
+          // Subscribe to new messages
+          const sub = subscribeToMessages(currentUser.id, (newMsg) => {
+              if (selectedDriver && (newMsg.sender_id === selectedDriver.id || newMsg.receiver_id === selectedDriver.id)) {
+                  setDriverMessages(prev => [...prev, newMsg]);
+                  if (newMsg.sender_id === selectedDriver.id) {
+                      soundService.playReceived();
+                  }
+              }
+          });
+          
+          return () => {
+              sub.unsubscribe();
+          }
+      }
+  }, [activeTab, selectedDriver, currentUser.id]);
+
+  const loadDriverMessages = async (driverId: string) => {
+      const msgs = await fetchMessages(currentUser.id, driverId);
+      setDriverMessages(msgs);
+  };
 
   const toggleCall = () => {
       if (isCalling) {
@@ -503,19 +542,26 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onL
             </div>
 
             {/* Cover */}
-            <div className="h-32 md:h-40 bg-gradient-to-r from-blue-600 to-indigo-600 relative shrink-0">
-               <div className="absolute -bottom-10 md:-bottom-12 left-6 md:left-8">
-                 <div className="w-20 h-20 md:w-24 md:h-24 rounded-full border-4 border-white bg-white overflow-hidden shadow-md">
+            <div className={`shrink-0 bg-gradient-to-r from-blue-600 to-indigo-600 relative ${activeTab === 'chat' ? 'h-16' : 'h-32 md:h-40'}`}>
+               <div className={`absolute left-6 md:left-8 ${activeTab === 'chat' ? 'top-2 flex items-center gap-3' : '-bottom-10 md:-bottom-12'}`}>
+                 <div className={`${activeTab === 'chat' ? 'w-12 h-12 border-2' : 'w-20 h-20 md:w-24 md:h-24 border-4'} rounded-full border-white bg-white overflow-hidden shadow-md`}>
                    <img src={selectedDriver.avatar_url} alt={selectedDriver.username} className={`w-full h-full object-cover ${!selectedDriver.is_approved ? 'grayscale' : ''}`} />
                  </div>
+                 {activeTab === 'chat' && (
+                     <h2 className="text-white font-bold text-lg">{selectedDriver.username}</h2>
+                 )}
                </div>
-               <div className="absolute top-4 right-4 flex gap-2">
-                 <button onClick={() => handleDelete(selectedDriver.id)} className="p-2 bg-white/20 hover:bg-white/30 text-white rounded-lg backdrop-blur-sm transition" title="Deletar Motorista">
-                   <span className="material-icons">delete</span>
-                 </button>
-               </div>
+               {activeTab !== 'chat' && (
+                <div className="absolute top-4 right-4 flex gap-2">
+                    <button onClick={() => handleDelete(selectedDriver.id)} className="p-2 bg-white/20 hover:bg-white/30 text-white rounded-lg backdrop-blur-sm transition" title="Deletar Motorista">
+                    <span className="material-icons">delete</span>
+                    </button>
+                </div>
+               )}
             </div>
 
+            {/* Info and Tabs - Only show if NOT chat, or minimize header */}
+            {activeTab !== 'chat' && (
             <div className="pt-12 md:pt-16 px-6 md:px-8 pb-2 shrink-0 bg-white">
                <div className="flex flex-col md:flex-row md:justify-between md:items-start gap-4 mb-4">
                  <div>
@@ -594,6 +640,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onL
                     Detalhes
                   </button>
                   <button 
+                    onClick={() => setActiveTab('chat')}
+                    className="px-4 md:px-6 py-3 font-medium text-sm transition whitespace-nowrap flex items-center gap-2 text-gray-500 hover:text-gray-700"
+                  >
+                    Chat
+                    <span className="bg-whatsapp-green text-white text-[10px] px-1.5 py-0.5 rounded-full">New</span>
+                  </button>
+                  <button 
                     onClick={() => setActiveTab('map')}
                     className={`px-4 md:px-6 py-3 font-medium text-sm transition whitespace-nowrap ${activeTab === 'map' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
                   >
@@ -607,10 +660,27 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onL
                   </button>
                </div>
             </div>
+            )}
 
-            {/* Tab Content */}
-            <div className="flex-1 bg-gray-50 p-4 md:p-8 overflow-y-auto">
+            {/* Tab Content - Full Height for Chat */}
+            <div className={`flex-1 ${activeTab === 'chat' ? 'bg-[#0b141a]' : 'bg-gray-50 p-4 md:p-8'} overflow-y-auto relative`}>
               
+              {activeTab === 'chat' && (
+                   <div className="h-full flex flex-col">
+                       {/* Custom Header within Chat Tab to switch back */}
+                       <div className="bg-gray-100 p-2 flex justify-between items-center text-xs text-gray-500 border-b">
+                           <span>Falando com <b>{selectedDriver.username}</b></span>
+                           <button onClick={() => setActiveTab('details')} className="underline">Voltar aos Detalhes</button>
+                       </div>
+                       <ChatWindow 
+                           currentUser={currentUser}
+                           chatPartner={selectedDriver}
+                           messages={driverMessages}
+                           onSendMessage={(msg) => setDriverMessages(prev => [...prev, msg])}
+                       />
+                   </div>
+              )}
+
               {activeTab === 'details' && (
                 <div className="animate-fade-in max-w-4xl mx-auto">
                     <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-8">

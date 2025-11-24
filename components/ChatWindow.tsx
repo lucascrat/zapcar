@@ -531,7 +531,9 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ currentUser, chatPartner
         </div>
       )}
 
-      {/* Desktop Header */}
+      {/* Desktop Header - ONLY SHOW IF NOT INSIDE ADMIN DASHBOARD (Check if we have a back button handled by parent logic maybe? Or just keep it generic) */}
+      {/* Logic: If currentUser is ADMIN, we hide this header because AdminDashboard provides its own tab header */}
+      {currentUser.role !== UserRole.ADMIN && (
       <div className="h-16 bg-whatsapp-panel hidden md:flex items-center px-4 justify-between z-10 shadow-sm shrink-0">
         <div className="flex items-center cursor-pointer">
           <div className="w-10 h-10 rounded-full bg-gray-500 flex items-center justify-center mr-3 overflow-hidden">
@@ -585,8 +587,10 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ currentUser, chatPartner
           <button className="p-2 rounded-full hover:bg-gray-700/50 active:scale-90 transition"><span className="material-icons">more_vert</span></button>
         </div>
       </div>
+      )}
 
-      {/* Mobile Header (Now includes Driver Buttons) */}
+      {/* Mobile Header (Now includes Driver Buttons) - Hide if Admin too, Admin handles its own back button */}
+      {currentUser.role !== UserRole.ADMIN && (
       <div className="md:hidden bg-whatsapp-panel h-16 flex items-center px-2 border-b border-gray-700 shadow-sm shrink-0 z-20">
         <button onClick={() => {/* Handle Back in parent */}} className="text-gray-300 p-2 rounded-full hover:bg-gray-700 mr-1 active:scale-95 transition">
              {/* Back button logic handled by parent, this is just placeholder visual if needed, currently parent passes nothing to close specifically here but visual consistency maintained */}
@@ -617,6 +621,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ currentUser, chatPartner
             <button onClick={startCall} className="p-2 text-whatsapp-green active:bg-gray-700 rounded-full"><span className="material-icons">call</span></button>
         </div>
       </div>
+      )}
 
       {/* Messages Area */}
       <div className="flex-1 overflow-y-auto p-3 md:p-4 bg-chat-pattern bg-contain bg-repeat opacity-95 scrollbar-thin scrollbar-thumb-gray-600" style={{backgroundColor: '#0b141a'}}>
