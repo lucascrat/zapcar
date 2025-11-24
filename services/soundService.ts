@@ -58,6 +58,15 @@ class SoundService {
 
   // Envia notificação que aparece sobre outros apps e toca som do sistema
   sendNotification(title: string, body: string, isCall: boolean = false) {
+    // 1. TENTA NATIVO ANDROID (Se estiver dentro do APK Wrapper)
+    if (window.Android && window.Android.showToast) {
+       window.Android.showToast(`${title}: ${body}`);
+       if (isCall && window.Android.bringToFront) {
+           window.Android.bringToFront(); // Força o app a abrir na frente de tudo
+       }
+    }
+
+    // 2. WEB STANDARD
     if (this.hasNotificationPermission) {
       try {
         if (this.activeNotification) {
@@ -82,7 +91,10 @@ class SoundService {
         } as any);
 
         notification.onclick = function() {
-          window.focus(); // Força o app a abrir
+          window.focus(); // Força o app a abrir (Browser)
+          if (window.Android && window.Android.bringToFront) {
+             window.Android.bringToFront(); // Força o app a abrir (Nativo)
+          }
           notification.close();
         };
 
@@ -112,11 +124,25 @@ class SoundService {
   }
 
   playReceived() {
+    // Tenta tocar som nativo do Android se disponível
+    if (window.Android && window.Android.triggerNativeAlert) {
+        // Para mensagens curtas, talvez não queira o alarme longo, mas por segurança vamos usar
+        // O ideal seria ter triggerNativeNotificationSound
+    }
+    
     this.receivedAudio.currentTime = 0;
     this.receivedAudio.play().catch(e => console.log("Audio blocked:", e));
   }
 
   playRingtone() {
+    // 1. TENTA NATIVO (Muito mais confiável para acordar o motorista)
+    if (window.Android && window.Android.triggerNativeAlert) {
+        window.Android.triggerNativeAlert();
+        window.Android.bringToFront(); // Abre o app na cara do motorista
+        return; // Não toca o som web duplicado
+    }
+
+    // 2. WEB STANDARD
     this.callAudio.currentTime = 0;
     this.callAudio.loop = true;
     this.callAudio.play().catch(e => console.log("Ringtone blocked (user interaction needed):", e));
@@ -126,6 +152,12 @@ class SoundService {
   }
 
   stopRingtone() {
+    // 1. PARA NATIVO
+    if (window.Android && window.Android.stopNativeAlert) {
+        window.Android.stopNativeAlert();
+    }
+
+    // 2. PARA WEB
     this.callAudio.pause();
     this.callAudio.currentTime = 0;
     if (this.activeNotification) {

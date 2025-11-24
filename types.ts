@@ -21,6 +21,7 @@ export interface UserProfile {
   id: string;
   username: string;
   phone?: string; // Novo campo
+  password?: string; // Campo para senha (opcional no objeto, mas existe no banco)
   role: UserRole;
   status: DriverStatus;
   is_approved?: boolean; // Novo campo para aprovação
@@ -70,6 +71,18 @@ export interface AppSettings {
   moto_price_km: number;
   moto_price_min: number;
   moto_start_distance_limit: number; // Distância (km) incluída na bandeirada
+}
+
+// Interface global para comunicação com Android Nativo
+declare global {
+  interface Window {
+    Android?: {
+      triggerNativeAlert: () => void;
+      stopNativeAlert: () => void;
+      showToast: (msg: string) => void;
+      bringToFront: () => void;
+    }
+  }
 }
 
 // Helper types for Supabase Generic usage

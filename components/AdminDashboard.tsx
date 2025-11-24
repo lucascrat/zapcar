@@ -1,6 +1,6 @@
 
 import React, { useEffect, useState, useRef } from 'react';
-import { fetchAllDriversForAdmin, deleteDriver, updateDriverStatus, updateDriverVehicle, fetchAppSettings, updateAppSettings, approveDriver, fetchMessages, subscribeToMessages } from '../services/supabaseClient';
+import { fetchAllDriversForAdmin, deleteDriver, updateDriverStatus, updateDriverVehicle, updateDriverPassword, fetchAppSettings, updateAppSettings, approveDriver, fetchMessages, subscribeToMessages, subscribeToProfiles } from '../services/supabaseClient';
 import { UserProfile, DriverStatus, CallRecord, AppSettings, Message } from '../types';
 import { soundService } from '../services/soundService';
 import { ChatWindow } from './ChatWindow'; // Importar ChatWindow
@@ -32,6 +32,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onL
   // Vehicle Form State
   const [vehicleForm, setVehicleForm] = useState({ model: '', plate: '', color: '', type: 'car' as 'car' | 'motorcycle' });
   const [isSavingVehicle, setIsSavingVehicle] = useState(false);
+  const [newPassword, setNewPassword] = useState('');
 
   // Settings State
   const [appSettings, setAppSettings] = useState<AppSettings>({
@@ -57,13 +58,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onL
   useEffect(() => {
     loadDrivers();
     loadSettings();
-  }, []);
-
-  // Cleanup on unmount - Stop Ringtone!
-  useEffect(() => {
-      return () => {
-          soundService.stopRingtone();
-      }
+    
+    // Subscribe to profile changes (Real-time updates for new drivers)
+    console.log("Admin assinando updates de perfil...");
+    const sub = subscribeToProfiles(() => {
+        console.log("Recebido update de perfil em tempo real");
+        loadDrivers(); // Reload list when profiles change
+    });
+    
+    return () => {
+        sub.unsubscribe();
+        soundService.stopRingtone();
+    };
   }, []);
 
   // Sync vehicle form when selected driver changes & Generate Mock History & Load Messages
@@ -75,6 +81,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onL
         color: selectedDriver.vehicle_color || '',
         type: selectedDriver.vehicle_type || 'car'
       });
+      setNewPassword(''); // Reset password field
       setIsPlayingAudio(false);
       
       // If we clicked on a driver, assume we want to see details first, unless we specifically went to chat from a notification (logic to be added later)
@@ -294,14 +301,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onL
   const handleUpdateVehicle = async () => {
     if (!selectedDriver) return;
     setIsSavingVehicle(true);
-    const success = await updateDriverVehicle(selectedDriver.id, {
+    
+    const vehicleSuccess = await updateDriverVehicle(selectedDriver.id, {
         vehicle_model: vehicleForm.model,
         vehicle_plate: vehicleForm.plate,
         vehicle_color: vehicleForm.color,
         vehicle_type: vehicleForm.type
     });
+
+    let passwordSuccess = true;
+    if (newPassword.trim()) {
+        passwordSuccess = await updateDriverPassword(selectedDriver.id, newPassword);
+    }
     
-    if (success) {
+    if (vehicleSuccess && passwordSuccess) {
         setDrivers(prev => prev.map(d => d.id === selectedDriver.id ? { 
             ...d, 
             vehicle_model: vehicleForm.model,
@@ -316,7 +329,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onL
             vehicle_color: vehicleForm.color,
             vehicle_type: vehicleForm.type
         } : null);
-        alert("Veículo atualizado!");
+        alert("Dados atualizados com sucesso!");
+        setNewPassword('');
+    } else {
+        alert("Erro ao atualizar alguns dados.");
     }
     setIsSavingVehicle(false);
   };
@@ -367,7 +383,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onL
              <input 
                 type="text"
                 placeholder="Buscar motorista..."
-                className="w-full pl-9 p-2 bg-gray-100 rounded-lg text-sm outline-none focus:ring-2 ring-whatsapp-green/50"
+                className="w-full pl-9 p-2 bg-gray-100 rounded-lg text-sm outline-none focus:ring-2 ring-whatsapp-green/50 text-gray-900"
                 value={searchTerm}
                 onChange={e => setSearchTerm(e.target.value)}
             />
@@ -468,20 +484,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onL
                          <div className="space-y-4">
                              <div>
                                  <label className="block text-sm font-medium text-gray-700 mb-1">Bandeirada (R$)</label>
-                                 <input type="number" step="0.10" value={appSettings.car_base_price} onChange={e => setAppSettings({...appSettings, car_base_price: parseFloat(e.target.value)})} className="w-full p-2 border rounded" />
+                                 <input type="number" step="0.10" value={appSettings.car_base_price} onChange={e => setAppSettings({...appSettings, car_base_price: parseFloat(e.target.value)})} className="w-full p-2 border rounded text-gray-900" />
                              </div>
                              <div>
                                  <label className="block text-sm font-medium text-gray-700 mb-1">Preço por KM (R$)</label>
-                                 <input type="number" step="0.10" value={appSettings.car_price_km} onChange={e => setAppSettings({...appSettings, car_price_km: parseFloat(e.target.value)})} className="w-full p-2 border rounded" />
+                                 <input type="number" step="0.10" value={appSettings.car_price_km} onChange={e => setAppSettings({...appSettings, car_price_km: parseFloat(e.target.value)})} className="w-full p-2 border rounded text-gray-900" />
                              </div>
                              <div>
                                  <label className="block text-sm font-medium text-gray-700 mb-1">Preço por Minuto (R$)</label>
-                                 <input type="number" step="0.10" value={appSettings.car_price_min} onChange={e => setAppSettings({...appSettings, car_price_min: parseFloat(e.target.value)})} className="w-full p-2 border rounded" />
+                                 <input type="number" step="0.10" value={appSettings.car_price_min} onChange={e => setAppSettings({...appSettings, car_price_min: parseFloat(e.target.value)})} className="w-full p-2 border rounded text-gray-900" />
                              </div>
                              <div className="pt-2 border-t border-gray-100">
                                  <label className="block text-sm font-bold text-gray-700 mb-1">Distância Inicial (Inclusa na Bandeirada)</label>
                                  <div className="flex items-center">
-                                    <input type="number" step="0.10" value={appSettings.car_start_distance_limit} onChange={e => setAppSettings({...appSettings, car_start_distance_limit: parseFloat(e.target.value)})} className="flex-1 p-2 border rounded" />
+                                    <input type="number" step="0.10" value={appSettings.car_start_distance_limit} onChange={e => setAppSettings({...appSettings, car_start_distance_limit: parseFloat(e.target.value)})} className="flex-1 p-2 border rounded text-gray-900" />
                                     <span className="ml-2 text-sm text-gray-500">km</span>
                                  </div>
                                  <p className="text-xs text-gray-400 mt-1">Ex: Se colocar 2, só cobra por KM após 2km rodados.</p>
@@ -497,20 +513,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onL
                          <div className="space-y-4">
                              <div>
                                  <label className="block text-sm font-medium text-gray-700 mb-1">Bandeirada (R$)</label>
-                                 <input type="number" step="0.10" value={appSettings.moto_base_price} onChange={e => setAppSettings({...appSettings, moto_base_price: parseFloat(e.target.value)})} className="w-full p-2 border rounded" />
+                                 <input type="number" step="0.10" value={appSettings.moto_base_price} onChange={e => setAppSettings({...appSettings, moto_base_price: parseFloat(e.target.value)})} className="w-full p-2 border rounded text-gray-900" />
                              </div>
                              <div>
                                  <label className="block text-sm font-medium text-gray-700 mb-1">Preço por KM (R$)</label>
-                                 <input type="number" step="0.10" value={appSettings.moto_price_km} onChange={e => setAppSettings({...appSettings, moto_price_km: parseFloat(e.target.value)})} className="w-full p-2 border rounded" />
+                                 <input type="number" step="0.10" value={appSettings.moto_price_km} onChange={e => setAppSettings({...appSettings, moto_price_km: parseFloat(e.target.value)})} className="w-full p-2 border rounded text-gray-900" />
                              </div>
                              <div>
                                  <label className="block text-sm font-medium text-gray-700 mb-1">Preço por Minuto (R$)</label>
-                                 <input type="number" step="0.10" value={appSettings.moto_price_min} onChange={e => setAppSettings({...appSettings, moto_price_min: parseFloat(e.target.value)})} className="w-full p-2 border rounded" />
+                                 <input type="number" step="0.10" value={appSettings.moto_price_min} onChange={e => setAppSettings({...appSettings, moto_price_min: parseFloat(e.target.value)})} className="w-full p-2 border rounded text-gray-900" />
                              </div>
                              <div className="pt-2 border-t border-gray-100">
                                  <label className="block text-sm font-bold text-gray-700 mb-1">Distância Inicial (Inclusa na Bandeirada)</label>
                                  <div className="flex items-center">
-                                    <input type="number" step="0.10" value={appSettings.moto_start_distance_limit} onChange={e => setAppSettings({...appSettings, moto_start_distance_limit: parseFloat(e.target.value)})} className="flex-1 p-2 border rounded" />
+                                    <input type="number" step="0.10" value={appSettings.moto_start_distance_limit} onChange={e => setAppSettings({...appSettings, moto_start_distance_limit: parseFloat(e.target.value)})} className="flex-1 p-2 border rounded text-gray-900" />
                                     <span className="ml-2 text-sm text-gray-500">km</span>
                                  </div>
                                  <p className="text-xs text-gray-400 mt-1">Ex: Se colocar 2, só cobra por KM após 2km rodados.</p>
@@ -737,10 +753,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onL
                             </div>
                         </div>
                         
-                        {/* Vehicle Form */}
+                        {/* Vehicle Form & Password Reset */}
                         <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200 xl:col-span-2">
                             <div className="flex justify-between items-center mb-4">
-                                <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider">Dados do Veículo</h3>
+                                <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider">Dados do Veículo & Acesso</h3>
                                 <span className="material-icons text-gray-300">directions_car</span>
                             </div>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -749,7 +765,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onL
                                     <select 
                                         value={vehicleForm.type}
                                         onChange={e => setVehicleForm({...vehicleForm, type: e.target.value as any})}
-                                        className="w-full p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 ring-whatsapp-green/20 outline-none bg-white"
+                                        className="w-full p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 ring-whatsapp-green/20 outline-none bg-white text-gray-900"
                                     >
                                         <option value="car">Carro</option>
                                         <option value="motorcycle">Moto</option>
@@ -762,7 +778,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onL
                                         value={vehicleForm.model}
                                         onChange={e => setVehicleForm({...vehicleForm, model: e.target.value})}
                                         placeholder="Ex: Toyota Corolla"
-                                        className="w-full p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 ring-whatsapp-green/20 outline-none"
+                                        className="w-full p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 ring-whatsapp-green/20 outline-none text-gray-900"
                                     />
                                 </div>
                                 <div>
@@ -772,7 +788,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onL
                                         value={vehicleForm.plate}
                                         onChange={e => setVehicleForm({...vehicleForm, plate: e.target.value})}
                                         placeholder="ABC-1234"
-                                        className="w-full p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 ring-whatsapp-green/20 outline-none uppercase"
+                                        className="w-full p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 ring-whatsapp-green/20 outline-none uppercase text-gray-900"
                                     />
                                 </div>
                                 <div>
@@ -782,15 +798,33 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onL
                                         value={vehicleForm.color}
                                         onChange={e => setVehicleForm({...vehicleForm, color: e.target.value})}
                                         placeholder="Ex: Prata"
-                                        className="w-full p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 ring-whatsapp-green/20 outline-none"
+                                        className="w-full p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 ring-whatsapp-green/20 outline-none text-gray-900"
                                     />
+                                </div>
+                                {/* Password Field - HIGHLIGHTED */}
+                                <div className="md:col-span-2 border-t pt-4 mt-2 bg-yellow-50 p-4 rounded-lg border-yellow-200">
+                                    <label className="block text-xs font-bold text-yellow-800 mb-1 flex items-center gap-1">
+                                        <span className="material-icons text-sm">lock_reset</span> Redefinir Senha do Motorista
+                                    </label>
+                                    <div className="flex gap-2">
+                                        <input 
+                                            type="text" 
+                                            value={newPassword}
+                                            onChange={e => setNewPassword(e.target.value)}
+                                            placeholder="Digite a Nova Senha aqui..."
+                                            className="flex-1 p-2 border border-yellow-300 rounded-lg text-sm focus:ring-2 ring-yellow-500/20 outline-none text-gray-900 bg-white"
+                                        />
+                                    </div>
+                                    <p className="text-[10px] text-yellow-700 mt-1">
+                                        Deixe em branco se não quiser alterar. O motorista usará esta senha no próximo login.
+                                    </p>
                                 </div>
                             </div>
                             <div className="mt-4 text-right">
                                 <button 
                                     onClick={handleUpdateVehicle}
                                     disabled={isSavingVehicle}
-                                    className="bg-whatsapp-green text-white px-4 py-2 rounded-lg text-sm hover:bg-emerald-600 transition flex items-center gap-2 ml-auto"
+                                    className="bg-whatsapp-green text-white px-4 py-2 rounded-lg text-sm hover:bg-emerald-600 transition flex items-center gap-2 ml-auto shadow-sm"
                                 >
                                     {isSavingVehicle ? 'Salvando...' : 'Salvar Alterações'}
                                     {!isSavingVehicle && <span className="material-icons text-sm">save</span>}

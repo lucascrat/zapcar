@@ -18,13 +18,33 @@ export const generateUUID = () => {
 };
 
 // Centralized error handling helper
-const handleDbError = (error: any, context: string) => {
+const handleDbError = (error: any, context: string): string => {
   // Log the full object for debugging
   console.error(`Detailed Error in ${context}:`, error);
   
-  // Extract a readable message
-  const msg = error?.message || error?.error_description || (typeof error === 'string' ? error : JSON.stringify(error));
+  let msg = 'Erro desconhecido';
+  
+  if (error) {
+    if (typeof error === 'string') {
+        msg = error;
+    } else if (error.message) {
+        msg = error.message;
+        // Adiciona detalhes se existirem (comum em erros Postgres)
+        if (error.details) msg += ` (${error.details})`;
+        if (error.hint) msg += ` - Dica: ${error.hint}`;
+    } else if (error.error_description) {
+        msg = error.error_description;
+    } else {
+        try {
+            msg = JSON.stringify(error);
+        } catch (e) {
+            msg = String(error);
+        }
+    }
+  }
+  
   console.warn(`Database Error (${context}): ${msg}`);
+  return msg;
 };
 
 export const fetchOnlineDrivers = async (): Promise<UserProfile[]> => {
@@ -139,6 +159,19 @@ export const updateDriverVehicle = async (
 
   if (error) {
     handleDbError(error, "updateDriverVehicle");
+    return false;
+  }
+  return true;
+};
+
+export const updateDriverPassword = async (driverId: string, newPassword: string): Promise<boolean> => {
+  const { error } = await supabase
+    .from('profiles')
+    .update({ password: newPassword })
+    .eq('id', driverId);
+
+  if (error) {
+    handleDbError(error, "updateDriverPassword");
     return false;
   }
   return true;
@@ -438,7 +471,7 @@ export const registerDriver = async (
   avatarFile?: File
 ): Promise<UserProfile | null> => {
   try {
-    // Check if username exists
+    // 1. Check if username exists
     const { data: existing, error: checkError } = await supabase
       .from('profiles')
       .select('id')
@@ -446,8 +479,8 @@ export const registerDriver = async (
       .maybeSingle();
       
     if (checkError) {
-       handleDbError(checkError, "registerDriver_checkUser");
-       alert("Erro ao verificar usuário existente. Tente novamente.");
+       const msg = handleDbError(checkError, "registerDriver_checkUser");
+       alert(`Erro ao verificar usuário: ${msg}`);
        return null;
     }
 
@@ -456,26 +489,34 @@ export const registerDriver = async (
       return null;
     }
 
-    // Upload Avatar if provided
+    // 2. Upload Avatar if provided
     let avatar_url = `https://ui-avatars.com/api/?name=${encodeURIComponent(username)}&background=00a884&color=fff`;
     if (avatarFile) {
-        const ext = avatarFile.name.split('.').pop() || 'jpg';
-        const url = await uploadFile(avatarFile, 'images', ext);
-        if (url) avatar_url = url;
+        try {
+            const ext = avatarFile.name.split('.').pop() || 'jpg';
+            const url = await uploadFile(avatarFile, 'images', ext);
+            if (url) avatar_url = url;
+        } catch (e) {
+            console.warn("Falha no upload do avatar, usando padrão.", e);
+        }
     }
 
+    // 3. Prepare Insert Data
+    // Ensure string fields are never null/undefined if possible
     const profileInsert = {
-      username,
-      password, // Save password
+      username: username.trim(),
+      password: password, // Save password
       role: UserRole.DRIVER,
       status: DriverStatus.AVAILABLE,
       is_approved: false, // MOTORISTA PRECISA DE APROVAÇÃO
       vehicle_type: vehicleType,
       vehicle_model: vehicleModel || '',
-      vehicle_plate: vehiclePlate || '',
+      vehicle_plate: (vehiclePlate || '').toUpperCase(),
       vehicle_color: vehicleColor || '',
       avatar_url
     };
+
+    console.log("Tentando registrar motorista:", profileInsert);
 
     const { data, error } = await supabase
       .from('profiles')
@@ -484,13 +525,22 @@ export const registerDriver = async (
       .single();
 
     if (error) {
-      handleDbError(error, "registerDriver");
+      const msg = handleDbError(error, "registerDriver");
+      
+      // Mensagens amigáveis para erros comuns
+      if (msg.includes('duplicate key') || msg.includes('unique constraint')) {
+          alert("Erro: Este nome de usuário ou placa já está cadastrado.");
+      } else if (msg.includes('column') && msg.includes('does not exist')) {
+          alert("Erro de Sistema: O banco de dados está desatualizado. Por favor, contate o suporte para rodar o script de atualização (password/is_approved).");
+      } else {
+          alert(`Erro ao salvar motorista: ${msg}`);
+      }
       return null;
     }
     return data as UserProfile;
   } catch (err: any) {
     console.error("Exceção no cadastro motorista:", err);
-    alert(`Erro inesperado ao cadastrar: ${err?.message || 'Erro desconhecido'}`);
+    alert(`Erro inesperado ao cadastrar: ${err?.message || JSON.stringify(err)}`);
     return null;
   }
 };

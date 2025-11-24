@@ -3,6 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { ChatWindow } from './components/ChatWindow';
 import { AdminDashboard } from './components/AdminDashboard';
 import { InstallPrompt } from './components/InstallPrompt'; // Importar componente
+import { AndroidSetup } from './components/AndroidSetup'; // Importar componente Android
 import { 
   registerClientWithPhoto, 
   fetchOnlineDrivers, 
@@ -19,7 +20,7 @@ import { UserProfile, UserRole, DriverStatus, Message } from './types';
 import { APP_NAME } from './constants';
 import { soundService } from './services/soundService';
 
-const APP_VERSION = "2.3 (Mobile & Permissions)";
+const APP_VERSION = "2.5 (Correções UI/UX)";
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
@@ -49,6 +50,7 @@ export default function App() {
 
   // Mobile View State
   const [showChatOnMobile, setShowChatOnMobile] = useState(false);
+  const [showAndroidSetup, setShowAndroidSetup] = useState(false); // Estado do modal Android
 
   // Refs
   const avatarInputRef = useRef<HTMLInputElement>(null);
@@ -171,18 +173,18 @@ export default function App() {
     const sub = subscribeToMessages(currentUser.id, (newMsg) => {
       // Logic for received messages
       if (newMsg.sender_id !== currentUser.id) {
-        // Toca som interno do app
-        soundService.playReceived();
         
-        // --- LÓGICA DE SEGUNDO PLANO / NOTIFICAÇÃO ---
-        // Se a aba estiver oculta OU se o usuário estiver em outra aba/app
-        // Exibimos a notificação do sistema com som e vibração
-        if (document.visibilityState === 'hidden') {
-             const senderName = contactList.find(c => c.id === newMsg.sender_id)?.username || "Suporte / Cliente";
-             
+        // --- NOTIFICAÇÃO DO MOTORISTA ---
+        // Toca o som SEMPRE que chegar mensagem (Prioridade Máxima)
+        soundService.playReceived();
+
+        // Se o app estiver em segundo plano, manda notificação push
+        // A lógica dentro de sendNotification agora tenta usar window.Android.showToast e bringToFront
+        if (document.visibilityState === 'hidden' || !document.hasFocus() || window.Android) {
+             const senderName = contactList.find(c => c.id === newMsg.sender_id)?.username || "Novo Cliente";
              soundService.sendNotification(
-                 `Nova mensagem de ${senderName}`, 
-                 newMsg.media_type === 'text' ? newMsg.content : 'Enviou um arquivo de mídia'
+                 `Mensagem de ${senderName}`, 
+                 newMsg.media_type === 'text' ? newMsg.content : '📷 Enviou uma mídia'
              );
         }
 
@@ -225,26 +227,18 @@ export default function App() {
   const requestDriverPermissions = async () => {
     console.log("Iniciando solicitação de permissões completas do motorista...");
     try {
-      // 1. Notificações (Som e Pop-up)
+      // 1. Notificações (Som e Pop-up) - Crucial para segundo plano
       await soundService.requestPermission();
 
       // 2. Microfone E Camera (Pedir TUDO de uma vez para não bloquear)
-      // Nota: Em dispositivos móveis, isso geralmente só funciona em resposta a um gesto do usuário (clique)
+      // Nota: Em dispositivos móveis, isso deve ser feito em resposta a um clique
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         // Para imediatamente, só queremos a permissão concedida no navegador
         stream.getTracks().forEach(track => track.stop()); 
-        console.log("Permissão Multimídia (Mic/Cam): OK");
+        console.log("Permissão Microfone: OK");
       } catch (err) {
-        console.warn("Permissão de Câmera/Mic negada ou dispositivo sem câmera:", err);
-        // Tenta fallback só para áudio se vídeo falhou
-        try {
-            const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            audioStream.getTracks().forEach(track => track.stop());
-            console.log("Permissão Microfone (Fallback): OK");
-        } catch(e) {
-            alert("Aviso: Sem permissão de microfone, as chamadas de voz não funcionarão.");
-        }
+        console.warn("Permissão de Microfone negada:", err);
       }
 
       // 3. Geolocalização (Essencial)
@@ -253,7 +247,6 @@ export default function App() {
           (pos) => console.log("GPS Ativo e Permitido", pos.coords),
           (err) => {
              console.warn("GPS Negado ou Erro", err);
-             alert("A localização é obrigatória para calcular corridas. Verifique as configurações do navegador.");
           },
           { enableHighAccuracy: true }
         );
@@ -342,11 +335,10 @@ export default function App() {
         // SALVA NA MEMÓRIA DO APARELHO (PERSISTÊNCIA)
         localStorage.setItem('chegoja_user', JSON.stringify(user));
         setCurrentUser(user);
-
-        // SE FOR MOTORISTA, PEDE TODAS AS PERMISSÕES IMEDIATAMENTE
-        // Isso é crucial ser feito aqui, dentro do evento de clique do usuário
+        
+        // Solicita permissões logo após login se for motorista
         if (user.role === UserRole.DRIVER) {
-             await requestDriverPermissions();
+             requestDriverPermissions();
         }
       }
 
@@ -421,24 +413,72 @@ export default function App() {
          });
       }
 
+      // Realtime listener for self-approval
+      // Isso atualiza a tela do motorista automaticamente quando o admin aprovar
+      useEffect(() => {
+          console.log("Monitorando aprovação do motorista...");
+          const sub = subscribeToProfiles(async () => {
+              if (currentUser) {
+                  // Re-fetch my own data to check approval
+                  const me = await loginDriver(currentUser.username, currentUser.password || undefined);
+                  if (me && me.is_approved) {
+                      console.log("Motorista aprovado! Atualizando tela...");
+                      setCurrentUser(me);
+                      localStorage.setItem('chegoja_user', JSON.stringify(me));
+                      // Force reload to clean up states
+                      window.location.reload(); 
+                  }
+              }
+          });
+          return () => {
+              sub.unsubscribe();
+          };
+      }, [currentUser]);
+
       return (
           <div className="flex h-[100dvh] w-full flex-col bg-gray-100 relative overflow-hidden">
             <InstallPrompt />
+            {showAndroidSetup && <AndroidSetup onClose={() => setShowAndroidSetup(false)} />}
             
             {/* Header de Aviso */}
-            <div className="bg-yellow-500 p-3 text-white shadow-md z-20 flex justify-between items-center px-4 shrink-0">
-                <div className="flex items-center gap-3">
-                   <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center animate-pulse">
-                       <span className="material-icons text-white">hourglass_empty</span>
-                   </div>
-                   <div className="flex flex-col">
-                       <span className="font-bold text-sm">Cadastro em Análise</span>
-                       <span className="text-xs opacity-90">Fale com o suporte abaixo para agilizar.</span>
-                   </div>
+            <div className="bg-yellow-500 p-3 text-white shadow-md z-20 shrink-0">
+                <div className="flex items-center justify-between px-2 mb-2">
+                    <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center animate-pulse">
+                            <span className="material-icons text-white">hourglass_empty</span>
+                        </div>
+                        <div className="flex flex-col">
+                            <span className="font-bold text-sm">Cadastro em Análise</span>
+                            <span className="text-xs opacity-90">Aguarde aprovação do Admin.</span>
+                        </div>
+                    </div>
+                    <button onClick={handleLogout} className="text-white/80 hover:text-white">
+                        <span className="material-icons">logout</span>
+                    </button>
                 </div>
-                <button onClick={handleLogout} className="text-white/80 hover:text-white p-2">
-                    <span className="material-icons">logout</span>
-                </button>
+                
+                {/* BOTÃO GRANDE PARA ATIVAR PERMISSÕES */}
+                <div className="grid grid-cols-2 gap-2">
+                    <button 
+                        onClick={requestDriverPermissions}
+                        className="w-full bg-blue-600 hover:bg-blue-700 active:scale-95 text-white font-bold py-3 rounded-lg shadow-lg flex items-center justify-center gap-2 animate-pulse border-2 border-white/30"
+                    >
+                        <span className="material-icons">notifications_active</span>
+                        PERMISSÕES WEB
+                    </button>
+                    
+                    {/* BOTÃO PARA APP NATIVO */}
+                    <button 
+                        onClick={() => setShowAndroidSetup(true)}
+                        className="w-full bg-green-700 hover:bg-green-800 active:scale-95 text-white font-bold py-3 rounded-lg shadow-lg flex items-center justify-center gap-2 border-2 border-green-500/50"
+                    >
+                        <span className="material-icons">android</span>
+                        APP NATIVO (APK)
+                    </button>
+                </div>
+                <p className="text-[10px] text-white/80 text-center mt-1">
+                    Baixe o App Nativo para tocar alarme mesmo com tela bloqueada.
+                </p>
             </div>
 
             {/* Chat Area (Preenche o resto da tela) */}
@@ -547,7 +587,7 @@ export default function App() {
               value={entryName}
               onChange={e => setEntryName(e.target.value)}
               disabled={isLoading}
-              className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:border-whatsapp-green transition bg-gray-50 text-base"
+              className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:border-whatsapp-green transition bg-white text-base text-black placeholder-gray-500 font-medium shadow-sm"
             />
 
             {loginMode === 'client' && (
@@ -557,7 +597,7 @@ export default function App() {
                     value={entryPhone}
                     onChange={e => setEntryPhone(e.target.value)}
                     disabled={isLoading}
-                    className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:border-whatsapp-green transition bg-gray-50 text-base"
+                    className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:border-whatsapp-green transition bg-white text-base text-black placeholder-gray-500 font-medium shadow-sm"
                 />
             )}
 
@@ -568,20 +608,20 @@ export default function App() {
                         placeholder="Crie uma Senha"
                         value={entryPassword}
                         onChange={e => setEntryPassword(e.target.value)}
-                        className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:border-whatsapp-green transition bg-gray-50 text-base"
+                        className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:border-whatsapp-green transition bg-white text-base text-black placeholder-gray-500 font-medium shadow-sm"
                     />
 
                     <div className="flex gap-2">
                         <button 
                             onClick={() => setEntryVehicleType('car')}
-                            className={`flex-1 p-3 rounded-lg border flex items-center justify-center gap-2 transition ${entryVehicleType === 'car' ? 'bg-whatsapp-green text-white border-whatsapp-green' : 'bg-gray-50 text-gray-500 border-gray-300'}`}
+                            className={`flex-1 p-3 rounded-lg border flex items-center justify-center gap-2 transition ${entryVehicleType === 'car' ? 'bg-whatsapp-green text-white border-whatsapp-green' : 'bg-white text-gray-500 border-gray-300'}`}
                         >
                             <span className="material-icons text-sm">directions_car</span>
                             Carro
                         </button>
                         <button 
                             onClick={() => setEntryVehicleType('motorcycle')}
-                            className={`flex-1 p-3 rounded-lg border flex items-center justify-center gap-2 transition ${entryVehicleType === 'motorcycle' ? 'bg-whatsapp-green text-white border-whatsapp-green' : 'bg-gray-50 text-gray-500 border-gray-300'}`}
+                            className={`flex-1 p-3 rounded-lg border flex items-center justify-center gap-2 transition ${entryVehicleType === 'motorcycle' ? 'bg-whatsapp-green text-white border-whatsapp-green' : 'bg-white text-gray-500 border-gray-300'}`}
                         >
                             <span className="material-icons text-sm">two_wheeler</span>
                             Moto
@@ -594,21 +634,21 @@ export default function App() {
                             placeholder="Modelo (Ex: Civic)"
                             value={entryVehicleModel}
                             onChange={e => setEntryVehicleModel(e.target.value)}
-                            className="col-span-2 p-3 border border-gray-300 rounded-lg focus:outline-none focus:border-whatsapp-green transition bg-gray-50 text-base"
+                            className="col-span-2 p-3 border border-gray-300 rounded-lg focus:outline-none focus:border-whatsapp-green transition bg-white text-base text-black placeholder-gray-500 font-medium shadow-sm"
                         />
                          <input
                             type="text"
                             placeholder="Placa"
                             value={entryVehiclePlate}
                             onChange={e => setEntryVehiclePlate(e.target.value)}
-                            className="p-3 border border-gray-300 rounded-lg focus:outline-none focus:border-whatsapp-green transition bg-gray-50 uppercase text-base"
+                            className="p-3 border border-gray-300 rounded-lg focus:outline-none focus:border-whatsapp-green transition bg-white text-base text-black placeholder-gray-500 font-medium shadow-sm uppercase"
                         />
                          <input
                             type="text"
                             placeholder="Cor"
                             value={entryVehicleColor}
                             onChange={e => setEntryVehicleColor(e.target.value)}
-                            className="p-3 border border-gray-300 rounded-lg focus:outline-none focus:border-whatsapp-green transition bg-gray-50 text-base"
+                            className="p-3 border border-gray-300 rounded-lg focus:outline-none focus:border-whatsapp-green transition bg-white text-base text-black placeholder-gray-500 font-medium shadow-sm"
                         />
                     </div>
                 </>
@@ -623,7 +663,7 @@ export default function App() {
                     onChange={e => setAuthPassword(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
                     disabled={isLoading}
-                    className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:border-whatsapp-green transition bg-gray-50 text-base"
+                    className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:border-whatsapp-green transition bg-white text-base text-black placeholder-gray-500 font-medium shadow-sm"
                   />
               </div>
             ) : null}
@@ -668,6 +708,7 @@ export default function App() {
   return (
     <div className="h-[100dvh] w-full flex overflow-hidden bg-app-bg relative">
       <InstallPrompt />
+      {showAndroidSetup && <AndroidSetup onClose={() => setShowAndroidSetup(false)} />}
       
       {/* Sidebar */}
       <div className={`w-full md:w-[400px] bg-whatsapp-dark border-r border-gray-800 flex flex-col ${showChatOnMobile ? 'hidden md:flex' : 'flex'}`}>
@@ -700,15 +741,13 @@ export default function App() {
                     </button>
                     
                     {/* Admin Contact Button - HIGHLIGHTED */}
-                    <a 
-                        href="https://wa.me/5581999999999" // TODO: Update admin number
-                        target="_blank"
-                        rel="noreferrer"
+                    <button 
+                        onClick={() => setShowAndroidSetup(true)}
                         className="bg-gray-700 hover:bg-gray-600 text-gray-200 p-2 rounded-full transition flex items-center justify-center" 
-                        title="Falar com Suporte/Admin"
+                        title="Baixar App Nativo Android"
                     >
-                        <span className="material-icons text-sm">support_agent</span>
-                    </a>
+                        <span className="material-icons text-sm">android</span>
+                    </button>
                  </>
              )}
             <button className="p-2 rounded-full hover:bg-gray-700 transition" title="Configurações"><span className="material-icons">settings</span></button>
