@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { ChatWindow } from './components/ChatWindow';
 import { AdminDashboard } from './components/AdminDashboard';
@@ -20,7 +19,7 @@ import { UserProfile, UserRole, DriverStatus, Message } from './types';
 import { APP_NAME } from './constants';
 import { soundService } from './services/soundService';
 
-const APP_VERSION = "2.5 (Correções UI/UX)";
+const APP_VERSION = "2.6 (Modo Flutuante)";
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
@@ -175,17 +174,12 @@ export default function App() {
       if (newMsg.sender_id !== currentUser.id) {
         
         // --- NOTIFICAÇÃO DO MOTORISTA ---
-        // Toca o som SEMPRE que chegar mensagem (Prioridade Máxima)
-        soundService.playReceived();
-
-        // Se o app estiver em segundo plano, manda notificação push
-        // A lógica dentro de sendNotification agora tenta usar window.Android.showToast e bringToFront
-        if (document.visibilityState === 'hidden' || !document.hasFocus() || window.Android) {
-             const senderName = contactList.find(c => c.id === newMsg.sender_id)?.username || "Novo Cliente";
-             soundService.sendNotification(
-                 `Mensagem de ${senderName}`, 
-                 newMsg.media_type === 'text' ? newMsg.content : '📷 Enviou uma mídia'
-             );
+        if (currentUser.role === UserRole.DRIVER) {
+            // ALERTA MÁXIMO: Toca alarme nativo ou web, vibra e abre o app
+            soundService.playRingtone(); 
+        } else {
+            // Alerta padrão para clientes
+            soundService.playReceived();
         }
 
         // If a driver receives a message from a NEW client, we need to refresh the contact list
@@ -336,6 +330,9 @@ export default function App() {
         localStorage.setItem('chegoja_user', JSON.stringify(user));
         setCurrentUser(user);
         
+        // Desbloqueia contexto de áudio após interação do usuário
+        soundService.unlockAudio();
+        
         // Solicita permissões logo após login se for motorista
         if (user.role === UserRole.DRIVER) {
              requestDriverPermissions();
@@ -384,6 +381,14 @@ export default function App() {
     
     // Update DB
     await updateDriverStatus(currentUser.id, newStatus);
+  };
+
+  const handleEnterPipMode = () => {
+    if (window.Android && window.Android.enterPictureInPictureMode) {
+      window.Android.enterPictureInPictureMode();
+    } else {
+      alert("Este recurso requer o App Nativo Android. Clique no ícone do Android para instalar e habilitar o modo flutuante.");
+    }
   };
 
   const resetForm = () => {
@@ -740,6 +745,15 @@ export default function App() {
                         {currentUser.status === DriverStatus.AVAILABLE ? 'LIVRE' : 'OCUPADO'}
                     </button>
                     
+                    {/* Floating Button (PiP) */}
+                    <button
+                        onClick={handleEnterPipMode}
+                        className="bg-gray-700 hover:bg-gray-600 text-gray-200 p-2 rounded-full transition flex items-center justify-center"
+                        title="Modo Flutuante (Requer App Nativo)"
+                    >
+                        <span className="material-icons text-sm">picture_in_picture_alt</span>
+                    </button>
+
                     {/* Admin Contact Button - HIGHLIGHTED */}
                     <button 
                         onClick={() => setShowAndroidSetup(true)}
@@ -831,43 +845,13 @@ export default function App() {
       {/* Chat Area */}
       <div className={`flex-1 flex flex-col bg-whatsapp-panel relative ${!showChatOnMobile ? 'hidden md:flex' : 'flex'} h-full`}>
         {activeContact ? (
-          <>
-              {/* Mobile Header Override */}
-              <div className="md:hidden bg-whatsapp-panel h-16 flex items-center px-2 border-b border-gray-700 shadow-sm shrink-0 z-20">
-                <button onClick={handleBackToList} className="text-gray-300 p-2 rounded-full hover:bg-gray-700 mr-1 active:scale-95 transition">
-                  <span className="material-icons">arrow_back</span>
-                </button>
-                <div className="flex items-center flex-1" onClick={() => {/* Show Contact Info */}}>
-                   <img src={activeContact.avatar_url || 'https://via.placeholder.com/40'} className="w-9 h-9 rounded-full mr-3 object-cover" alt="" />
-                   <div className="flex flex-col">
-                     <span className="text-white font-medium text-base leading-tight flex items-center gap-1">
-                        {activeContact.username}
-                        {activeContact.role === UserRole.DRIVER && (
-                          <span className={`material-icons text-xs ${activeContact.vehicle_type === 'motorcycle' ? 'text-orange-400' : 'text-blue-400'}`}>
-                             {activeContact.vehicle_type === 'motorcycle' ? 'two_wheeler' : 'directions_car'}
-                          </span>
-                        )}
-                     </span>
-                     <span className="text-xs text-gray-400 truncate">
-                        {activeContact.role === UserRole.DRIVER 
-                            ? (activeContact.status === 'available' ? 'Online' : 'Ocupado') 
-                            : activeContact.phone || 'Detalhes'}
-                     </span>
-                   </div>
-                </div>
-                <div className="flex gap-3 pr-2">
-                   <button className="text-whatsapp-green"><span className="material-icons">videocam</span></button>
-                   <button className="text-whatsapp-green"><span className="material-icons">call</span></button>
-                </div>
-              </div>
-              
-              <ChatWindow 
-                currentUser={currentUser}
-                chatPartner={activeContact}
-                messages={messages}
-                onSendMessage={(msg) => setMessages(p => [...p, msg])}
-              />
-          </>
+          <ChatWindow 
+            currentUser={currentUser}
+            chatPartner={activeContact}
+            messages={messages}
+            onSendMessage={(msg) => setMessages(p => [...p, msg])}
+            onBack={handleBackToList}
+          />
         ) : (
           <div className="hidden md:flex h-full flex-col items-center justify-center text-center border-b-8 border-whatsapp-green bg-[#222e35]">
               <div className="mb-4">

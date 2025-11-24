@@ -17,6 +17,7 @@ class SoundService {
   private callAudio: HTMLAudioElement;
   private hasNotificationPermission: boolean = false;
   private activeNotification: Notification | null = null;
+  private isUnlocked: boolean = false;
 
   constructor() {
     this.sentAudio = new Audio(SENT_URL);
@@ -35,6 +36,33 @@ class SoundService {
     this.receivedAudio.load();
     this.callAudio.load();
   }
+
+  // Desbloqueia o contexto de áudio para permitir a reprodução programática
+  async unlockAudio() {
+    if (this.isUnlocked) return;
+    try {
+      // Toca e pausa sons silenciosamente para obter permissão do navegador
+      const playPromise = (audio: HTMLAudioElement) => {
+          const promise = audio.play();
+          if (promise !== undefined) {
+              promise.then(() => {
+                  audio.pause();
+                  audio.currentTime = 0;
+              }).catch(() => {});
+          }
+      };
+      
+      playPromise(this.sentAudio);
+      playPromise(this.receivedAudio);
+      playPromise(this.callAudio);
+      
+      this.isUnlocked = true;
+      console.log("Contexto de áudio desbloqueado com sucesso.");
+    } catch (e) {
+      console.warn("Desbloqueio de áudio falhou, tentará novamente na próxima reprodução.", e);
+    }
+  }
+
 
   // Solicita permissão para notificações do sistema (Pop-up/Banner)
   async requestPermission() {

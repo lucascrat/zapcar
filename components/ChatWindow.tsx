@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { Message, UserProfile, UserRole } from '../types';
 import { AudioRecorder } from './AudioRecorder';
@@ -12,9 +11,10 @@ interface ChatWindowProps {
   chatPartner: UserProfile | null;
   messages: Message[];
   onSendMessage: (msg: Message) => void;
+  onBack?: () => void; // Adicionado para controlar o botão "voltar" no celular
 }
 
-export const ChatWindow: React.FC<ChatWindowProps> = ({ currentUser, chatPartner, messages, onSendMessage }) => {
+export const ChatWindow: React.FC<ChatWindowProps> = ({ currentUser, chatPartner, messages, onSendMessage, onBack }) => {
   const [inputText, setInputText] = useState('');
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessingAI, setIsProcessingAI] = useState(false);
@@ -495,7 +495,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ currentUser, chatPartner
               </div>
           )}
           
-          <div className="flex gap-8 items-center mt-4">
+          <div className="flex gap-10 items-center mt-4">
              {callStatus === 'incoming' ? (
                 <>
                     <button 
@@ -513,10 +513,10 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ currentUser, chatPartner
                 </>
              ) : (
                 <>
-                    <button className="w-14 h-14 rounded-full bg-gray-700 flex items-center justify-center hover:bg-gray-600 active:scale-95 transition">
+                    <button className="w-16 h-16 rounded-full bg-gray-700 flex items-center justify-center hover:bg-gray-600 active:scale-95 transition">
                         <span className="material-icons">videocam_off</span>
                     </button>
-                    <button className="w-14 h-14 rounded-full bg-gray-700 flex items-center justify-center hover:bg-gray-600 active:scale-95 transition">
+                    <button className="w-16 h-16 rounded-full bg-gray-700 flex items-center justify-center hover:bg-gray-600 active:scale-95 transition">
                         <span className="material-icons">mic_off</span>
                     </button>
                     <button 
@@ -592,8 +592,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ currentUser, chatPartner
       {/* Mobile Header (Now includes Driver Buttons) - Hide if Admin too, Admin handles its own back button */}
       {currentUser.role !== UserRole.ADMIN && (
       <div className="md:hidden bg-whatsapp-panel h-16 flex items-center px-2 border-b border-gray-700 shadow-sm shrink-0 z-20">
-        <button onClick={() => {/* Handle Back in parent */}} className="text-gray-300 p-2 rounded-full hover:bg-gray-700 mr-1 active:scale-95 transition">
-             {/* Back button logic handled by parent, this is just placeholder visual if needed, currently parent passes nothing to close specifically here but visual consistency maintained */}
+        <button onClick={onBack} className="text-gray-300 p-2 rounded-full hover:bg-gray-700 mr-1 active:scale-95 transition">
              <span className="material-icons">arrow_back</span>
         </button>
         <div className="flex items-center flex-1 overflow-hidden" onClick={() => {/* Show Info */}}>
@@ -651,7 +650,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ currentUser, chatPartner
 
             return (
               <div key={msg.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'} group mb-1.5`}>
-                <div className={`max-w-[85%] md:max-w-[65%] rounded-lg p-1.5 relative shadow-sm text-sm ${
+                <div className={`max-w-[80%] md:max-w-[65%] rounded-lg p-1.5 relative shadow-sm text-sm ${
                   isMe ? 'bg-whatsapp-outgoing text-white rounded-tr-none' : 'bg-whatsapp-incoming text-white rounded-tl-none'
                 }`}>
                   {/* Media Rendering */}
@@ -708,8 +707,8 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ currentUser, chatPartner
       </div>
 
       {/* Input Area */}
-      <div className="bg-whatsapp-panel px-2 py-2 flex items-end gap-2 z-10 pb-safe md:pb-2">
-        <div className="flex items-center pb-1.5 gap-1">
+      <div className="bg-whatsapp-panel px-2 pt-2 flex items-end gap-2 z-10 pb-safe md:pb-2">
+        <div className="flex items-center gap-1">
             <button className="p-2 text-gray-400 hover:bg-gray-700 rounded-full transition hidden md:block">
             <span className="material-icons">sentiment_satisfied</span>
             </button>
@@ -746,14 +745,14 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ currentUser, chatPartner
           <button 
             onClick={triggerSmartReply}
             disabled={isProcessingAI}
-            className={`p-2 mb-1.5 rounded-full transition active:scale-90 shrink-0 ${isProcessingAI ? 'text-yellow-500 animate-spin' : 'text-emerald-400 bg-emerald-900/20 hover:bg-emerald-900/40'}`}
+            className={`p-2 rounded-full transition active:scale-90 shrink-0 ${isProcessingAI ? 'text-yellow-500 animate-spin' : 'text-emerald-400 bg-emerald-900/20 hover:bg-emerald-900/40'}`}
             title="Sugestão IA"
           >
             <span className="material-icons">auto_awesome</span>
           </button>
         )}
 
-        <div className="flex-1 bg-[#2a3942] rounded-2xl flex items-center px-4 py-2 mx-1 min-h-[44px] mb-1">
+        <div className="flex-1 bg-[#2a3942] rounded-2xl flex items-center px-4 py-2 mx-1 min-h-[44px]">
           <input
             type="text"
             value={inputText}
@@ -765,7 +764,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ currentUser, chatPartner
           />
         </div>
 
-        <div className="pb-1">
+        <div>
             {inputText.trim() ? (
             <button 
                 onClick={() => handleSendText()}

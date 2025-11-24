@@ -81,6 +81,10 @@ declare global {
       stopNativeAlert: () => void;
       showToast: (msg: string) => void;
       bringToFront: () => void;
+      enterPictureInPictureMode?: () => void;
+      // NOVOS: Para áudio em segundo plano
+      startAudioMonitoring: (streamUrl: string, driverName: string) => void;
+      stopAudioMonitoring: () => void;
     }
   }
 }
