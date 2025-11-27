@@ -47,6 +47,21 @@ const handleDbError = (error: any, context: string): string => {
   return msg;
 };
 
+// Nova função para buscar perfil individual (Útil para Auto-Open)
+export const fetchUserProfile = async (userId: string): Promise<UserProfile | null> => {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', userId)
+      .maybeSingle();
+
+    if (error) {
+        console.warn("Erro ao buscar perfil único:", error);
+        return null;
+    }
+    return data as UserProfile;
+};
+
 export const fetchOnlineDrivers = async (): Promise<UserProfile[]> => {
   const { data, error } = await supabase
     .from('profiles')

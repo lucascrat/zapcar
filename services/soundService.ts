@@ -17,7 +17,6 @@ class SoundService {
   private callAudio: HTMLAudioElement;
   private hasNotificationPermission: boolean = false;
   private activeNotification: Notification | null = null;
-  private isUnlocked: boolean = false;
 
   constructor() {
     this.sentAudio = new Audio(SENT_URL);
@@ -36,33 +35,6 @@ class SoundService {
     this.receivedAudio.load();
     this.callAudio.load();
   }
-
-  // Desbloqueia o contexto de áudio para permitir a reprodução programática
-  async unlockAudio() {
-    if (this.isUnlocked) return;
-    try {
-      // Toca e pausa sons silenciosamente para obter permissão do navegador
-      const playPromise = (audio: HTMLAudioElement) => {
-          const promise = audio.play();
-          if (promise !== undefined) {
-              promise.then(() => {
-                  audio.pause();
-                  audio.currentTime = 0;
-              }).catch(() => {});
-          }
-      };
-      
-      playPromise(this.sentAudio);
-      playPromise(this.receivedAudio);
-      playPromise(this.callAudio);
-      
-      this.isUnlocked = true;
-      console.log("Contexto de áudio desbloqueado com sucesso.");
-    } catch (e) {
-      console.warn("Desbloqueio de áudio falhou, tentará novamente na próxima reprodução.", e);
-    }
-  }
-
 
   // Solicita permissão para notificações do sistema (Pop-up/Banner)
   async requestPermission() {
@@ -87,9 +59,13 @@ class SoundService {
   // Envia notificação que aparece sobre outros apps e toca som do sistema
   sendNotification(title: string, body: string, isCall: boolean = false) {
     // 1. TENTA NATIVO ANDROID (Se estiver dentro do APK Wrapper)
+    // Isso cumpre o requisito: "abrir se receber mensagens"
     if (window.Android && window.Android.showToast) {
        window.Android.showToast(`${title}: ${body}`);
-       if (isCall && window.Android.bringToFront) {
+       
+       // SE TIVER A FUNÇÃO BRING TO FRONT, CHAMA ELA PARA MENSAGENS E CHAMADAS
+       if (window.Android.bringToFront) {
+           console.log("Chamando Android.bringToFront()...");
            window.Android.bringToFront(); // Força o app a abrir na frente de tudo
        }
     }
@@ -130,7 +106,8 @@ class SoundService {
 
         // Se for mensagem, toca o som também (para garantir em mobile)
         if (!isCall) {
-           this.receivedAudio.play().catch(() => {});
+           // this.receivedAudio.play().catch(() => {});
+           // Removido aqui pois playReceived/playMessageAlert será chamado explicitamente
         }
 
       } catch (e) {
@@ -152,21 +129,33 @@ class SoundService {
   }
 
   playReceived() {
-    // Tenta tocar som nativo do Android se disponível
-    if (window.Android && window.Android.triggerNativeAlert) {
-        // Para mensagens curtas, talvez não queira o alarme longo, mas por segurança vamos usar
-        // O ideal seria ter triggerNativeNotificationSound
-    }
-    
     this.receivedAudio.currentTime = 0;
     this.receivedAudio.play().catch(e => console.log("Audio blocked:", e));
+  }
+
+  // NOVO MÉTODO: Toca um alerta mais alto para mensagens de texto de motoristas
+  playMessageAlert() {
+    // 1. TENTA NATIVO (Som do sistema, canal de alarme se possível)
+    if (window.Android && window.Android.triggerNativeMessageSound) {
+        window.Android.triggerNativeMessageSound();
+        return; 
+    }
+    
+    // 2. Fallback Web: Toca o som normal + Vibração extra
+    this.receivedAudio.currentTime = 0;
+    this.receivedAudio.play().catch(e => console.log("Audio blocked:", e));
+    if (navigator.vibrate) {
+        navigator.vibrate([200, 100, 200, 100, 200]); // Padrão mais longo
+    }
   }
 
   playRingtone() {
     // 1. TENTA NATIVO (Muito mais confiável para acordar o motorista)
     if (window.Android && window.Android.triggerNativeAlert) {
         window.Android.triggerNativeAlert();
-        window.Android.bringToFront(); // Abre o app na cara do motorista
+        if (window.Android.bringToFront) {
+            window.Android.bringToFront(); // Abre o app na cara do motorista
+        }
         return; // Não toca o som web duplicado
     }
 

@@ -1,3 +1,4 @@
+
 import React from 'react';
 
 interface AndroidSetupProps {
@@ -6,34 +7,33 @@ interface AndroidSetupProps {
 
 export const AndroidSetup: React.FC<AndroidSetupProps> = ({ onClose }) => {
   const javaCode = `
-// MainActivity.java
+// FILE: MainActivity.java
 package com.chegoja.driver;
 
-import android.app.PictureInPictureParams;
 import android.content.Intent;
+import android.media.AudioAttributes;
+import android.media.MediaPlayer;
+import android.media.RingtoneManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.provider.Settings;
-import android.util.Rational;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.Toast;
 import androidx.appcompat.app.AppCompatActivity;
-import android.media.RingtoneManager;
-import android.media.MediaPlayer;
-import android.media.AudioManager;
 
 public class MainActivity extends AppCompatActivity {
     private WebView myWebView;
-    private MediaPlayer alarmPlayer; // Usamos MediaPlayer para controle de loop
+    private MediaPlayer mediaPlayer; // Usando MediaPlayer para Loop Infinito
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         
+        // 1. Solicita permissão de sobreposição (Overlay) - CRUCIAL PARA ABRIR O APP SOZINHO
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
             Intent intent = new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + getPackageName()));
             startActivityForResult(intent, 0);
@@ -45,15 +45,18 @@ public class MainActivity extends AppCompatActivity {
         WebSettings webSettings = myWebView.getSettings();
         webSettings.setJavaScriptEnabled(true);
         webSettings.setDomStorageEnabled(true);
-        webSettings.setMediaPlaybackRequiresUserGesture(false);
+        webSettings.setMediaPlaybackRequiresUserGesture(false); // Permite som automático
 
+        // 2. Cria a Ponte Javascript -> Java
         myWebView.addJavascriptInterface(new WebAppInterface(this), "Android");
         
+        // SUBSTITUA PELA URL DO SEU SITE (Deploy na Vercel)
         myWebView.loadUrl("https://SEU-PROJETO.vercel.app"); 
         
         myWebView.setWebViewClient(new WebViewClient());
     }
 
+    // Classe que recebe os comandos do Site
     public class WebAppInterface {
         MainActivity mContext;
 
@@ -68,216 +71,100 @@ public class MainActivity extends AppCompatActivity {
 
         @JavascriptInterface
         public void triggerNativeAlert() {
-            runOnUiThread(() -> {
-                try {
-                    // Para qualquer alarme anterior
-                    if (alarmPlayer != null && alarmPlayer.isPlaying()) {
-                        alarmPlayer.stop();
-                        alarmPlayer.release();
-                    }
-
-                    Uri notificationSound = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM);
-                    if (notificationSound == null) {
-                        notificationSound = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE);
-                    }
-
-                    alarmPlayer = new MediaPlayer();
-                    alarmPlayer.setDataSource(mContext, notificationSound);
+            // ALARME DE CHAMADA (LOOP)
+            try {
+                if (mediaPlayer == null) {
+                    Uri notification = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE);
+                    if (notification == null) notification = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM);
                     
-                    // CRÍTICO: Garante que o som saia pelo canal de ALARME (volume máximo)
-                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                        alarmPlayer.setAudioAttributes(
-                            new android.media.AudioAttributes.Builder()
-                                .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                                .setUsage(android.media.AudioAttributes.USAGE_ALARM)
-                                .build()
-                        );
-                    } else {
-                        alarmPlayer.setAudioStreamType(AudioManager.STREAM_ALARM);
-                    }
-
-                    alarmPlayer.setLooping(true); // Toca continuamente
-                    alarmPlayer.prepareAsync();
-                    alarmPlayer.setOnPreparedListener(MediaPlayer::start);
-
-                } catch (Exception e) {
-                    e.printStackTrace();
+                    mediaPlayer = new MediaPlayer();
+                    mediaPlayer.setDataSource(mContext, notification);
+                    mediaPlayer.setAudioAttributes(new AudioAttributes.Builder()
+                            .setUsage(AudioAttributes.USAGE_ALARM) // Prioridade Alta
+                            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                            .build());
+                    mediaPlayer.setLooping(true); // Toca sem parar até atender
+                    mediaPlayer.prepare();
                 }
-            });
+                
+                if (!mediaPlayer.isPlaying()) {
+                    mediaPlayer.start();
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+
+        @JavascriptInterface
+        public void triggerNativeMessageSound() {
+            // ALERTA DE MENSAGEM (SOM ÚNICO, MAS ALTO/ALARM)
+            try {
+                Uri notification = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION);
+                if (notification == null) notification = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM);
+                
+                MediaPlayer mp = new MediaPlayer();
+                mp.setDataSource(mContext, notification);
+                // Define como USAGE_ALARM para garantir volume alto mesmo se notificação estiver baixa
+                mp.setAudioAttributes(new AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_ALARM) 
+                        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                        .build());
+                mp.setLooping(false); // Toca apenas uma vez
+                mp.prepare();
+                mp.start();
+                // Libera recursos após tocar
+                mp.setOnCompletionListener(new MediaPlayer.OnCompletionListener() {
+                    @Override
+                    public void onCompletion(MediaPlayer mp) {
+                        mp.release();
+                    }
+                });
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
         }
 
         @JavascriptInterface
         public void stopNativeAlert() {
-             runOnUiThread(() -> {
-                if (alarmPlayer != null && alarmPlayer.isPlaying()) {
-                    alarmPlayer.stop();
-                    alarmPlayer.release();
-                    alarmPlayer = null;
+            try {
+                if (mediaPlayer != null && mediaPlayer.isPlaying()) {
+                    mediaPlayer.stop();
+                    mediaPlayer.release();
+                    mediaPlayer = null; // Reseta para próxima chamada
                 }
-            });
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
         }
 
         @JavascriptInterface
         public void bringToFront() {
-            Intent intent = new Intent(mContext, MainActivity.class);
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_REORDER_TO_FRONT | Intent.FLAG_ACTIVITY_SINGLE_TOP);
-            startActivity(intent);
-        }
-
-        @JavascriptInterface
-        public void enterPictureInPictureMode() {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                mContext.runOnUiThread(() -> {
-                    PictureInPictureParams params = new PictureInPictureParams.Builder()
-                        .setAspectRatio(new Rational(9, 16))
-                        .build();
-                    mContext.enterPictureInPictureMode(params);
-                });
+            // COMANDO MÁGICO: Traz o app para frente (Sobreposição)
+            try {
+                Intent intent = new Intent(mContext, MainActivity.class);
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); 
+                intent.addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT);
+                intent.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
+                intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP); // Garante limpeza
+                mContext.startActivity(intent);
+            } catch (Exception e) {
+                e.printStackTrace();
             }
         }
-
-        @JavascriptInterface
-        public void startAudioMonitoring(String streamUrl, String driverName) {
-            Intent serviceIntent = new Intent(mContext, AudioMonitoringService.class);
-            serviceIntent.putExtra("STREAM_URL", streamUrl);
-            serviceIntent.putExtra("DRIVER_NAME", driverName);
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                startForegroundService(serviceIntent);
-            } else {
-                startService(serviceIntent);
-            }
-        }
-
-        @JavascriptInterface
-        public void stopAudioMonitoring() {
-            Intent serviceIntent = new Intent(mContext, AudioMonitoringService.class);
-            stopService(serviceIntent);
-        }
-    }
-}
-  `;
-
-  const serviceCode = `
-// AudioMonitoringService.java (NOVO ARQUIVO)
-package com.chegoja.driver;
-
-import android.app.Notification;
-import android.app.NotificationChannel;
-import android.app.NotificationManager;
-import android.app.PendingIntent;
-import android.app.Service;
-import android.content.Intent;
-import android.media.MediaPlayer;
-import android.os.Build;
-import android.os.IBinder;
-import androidx.core.app.NotificationCompat;
-import java.io.IOException;
-
-public class AudioMonitoringService extends Service implements MediaPlayer.OnPreparedListener {
-    private static final int NOTIFICATION_ID = 1;
-    private static final String CHANNEL_ID = "AudioMonitoringChannel";
-    public static final String ACTION_STOP = "com.chegoja.driver.ACTION_STOP";
-    private MediaPlayer mediaPlayer;
-
-    @Override
-    public void onCreate() {
-        super.onCreate();
-        createNotificationChannel();
-    }
-
-    @Override
-    public int onStartCommand(Intent intent, int flags, int startId) {
-        if (intent != null && ACTION_STOP.equals(intent.getAction())) {
-            stopSelf(); // Para o serviço se a ação for STOP
-            return START_NOT_STICKY;
-        }
-
-        String streamUrl = intent.getStringExtra("STREAM_URL");
-        String driverName = intent.getStringExtra("DRIVER_NAME");
-
-        startForeground(NOTIFICATION_ID, createNotification("Conectando a " + driverName + "..."));
-        
-        initMediaPlayer(streamUrl);
-        
-        return START_STICKY;
-    }
-
-    private void initMediaPlayer(String url) {
-        if (mediaPlayer != null) {
-            mediaPlayer.release();
-        }
-        mediaPlayer = new MediaPlayer();
-        try {
-            mediaPlayer.setDataSource(url);
-            mediaPlayer.setOnPreparedListener(this);
-            mediaPlayer.prepareAsync(); // Prepara em background
-        } catch (IOException e) {
-            e.printStackTrace();
-            stopSelf();
-        }
-    }
-
-    @Override
-    public void onPrepared(MediaPlayer mp) {
-        mp.start(); // Inicia a reprodução quando estiver pronto
-        updateNotification("Monitorando áudio...");
-    }
-
-    @Override
-    public void onDestroy() {
-        super.onDestroy();
-        if (mediaPlayer != null) {
-            if (mediaPlayer.isPlaying()) {
-                mediaPlayer.stop();
-            }
-            mediaPlayer.release();
-            mediaPlayer = null;
-        }
-    }
-
-    @Override
-    public IBinder onBind(Intent intent) { return null; }
-
-    private void createNotificationChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            NotificationChannel serviceChannel = new NotificationChannel(
-                CHANNEL_ID, "Serviço de Monitoramento de Áudio",
-                NotificationManager.IMPORTANCE_LOW
-            );
-            getSystemService(NotificationManager.class).createNotificationChannel(serviceChannel);
-        }
-    }
-
-    private Notification createNotification(String text) {
-        Intent stopIntent = new Intent(this, AudioMonitoringService.class);
-        stopIntent.setAction(ACTION_STOP);
-        PendingIntent stopPendingIntent = PendingIntent.getService(this, 0, stopIntent, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
-
-        return new NotificationCompat.Builder(this, CHANNEL_ID)
-                .setContentTitle("Monitoramento Ativo")
-                .setContentText(text)
-                .setSmallIcon(R.drawable.ic_hearing) // Você precisa adicionar um ícone 'ic_hearing'
-                .addAction(R.drawable.ic_close, "Parar", stopPendingIntent)
-                .build();
-    }
-    
-    private void updateNotification(String text) {
-        Notification notification = createNotification(text);
-        getSystemService(NotificationManager.class).notify(NOTIFICATION_ID, notification);
     }
 }
   `;
 
   const manifestCode = `
-<!-- AndroidManifest.xml -->
+<!-- FILE: AndroidManifest.xml -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.chegoja.driver">
 
+    <!-- PERMISSÕES NECESSÁRIAS -->
     <uses-permission android:name="android.permission.INTERNET" />
-    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW"/>
-    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW"/> <!-- Sobrepor Apps -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" /> <!-- Manter tela ligada -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"/>
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
 
@@ -289,19 +176,12 @@ public class AudioMonitoringService extends Service implements MediaPlayer.OnPre
         
         <activity android:name=".MainActivity"
             android:exported="true"
-            android:launchMode="singleTop"
-            android:supportsPictureInPicture="true"
-            android:configChanges="screenSize|smallestScreenSize|screenLayout|orientation">
+            android:launchMode="singleTop">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-
-        <!-- NOVO: Declaração do Serviço de Áudio -->
-        <service android:name=".AudioMonitoringService"
-                 android:foregroundServiceType="mediaPlayback" />
-
     </application>
 </manifest>
   `;
@@ -313,7 +193,7 @@ public class AudioMonitoringService extends Service implements MediaPlayer.OnPre
         <div className="p-4 border-b border-gray-200 flex justify-between items-center bg-gray-50">
           <div className="flex items-center gap-2">
             <span className="material-icons text-green-600">android</span>
-            <h2 className="text-xl font-bold text-gray-800">Criar App Nativo com Super Permissões</h2>
+            <h2 className="text-xl font-bold text-gray-800">Código do App Nativo (Atualizado)</h2>
           </div>
           <button onClick={onClose} className="text-gray-500 hover:text-gray-700">
             <span className="material-icons">close</span>
@@ -322,36 +202,28 @@ public class AudioMonitoringService extends Service implements MediaPlayer.OnPre
 
         <div className="p-6 overflow-y-auto bg-gray-50 custom-scrollbar text-gray-800">
           <div className="bg-blue-100 border-l-4 border-blue-500 p-4 mb-6 text-sm">
-            <p className="font-bold text-blue-800">Recurso Atualizado: Alarme Contínuo</p>
-            <p>Este código agora usa <strong>MediaPlayer</strong> para garantir que o alerta de chamada toque continuamente e no volume máximo de alarme do celular, mesmo em modo silencioso.</p>
+            <p className="font-bold text-blue-800">Instruções:</p>
+            <p>Copie os códigos abaixo e cole em um projeto <strong>Android Studio (Java)</strong>. Este código cria a "ponte" necessária para que o site comande o celular (Tocar alarme, Abrir sozinho).</p>
           </div>
 
-          <h3 className="font-bold text-lg mb-2">Passo 1: AndroidManifest.xml</h3>
-          <p className="text-sm text-gray-600 mb-2">Verifique se todas as permissões necessárias, como `FOREGROUND_SERVICE` e `WAKE_LOCK`, estão presentes.</p>
-          <div className="relative mb-6">
-            <pre className="bg-gray-800 text-green-400 p-4 rounded-lg text-xs overflow-x-auto select-all">
+          <h3 className="font-bold text-lg mb-2 text-whatsapp-dark">1. AndroidManifest.xml</h3>
+          <p className="text-sm text-gray-600 mb-2">Define as permissões de sobreposição e GPS.</p>
+          <div className="relative mb-6 group">
+            <pre className="bg-gray-800 text-green-400 p-4 rounded-lg text-xs overflow-x-auto select-all shadow-inner">
                 {manifestCode}
             </pre>
           </div>
 
-          <h3 className="font-bold text-lg mb-2">Passo 2: Crie/Atualize o arquivo AudioMonitoringService.java</h3>
-          <p className="text-sm text-gray-600 mb-2">Este serviço gerencia o áudio de monitoramento em segundo plano.</p>
-          <div className="relative mb-6">
-            <pre className="bg-gray-800 text-yellow-300 p-4 rounded-lg text-xs overflow-x-auto select-all">
-                {serviceCode}
-            </pre>
-          </div>
-
-          <h3 className="font-bold text-lg mb-2">Passo 3: MainActivity.java (COM ALARME MELHORADO)</h3>
-          <p className="text-sm text-gray-600 mb-2">Substitua sua MainActivity para incluir a lógica de alarme contínuo usando MediaPlayer.</p>
-          <div className="relative mb-6">
-            <pre className="bg-gray-800 text-blue-300 p-4 rounded-lg text-xs overflow-x-auto select-all">
+          <h3 className="font-bold text-lg mb-2 text-whatsapp-dark">2. MainActivity.java</h3>
+          <p className="text-sm text-gray-600 mb-2">Lógica para abrir o app ao receber mensagem (bringToFront) e tocar alarme.</p>
+          <div className="relative mb-6 group">
+            <pre className="bg-gray-800 text-blue-300 p-4 rounded-lg text-xs overflow-x-auto select-all shadow-inner">
                 {javaCode}
             </pre>
           </div>
           
-          <div className="text-center mt-4">
-              <p className="text-sm text-gray-500">Com estas atualizações, o motorista não perderá mais nenhuma chamada.</p>
+          <div className="bg-gray-200 p-3 rounded text-xs text-center text-gray-600">
+              Nota: Lembre-se de substituir <code>https://SEU-PROJETO.vercel.app</code> pela URL real do seu site publicado.
           </div>
         </div>
 
@@ -365,11 +237,12 @@ public class AudioMonitoringService extends Service implements MediaPlayer.OnPre
           <button 
             className="px-6 py-2 bg-green-600 text-white font-bold rounded-lg hover:bg-green-700 shadow-lg flex items-center gap-2"
             onClick={() => {
-                alert("Copie o código acima e use no Android Studio. Se precisar de ajuda, peça a um desenvolvedor Android.");
+                // Em um cenário real, isso poderia copiar para o clipboard
+                alert("Códigos disponíveis para cópia!");
             }}
           >
-            <span className="material-icons text-sm">content_copy</span>
-            Entendi
+            <span className="material-icons text-sm">check</span>
+            Ok, Entendi
           </button>
         </div>
       </div>

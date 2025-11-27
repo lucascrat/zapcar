@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState, useRef } from 'react';
 import { fetchAllDriversForAdmin, deleteDriver, updateDriverStatus, updateDriverVehicle, updateDriverPassword, fetchAppSettings, updateAppSettings, approveDriver, fetchMessages, subscribeToMessages, subscribeToProfiles } from '../services/supabaseClient';
 import { UserProfile, DriverStatus, CallRecord, AppSettings, Message } from '../types';
@@ -81,14 +82,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onL
         type: selectedDriver.vehicle_type || 'car'
       });
       setNewPassword(''); // Reset password field
-      
-      // Se o motorista mudar, pare qualquer monitoramento anterior.
-      if (isPlayingAudio) {
-        if (window.Android?.stopAudioMonitoring) {
-            window.Android.stopAudioMonitoring();
-        }
-        setIsPlayingAudio(false);
-      }
+      setIsPlayingAudio(false);
       
       // If we clicked on a driver, assume we want to see details first, unless we specifically went to chat from a notification (logic to be added later)
       // For now, if driver changes, default to details
@@ -166,26 +160,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onL
           // Play loop sound
           soundService.playRingtone();
       }
-  };
-
-  const handleToggleMonitoring = () => {
-    if (!selectedDriver) return;
-
-    // A URL do stream de áudio real viria do seu sistema de WebRTC.
-    // Para esta demonstração, usamos uma rádio online como placeholder.
-    const mockAudioStreamUrl = "https://stream.live.vc.bbcmedia.co.uk/bbc_world_service";
-
-    if (window.Android && window.Android.startAudioMonitoring) {
-        if (isPlayingAudio) {
-            window.Android.stopAudioMonitoring();
-            setIsPlayingAudio(false);
-        } else {
-            window.Android.startAudioMonitoring(mockAudioStreamUrl, selectedDriver.username);
-            setIsPlayingAudio(true);
-        }
-    } else {
-        alert("O monitoramento em segundo plano requer o App Nativo Android. Use o QR Code ou o link para instalar.");
-    }
   };
 
   // Timer for active call
@@ -415,7 +389,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onL
             />
            </div>
 
-           <div className="flex gap-2 overflow-x-auto pb-1 mb-2 hide-scrollbar">
+           <div className="flex gap-2 overflow-x-auto pb-1 mb-2">
              <button
                  onClick={() => setFilterStatus('all')}
                  className={`px-3 py-1.5 text-xs rounded-full capitalize border transition whitespace-nowrap ${
@@ -648,8 +622,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onL
                    )}
 
                    <button 
-                     onClick={handleToggleMonitoring}
-                     className={`flex items-center gap-2 px-3 py-2 rounded-lg transition whitespace-nowrap ${isPlayingAudio ? 'bg-green-100 text-green-700 ring-2 ring-green-200' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                     onClick={() => setIsPlayingAudio(!isPlayingAudio)}
+                     className={`flex items-center gap-2 px-3 py-2 rounded-lg transition whitespace-nowrap ${isPlayingAudio ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
                    >
                      <span className="material-icons text-sm">{isPlayingAudio ? 'pause' : 'mic'}</span>
                      <span className="text-sm font-medium">Monitorar</span>
@@ -873,40 +847,38 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onL
               )}
 
               {activeTab === 'history' && (
-                  <div className="overflow-x-auto custom-scrollbar">
-                    <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden min-w-[600px]">
-                        <table className="w-full text-left">
-                            <thead className="bg-gray-50 border-b border-gray-200">
-                                <tr>
-                                    <th className="p-4 text-xs font-bold text-gray-500 uppercase">Tipo</th>
-                                    <th className="p-4 text-xs font-bold text-gray-500 uppercase">Cliente</th>
-                                    <th className="p-4 text-xs font-bold text-gray-500 uppercase">Duração</th>
-                                    <th className="p-4 text-xs font-bold text-gray-500 uppercase">Horário</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-100">
-                                {callHistory.map(call => (
-                                    <tr key={call.id} className="hover:bg-gray-50 transition">
-                                        <td className="p-4">
-                                            <div className="flex items-center gap-2">
-                                                <span className={`material-icons text-sm ${
-                                                    call.status === 'missed' ? 'text-red-500' : 
-                                                    call.direction === 'incoming' ? 'text-green-500' : 'text-blue-500'
-                                                }`}>
-                                                    {call.status === 'missed' ? 'call_missed' : 
-                                                    call.direction === 'incoming' ? 'call_received' : 'call_made'}
-                                                </span>
-                                                <span className="text-sm text-gray-700 capitalize">{call.status === 'missed' ? 'Perdida' : call.direction === 'incoming' ? 'Recebida' : 'Efetuada'}</span>
-                                            </div>
-                                        </td>
-                                        <td className="p-4 text-sm text-gray-800">{call.clientName}</td>
-                                        <td className="p-4 text-sm text-gray-600 font-mono">{call.duration > 0 ? formatDuration(call.duration) : '--'}</td>
-                                        <td className="p-4 text-sm text-gray-500">{new Date(call.timestamp).toLocaleString()}</td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
+                  <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                      <table className="w-full text-left">
+                          <thead className="bg-gray-50 border-b border-gray-200">
+                              <tr>
+                                  <th className="p-4 text-xs font-bold text-gray-500 uppercase">Tipo</th>
+                                  <th className="p-4 text-xs font-bold text-gray-500 uppercase">Cliente</th>
+                                  <th className="p-4 text-xs font-bold text-gray-500 uppercase">Duração</th>
+                                  <th className="p-4 text-xs font-bold text-gray-500 uppercase">Horário</th>
+                              </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-100">
+                              {callHistory.map(call => (
+                                  <tr key={call.id} className="hover:bg-gray-50 transition">
+                                      <td className="p-4">
+                                          <div className="flex items-center gap-2">
+                                              <span className={`material-icons text-sm ${
+                                                  call.status === 'missed' ? 'text-red-500' : 
+                                                  call.direction === 'incoming' ? 'text-green-500' : 'text-blue-500'
+                                              }`}>
+                                                  {call.status === 'missed' ? 'call_missed' : 
+                                                   call.direction === 'incoming' ? 'call_received' : 'call_made'}
+                                              </span>
+                                              <span className="text-sm text-gray-700 capitalize">{call.status === 'missed' ? 'Perdida' : call.direction === 'incoming' ? 'Recebida' : 'Efetuada'}</span>
+                                          </div>
+                                      </td>
+                                      <td className="p-4 text-sm text-gray-800">{call.clientName}</td>
+                                      <td className="p-4 text-sm text-gray-600 font-mono">{call.duration > 0 ? formatDuration(call.duration) : '--'}</td>
+                                      <td className="p-4 text-sm text-gray-500">{new Date(call.timestamp).toLocaleString()}</td>
+                                  </tr>
+                              ))}
+                          </tbody>
+                      </table>
                   </div>
               )}
 

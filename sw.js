@@ -55,26 +55,23 @@ self.addEventListener('fetch', (event) => {
   }
 });
 
-// LÓGICA DE SOBREPOSIÇÃO (OVERLAY) - APRIMORADA
+// LÓGICA DE SOBREPOSIÇÃO (OVERLAY)
 self.addEventListener('notificationclick', function(event) {
   event.notification.close();
 
   event.waitUntil(
     clients.matchAll({
       type: 'window',
-      includeUncontrolled: true // Essencial para encontrar a aba mesmo que o SW não a controle diretamente
+      includeUncontrolled: true 
     }).then(function(windowClients) {
-      // Procura por uma janela já aberta
       for (var i = 0; i < windowClients.length; i++) {
         var client = windowClients[i];
-        // Verifica se a URL corresponde e se a janela pode ser focada
-        if (client.url.startsWith(self.registration.scope) && 'focus' in client) {
+        if (client.url.includes(self.registration.scope) && 'focus' in client) {
           return client.focus();
         }
       }
-      // Se nenhuma janela estiver aberta, abre uma nova
       if (clients.openWindow) {
-        return clients.openWindow(self.registration.scope);
+        return clients.openWindow('/');
       }
     })
   );

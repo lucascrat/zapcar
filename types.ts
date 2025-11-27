@@ -78,13 +78,10 @@ declare global {
   interface Window {
     Android?: {
       triggerNativeAlert: () => void;
+      triggerNativeMessageSound: () => void; // Novo método para mensagens
       stopNativeAlert: () => void;
       showToast: (msg: string) => void;
       bringToFront: () => void;
-      enterPictureInPictureMode?: () => void;
-      // NOVOS: Para áudio em segundo plano
-      startAudioMonitoring: (streamUrl: string, driverName: string) => void;
-      stopAudioMonitoring: () => void;
     }
   }
 }
