@@ -33,8 +33,8 @@ export const BingoUserView: React.FC<BingoUserViewProps> = ({ currentUser, onClo
 
   const getYoutubeId = (url: string) => {
      if(!url) return null;
-     // Regex mais robusto para capturar ID de vários formatos de URL do Youtube
-     const regExp = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/;
+     // Regex mais robusto para capturar ID de vários formatos de URL do Youtube incluindo /live/ e /shorts/
+     const regExp = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=|live\/|shorts\/)|youtu\.be\/)([^"&?\/\s]{11})/;
      const match = url.match(regExp);
      return match ? match[1] : null;
   };

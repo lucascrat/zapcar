@@ -2,8 +2,8 @@
 // Sounds Service
 // Sons mais altos e distintos para simular apps de transporte (99/Uber)
 
-// Alarme de chamada (Siren style)
-const CALL_SOUND_URL = 'https://assets.mixkit.co/active_storage/sfx/2859/2859-preview.mp3'; 
+// Alarme de chamada (Personalizado)
+const CALL_SOUND_URL = '/ubb.mp3'; 
 
 // Notificação recebida (Clear distinct ping)
 const RECEIVED_URL = 'https://assets.mixkit.co/active_storage/sfx/1862/1862-preview.mp3';

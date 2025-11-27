@@ -431,9 +431,9 @@ export const getOrCreateBingoCard = async (userId: string): Promise<BingoCard | 
     if (data) return data as BingoCard;
 
     // 2. Create new card
-    // Gera 24 números aleatórios únicos entre 1 e 75
+    // Gera 25 números aleatórios únicos entre 1 e 75 para preencher o grid 5x5
     const numbers = new Set<number>();
-    while(numbers.size < 24) {
+    while(numbers.size < 25) {
         numbers.add(Math.floor(Math.random() * 75) + 1);
     }
     const numbersArray = Array.from(numbers).sort((a,b) => a - b);
@@ -459,7 +459,7 @@ export const fetchBingoRanking = async (): Promise<BingoRankingUser[]> => {
     // Busca todas as cartelas com info do usuario
     const { data: cards, error } = await supabase
         .from('bingo_cards')
-        .select('*, profiles:user_id(username)');
+        .select('*, profiles:user_id(username, id, avatar_url)');
 
     if (error) {
         handleDbError(error, "fetchBingoRanking");
@@ -473,6 +473,8 @@ export const fetchBingoRanking = async (): Promise<BingoRankingUser[]> => {
         const hits = myNumbers.filter(n => drawnSet.has(n)).length;
         return {
             username: card.profiles?.username || 'Desconhecido',
+            user_id: card.profiles?.id,
+            avatar_url: card.profiles?.avatar_url,
             hits: hits,
             missing: myNumbers.length - hits
         };

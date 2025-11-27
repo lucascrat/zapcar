@@ -417,10 +417,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onL
       setShowDetailMobile(false);
   };
 
-  // Helper local para preview de vídeo
+  // Helper local para preview de vídeo (Sincronizado com BingoUserView)
   const getYoutubeId = (url: string) => {
     if(!url) return null;
-    const regExp = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/;
+    const regExp = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=|live\/|shorts\/)|youtu\.be\/)([^"&?\/\s]{11})/;
     const match = url.match(regExp);
     return match ? match[1] : null;
   };
@@ -1140,8 +1140,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onL
               )}
 
               {activeTab === 'history' && (
-                  <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-                      <table className="w-full text-left">
+                  <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden overflow-x-auto">
+                      <table className="w-full text-left min-w-[500px]">
                           <thead className="bg-gray-50 border-b border-gray-200">
                               <tr>
                                   <th className="p-4 text-xs font-bold text-gray-500 uppercase">Tipo</th>
