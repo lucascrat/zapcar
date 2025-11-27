@@ -73,6 +73,29 @@ export interface AppSettings {
   moto_start_distance_limit: number; // Distância (km) incluída na bandeirada
 }
 
+// Interfaces do Bingo
+export interface BingoSettings {
+  id?: string;
+  prize_image: string;
+  prize_description: string;
+  youtube_link: string;
+  drawn_numbers: number[]; // Array de números sorteados
+  is_active: boolean;
+}
+
+export interface BingoCard {
+  id: string;
+  user_id: string;
+  numbers: number[]; // Array de 24 ou 25 números da cartela
+  created_at: string;
+}
+
+export interface BingoRankingUser {
+  username: string;
+  hits: number; // Quantos números acertou
+  missing: number; // Quantos faltam
+}
+
 // Interface global para comunicação com Android Nativo
 declare global {
   interface Window {

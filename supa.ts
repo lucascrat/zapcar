@@ -1,115 +1,57 @@
 
 export const SUPABASE_SETUP_SQL = `
 -- =================================================================================
--- RESET COMPLETO E RECRIACÃO DO BANCO DE DADOS + STORAGE
--- COPIE E COLE TUDO ISSO NO SQL EDITOR DO SUPABASE
+-- CONFIGURAÇÃO DO BANCO DE DADOS - CHEGOJÁ (ATUALIZADO PARA BINGO)
+-- COPIE ESTE CONTEÚDO E COLE NO SQL EDITOR DO SUPABASE
 -- =================================================================================
 
--- 1. LIMPEZA (CUIDADO: ISSO APAGA TODOS OS DADOS)
-DROP TABLE IF EXISTS public.messages CASCADE;
-DROP TABLE IF EXISTS public.profiles CASCADE;
-DROP TABLE IF EXISTS public.app_settings CASCADE;
+-- 1. Criação das Tabelas Principais (Se não existirem)
 
--- 2. Habilitar extensão para UUIDs (se necessário)
-CREATE EXTENSION IF NOT EXISTS "pgcrypto";
-
--- =================================================================================
--- 3. Criar Tabela de Perfis (Motoristas e Clientes)
-CREATE TABLE public.profiles (
+-- Tabela de Configurações do BINGO
+CREATE TABLE IF NOT EXISTS public.bingo_settings (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    username TEXT NOT NULL,
-    phone TEXT, 
-    password TEXT, -- Senha simples para login (ideal seria hash, mas para protótipo usamos texto)
-    role TEXT NOT NULL CHECK (role IN ('client', 'driver', 'admin')),
-    status TEXT NOT NULL DEFAULT 'available',
-    is_approved BOOLEAN DEFAULT TRUE, -- Clientes nascem aprovados, motoristas mudamos no insert
-    avatar_url TEXT,
-    vehicle_model TEXT,
-    vehicle_plate TEXT,
-    vehicle_color TEXT,
-    vehicle_type TEXT CHECK (vehicle_type IN ('car', 'motorcycle')),
-    lat FLOAT,
-    lng FLOAT,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+    prize_image TEXT,
+    prize_description TEXT,
+    youtube_link TEXT,
+    drawn_numbers JSONB DEFAULT '[]'::jsonb,
+    is_active BOOLEAN DEFAULT TRUE
 );
 
--- Inserir um ADMIN PADRÃO para que o chat de suporte funcione
-INSERT INTO public.profiles (id, username, password, role, is_approved, avatar_url)
-VALUES (
-    'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11', -- ID fixo para facilitar
-    'Suporte ChegoJá', 
-    'admin123', 
-    'admin', 
-    true, 
-    'https://ui-avatars.com/api/?name=Suporte&background=0D8ABC&color=fff'
-);
-
--- =================================================================================
--- 4. Criar Tabela de Mensagens
-CREATE TABLE public.messages (
+-- Tabela de Cartelas do BINGO
+CREATE TABLE IF NOT EXISTS public.bingo_cards (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    sender_id UUID NOT NULL,
-    receiver_id UUID NOT NULL,
-    content TEXT,
-    media_url TEXT,
-    media_type TEXT CHECK (media_type IN ('text', 'audio', 'image', 'location')),
-    is_read BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+    user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE,
+    numbers JSONB NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+    UNIQUE(user_id)
 );
 
--- =================================================================================
--- 5. Criar Tabela de Configurações do App (Taxímetro)
-CREATE TABLE public.app_settings (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    car_base_price FLOAT DEFAULT 5.0,
-    car_price_km FLOAT DEFAULT 2.5,
-    car_price_min FLOAT DEFAULT 0.5,
-    car_start_distance_limit FLOAT DEFAULT 0.0,
-    moto_base_price FLOAT DEFAULT 3.5,
-    moto_price_km FLOAT DEFAULT 1.8,
-    moto_price_min FLOAT DEFAULT 0.3,
-    moto_start_distance_limit FLOAT DEFAULT 0.0
-);
+-- Inserir configuração padrão do Bingo se não existir
+INSERT INTO public.bingo_settings (prize_image, prize_description, youtube_link, drawn_numbers)
+SELECT 'https://placehold.co/600x400/png?text=Pr%C3%AAmio', 'Prêmio Surpresa', '', '[]'::jsonb
+WHERE NOT EXISTS (SELECT 1 FROM public.bingo_settings);
 
--- Inserir configuração padrão
-INSERT INTO public.app_settings (car_base_price, car_price_km, car_price_min, car_start_distance_limit, moto_base_price, moto_price_km, moto_price_min, moto_start_distance_limit)
-VALUES (5.0, 2.5, 0.5, 0.0, 3.5, 1.8, 0.3, 0.0);
 
 -- =================================================================================
--- 6. Adicionar chaves estrangeiras
-ALTER TABLE public.messages 
-ADD CONSTRAINT messages_sender_id_fkey 
-FOREIGN KEY (sender_id) REFERENCES public.profiles(id) ON DELETE CASCADE;
+-- 2. Configurar Segurança (RLS) para as tabelas do Bingo
 
-ALTER TABLE public.messages 
-ADD CONSTRAINT messages_receiver_id_fkey 
-FOREIGN KEY (receiver_id) REFERENCES public.profiles(id) ON DELETE CASCADE;
+ALTER TABLE public.bingo_settings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.bingo_cards ENABLE ROW LEVEL SECURITY;
 
--- =================================================================================
--- 7. STORAGE (Arquivos de mídia)
+-- Remover políticas antigas para recriar
+DROP POLICY IF EXISTS "Acesso total bingo_settings" ON public.bingo_settings;
+DROP POLICY IF EXISTS "Acesso total bingo_cards" ON public.bingo_cards;
 
-INSERT INTO storage.buckets (id, name, public) 
-VALUES ('chat-media', 'chat-media', true)
-ON CONFLICT (id) DO NOTHING;
+-- Criar Políticas
+CREATE POLICY "Acesso total bingo_settings" ON public.bingo_settings FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Acesso total bingo_cards" ON public.bingo_cards FOR ALL USING (true) WITH CHECK (true);
 
-CREATE POLICY "Permitir upload publico" ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'chat-media');
-CREATE POLICY "Permitir leitura publica" ON storage.objects FOR SELECT USING (bucket_id = 'chat-media');
 
 -- =================================================================================
--- 8. Configurar Segurança (RLS)
-ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.messages ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.app_settings ENABLE ROW LEVEL SECURITY;
+-- 3. Configurar Realtime para o Bingo
 
--- Políticas permissivas
-CREATE POLICY "Acesso total perfis" ON public.profiles FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Acesso total mensagens" ON public.messages FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Acesso total settings" ON public.app_settings FOR ALL USING (true) WITH CHECK (true);
+-- Adiciona as tabelas à publicação realtime existente
+ALTER PUBLICATION supabase_realtime ADD TABLE bingo_settings;
+ALTER PUBLICATION supabase_realtime ADD TABLE bingo_cards;
 
--- =================================================================================
--- 9. Configurar Realtime
-DROP PUBLICATION IF EXISTS supabase_realtime;
-CREATE PUBLICATION supabase_realtime FOR TABLE messages, profiles, app_settings;
-
--- FIM DO SCRIPT
 `;

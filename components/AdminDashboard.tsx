@@ -1,7 +1,7 @@
 
 import React, { useEffect, useState, useRef } from 'react';
-import { fetchAllDriversForAdmin, deleteDriver, updateDriverStatus, updateDriverVehicle, updateDriverPassword, fetchAppSettings, updateAppSettings, approveDriver, fetchMessages, subscribeToMessages, subscribeToProfiles } from '../services/supabaseClient';
-import { UserProfile, DriverStatus, CallRecord, AppSettings, Message } from '../types';
+import { fetchAllDriversForAdmin, deleteDriver, updateDriverStatus, updateDriverVehicle, updateDriverPassword, fetchAppSettings, updateAppSettings, approveDriver, fetchMessages, subscribeToMessages, subscribeToProfiles, fetchBingoSettings, updateBingoSettings, drawBingoNumber, drawSpecificBingoNumber, resetBingo, fetchBingoRanking, subscribeToBingo } from '../services/supabaseClient';
+import { UserProfile, DriverStatus, CallRecord, AppSettings, Message, BingoSettings, BingoRankingUser } from '../types';
 import { soundService } from '../services/soundService';
 import { ChatWindow } from './ChatWindow'; // Importar ChatWindow
 
@@ -13,7 +13,8 @@ interface AdminDashboardProps {
   onLogout: () => void;
 }
 
-type AdminTab = 'details' | 'map' | 'history' | 'settings' | 'chat';
+// Adicionada aba 'approvals'
+type AdminTab = 'details' | 'map' | 'history' | 'settings' | 'chat' | 'bingo' | 'approvals';
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onLogout }) => {
   const [drivers, setDrivers] = useState<UserProfile[]>([]);
@@ -41,6 +42,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onL
   });
   const [isSavingSettings, setIsSavingSettings] = useState(false);
 
+  // BINGO STATE
+  const [bingoSettings, setBingoSettings] = useState<BingoSettings | null>(null);
+  const [bingoRanking, setBingoRanking] = useState<BingoRankingUser[]>([]);
+  const [bingoLoading, setBingoLoading] = useState(false);
+
   // Audio Simulation State
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
 
@@ -58,6 +64,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onL
   useEffect(() => {
     loadDrivers();
     loadSettings();
+    loadBingoData();
     
     // Subscribe to profile changes (Real-time updates for new drivers)
     console.log("Admin assinando updates de perfil...");
@@ -145,6 +152,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onL
           }
       }
   }, [activeTab, selectedDriver, currentUser.id]);
+
+  // Bingo Sub
+  useEffect(() => {
+      if (activeTab === 'bingo') {
+          loadBingoData();
+          const sub = subscribeToBingo(() => {
+             loadBingoData();
+          });
+          return () => { sub.unsubscribe(); }
+      }
+  }, [activeTab]);
 
   const loadDriverMessages = async (driverId: string) => {
       const msgs = await fetchMessages(currentUser.id, driverId);
@@ -251,11 +269,42 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onL
       setAppSettings(settings);
   };
 
+  const loadBingoData = async () => {
+      setBingoLoading(true);
+      const settings = await fetchBingoSettings();
+      setBingoSettings(settings);
+      const rank = await fetchBingoRanking();
+      setBingoRanking(rank);
+      setBingoLoading(false);
+  };
+
   const handleSaveSettings = async () => {
       setIsSavingSettings(true);
       await updateAppSettings(appSettings);
       alert("Configurações atualizadas!");
       setIsSavingSettings(false);
+  };
+
+  const handleSaveBingoSettings = async () => {
+      if(!bingoSettings) return;
+      await updateBingoSettings(bingoSettings);
+      alert("Bingo atualizado!");
+  };
+
+  const handleDrawNumber = async () => {
+      const num = await drawBingoNumber();
+      if(!num) alert("Todos os números já foram sorteados!");
+  };
+
+  const handleManualDraw = async (num: number) => {
+      if (!bingoSettings) return;
+      if (bingoSettings.drawn_numbers.includes(num)) {
+          alert(`Número ${num} já foi sorteado!`);
+          return;
+      }
+      if (confirm(`Sortear o número ${num}?`)) {
+          await drawSpecificBingoNumber(num);
+      }
   };
 
   const handleDelete = async (id: string) => {
@@ -351,6 +400,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onL
      return 0;
   });
 
+  const pendingCount = drivers.filter(d => !d.is_approved).length;
+
   const formatDuration = (sec: number) => {
     const min = Math.floor(sec / 60);
     const s = sec % 60;
@@ -365,6 +416,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onL
   const handleBackToList = () => {
       setShowDetailMobile(false);
   };
+
+  // Helper local para preview de vídeo
+  const getYoutubeId = (url: string) => {
+    if(!url) return null;
+    const regExp = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/;
+    const match = url.match(regExp);
+    return match ? match[1] : null;
+  };
+
+  const adminVideoId = getYoutubeId(bingoSettings?.youtube_link || '');
 
   return (
     <div className="flex h-[100dvh] bg-gray-100 overflow-hidden relative">
@@ -405,19 +466,40 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onL
                  }`}
              >
                  Pendentes
-                 {drivers.filter(d => !d.is_approved).length > 0 && (
-                     <span className="bg-red-500 text-white text-[9px] px-1 rounded-full">{drivers.filter(d => !d.is_approved).length}</span>
+                 {pendingCount > 0 && (
+                     <span className="bg-red-500 text-white text-[9px] px-1 rounded-full">{pendingCount}</span>
                  )}
              </button>
-             {/* Outros filtros */}
            </div>
            
-           <button 
-             onClick={() => { setActiveTab('settings'); setSelectedDriver(null); setShowDetailMobile(true); }}
-             className="w-full py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm font-medium text-gray-700 flex items-center justify-center gap-2"
-           >
-               <span className="material-icons text-sm">settings</span> Configurações Gerais
-           </button>
+           {/* MENU DE ABAS DE AÇÃO RÁPIDA */}
+           <div className="grid grid-cols-2 gap-2 mt-2">
+               {/* BOTÃO APROVAÇÕES DEDICADO */}
+               <button 
+                onClick={() => { setActiveTab('approvals'); setSelectedDriver(null); setShowDetailMobile(true); }}
+                className="col-span-2 py-3 bg-yellow-50 hover:bg-yellow-100 rounded-lg text-xs font-bold text-yellow-700 flex items-center justify-center gap-2 border border-yellow-200 relative"
+               >
+                <span className="material-icons text-sm">how_to_reg</span> Aprovação de Motoristas
+                {pendingCount > 0 && (
+                    <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-600 text-white rounded-full flex items-center justify-center text-[10px] shadow-sm animate-bounce">
+                        {pendingCount}
+                    </span>
+                )}
+               </button>
+
+               <button 
+                onClick={() => { setActiveTab('settings'); setSelectedDriver(null); setShowDetailMobile(true); }}
+                className="py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-xs font-medium text-gray-700 flex items-center justify-center gap-2"
+               >
+                <span className="material-icons text-sm">settings</span> Ajustes
+               </button>
+               <button 
+                onClick={() => { setActiveTab('bingo'); setSelectedDriver(null); setShowDetailMobile(true); }}
+                className="py-2 bg-purple-100 hover:bg-purple-200 rounded-lg text-xs font-medium text-purple-700 flex items-center justify-center gap-2"
+               >
+                <span className="material-icons text-sm">casino</span> Bingo
+               </button>
+           </div>
         </div>
 
         <div className="flex-1 overflow-y-auto custom-scrollbar">
@@ -465,8 +547,219 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onL
       {/* Main Content (Detail View) */}
       <div className={`flex-1 bg-gray-50 overflow-y-auto ${showDetailMobile ? 'block absolute inset-0 z-20 bg-white' : 'hidden md:block static'}`}>
         
-        {/* SETTINGS VIEW */}
-        {activeTab === 'settings' && !selectedDriver ? (
+        {/* TELA DE APROVAÇÕES (NOVA) */}
+        {activeTab === 'approvals' && !selectedDriver ? (
+            <div className="max-w-4xl mx-auto p-4 md:p-8">
+                <div className="md:hidden mb-4">
+                    <button onClick={handleBackToList} className="flex items-center text-gray-600"><span className="material-icons mr-2">arrow_back</span> Voltar</button>
+                </div>
+                
+                <h2 className="text-2xl font-bold text-gray-800 mb-6 flex items-center gap-2">
+                     <span className="material-icons text-yellow-600">how_to_reg</span> Aprovação de Motoristas
+                     <span className="bg-yellow-500 text-white text-xs px-2 py-1 rounded-full">{pendingCount} Pendentes</span>
+                </h2>
+
+                {pendingCount === 0 ? (
+                    <div className="bg-white p-12 rounded-xl text-center shadow-sm border border-gray-200">
+                        <span className="material-icons text-6xl text-green-100 mb-4">check_circle</span>
+                        <h3 className="text-xl font-medium text-gray-800">Tudo em dia!</h3>
+                        <p className="text-gray-500">Não há motoristas aguardando aprovação no momento.</p>
+                    </div>
+                ) : (
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                        {drivers.filter(d => !d.is_approved).map(pendingDriver => (
+                            <div key={pendingDriver.id} className="bg-white rounded-xl shadow border border-yellow-200 overflow-hidden flex flex-col">
+                                <div className="p-4 flex items-start gap-4">
+                                    <img src={pendingDriver.avatar_url || 'https://via.placeholder.com/80'} className="w-16 h-16 rounded-full object-cover border-2 border-yellow-400" alt="" />
+                                    <div className="flex-1">
+                                        <h3 className="font-bold text-lg text-gray-800">{pendingDriver.username}</h3>
+                                        <p className="text-xs text-gray-500 mb-2">Registrado em: {new Date(pendingDriver.created_at || '').toLocaleDateString()}</p>
+                                        
+                                        <div className="bg-gray-50 p-2 rounded text-sm space-y-1">
+                                            <div className="flex items-center gap-2">
+                                                <span className="material-icons text-xs text-gray-400">directions_car</span>
+                                                <span className="font-medium">{pendingDriver.vehicle_model || 'Não info.'}</span>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <span className="material-icons text-xs text-gray-400">pin</span>
+                                                <span className="font-mono bg-yellow-100 px-1 rounded text-yellow-800 font-bold">{pendingDriver.vehicle_plate || 'SEM PLACA'}</span>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <span className="material-icons text-xs text-gray-400">palette</span>
+                                                <span>{pendingDriver.vehicle_color || 'Cor não info.'}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="bg-gray-50 p-3 flex gap-2 mt-auto">
+                                    <button 
+                                        onClick={() => handleApprove(pendingDriver.id)}
+                                        className="flex-1 bg-green-600 hover:bg-green-700 text-white py-2 rounded-lg font-bold flex items-center justify-center gap-2 shadow-sm active:scale-95 transition"
+                                    >
+                                        <span className="material-icons text-sm">check</span> Aprovar
+                                    </button>
+                                    <button 
+                                        onClick={() => handleDelete(pendingDriver.id)}
+                                        className="flex-1 bg-red-100 hover:bg-red-200 text-red-700 py-2 rounded-lg font-bold flex items-center justify-center gap-2 active:scale-95 transition"
+                                    >
+                                        <span className="material-icons text-sm">close</span> Rejeitar
+                                    </button>
+                                    <button 
+                                        onClick={() => { setSelectedDriver(pendingDriver); setActiveTab('chat'); }}
+                                        className="px-3 bg-blue-100 hover:bg-blue-200 text-blue-700 rounded-lg flex items-center justify-center"
+                                        title="Conversar"
+                                    >
+                                        <span className="material-icons text-sm">chat</span>
+                                    </button>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </div>
+        ) : activeTab === 'bingo' && !selectedDriver ? (
+            <div className="max-w-4xl mx-auto p-4 md:p-8">
+                <div className="md:hidden mb-4">
+                    <button onClick={handleBackToList} className="flex items-center text-gray-600"><span className="material-icons mr-2">arrow_back</span> Voltar</button>
+                </div>
+                <div className="bg-purple-900 text-white p-6 rounded-2xl shadow-lg mb-8 relative overflow-hidden">
+                    <div className="relative z-10 flex justify-between items-center">
+                        <h2 className="text-3xl font-bold flex items-center gap-3">
+                            <span className="material-icons text-4xl">casino</span> Gerenciar Bingo
+                        </h2>
+                        <button onClick={() => {if(confirm('Resetar jogo?')) resetBingo()}} className="bg-red-500 hover:bg-red-600 px-4 py-2 rounded text-sm font-bold">
+                            Resetar Jogo
+                        </button>
+                    </div>
+                    <div className="absolute right-0 top-0 h-full w-1/3 bg-white/10 transform skew-x-12"></div>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                    {/* Game Control */}
+                    <div className="space-y-6">
+                        <div className="bg-white p-6 rounded-xl shadow border border-gray-200">
+                             <h3 className="font-bold text-gray-700 mb-4 border-b pb-2">Controle do Sorteio</h3>
+                             
+                             <div className="flex justify-center mb-6">
+                                 <button 
+                                    onClick={handleDrawNumber}
+                                    className="w-40 h-40 rounded-full bg-gradient-to-br from-purple-500 to-indigo-600 text-white font-bold text-xl shadow-xl active:scale-95 transition flex flex-col items-center justify-center gap-2 border-4 border-purple-200"
+                                 >
+                                     <span className="material-icons text-4xl">refresh</span>
+                                     SORTEAR
+                                 </button>
+                             </div>
+                             
+                             {/* GRID DE SORTEIO MANUAL */}
+                             <div className="mt-4 border-t pt-4">
+                                 <h4 className="text-xs text-gray-400 font-bold uppercase mb-2 text-center">Seleção Manual</h4>
+                                 <div className="grid grid-cols-10 gap-1 text-[10px]">
+                                     {Array.from({length: 75}, (_, i) => i + 1).map(num => {
+                                         const isDrawn = bingoSettings?.drawn_numbers.includes(num);
+                                         return (
+                                            <button 
+                                                key={num} 
+                                                onClick={() => handleManualDraw(num)}
+                                                disabled={isDrawn}
+                                                className={`
+                                                    aspect-square rounded flex items-center justify-center font-bold border
+                                                    ${isDrawn 
+                                                        ? 'bg-gray-200 text-gray-400 border-gray-200 cursor-not-allowed' 
+                                                        : 'bg-white text-purple-700 border-purple-200 hover:bg-purple-100'
+                                                    }
+                                                `}
+                                            >
+                                                {num}
+                                            </button>
+                                         );
+                                     })}
+                                 </div>
+                             </div>
+
+                             <div className="mt-4">
+                                 <h4 className="text-sm text-gray-500 uppercase font-bold mb-2">Números Sorteados ({bingoSettings?.drawn_numbers.length})</h4>
+                                 <div className="flex flex-wrap gap-2 max-h-40 overflow-y-auto p-2 bg-gray-50 rounded-lg">
+                                     {bingoSettings?.drawn_numbers.slice().reverse().map((n, i) => (
+                                         <div key={i} className="w-8 h-8 rounded-full bg-purple-100 text-purple-800 font-bold flex items-center justify-center border border-purple-200 text-sm">
+                                             {n}
+                                         </div>
+                                     ))}
+                                 </div>
+                             </div>
+                        </div>
+
+                        {/* Configurar Premio */}
+                        <div className="bg-white p-6 rounded-xl shadow border border-gray-200">
+                             <h3 className="font-bold text-gray-700 mb-4 border-b pb-2">Configurar Prêmio</h3>
+                             <div className="space-y-3">
+                                 <div>
+                                     <label className="block text-xs font-bold text-gray-500 mb-1">Link da Imagem</label>
+                                     <input type="text" value={bingoSettings?.prize_image} onChange={e => setBingoSettings(s => s ? {...s, prize_image: e.target.value} : null)} className="w-full p-2 border rounded text-sm text-gray-800" />
+                                 </div>
+                                 <div>
+                                     <label className="block text-xs font-bold text-gray-500 mb-1">Descrição</label>
+                                     <input type="text" value={bingoSettings?.prize_description} onChange={e => setBingoSettings(s => s ? {...s, prize_description: e.target.value} : null)} className="w-full p-2 border rounded text-sm text-gray-800" />
+                                 </div>
+                                 <div>
+                                     <label className="block text-xs font-bold text-gray-500 mb-1">Link do YouTube</label>
+                                     <input type="text" value={bingoSettings?.youtube_link} onChange={e => setBingoSettings(s => s ? {...s, youtube_link: e.target.value} : null)} className="w-full p-2 border rounded text-sm text-gray-800" />
+                                 </div>
+                                 
+                                 {/* VIDEO PREVIEW */}
+                                 {adminVideoId && (
+                                     <div className="mt-2 rounded-lg overflow-hidden bg-black border border-gray-300">
+                                         <p className="text-[10px] text-gray-500 bg-gray-100 p-1 text-center">Preview (Verifique se funciona)</p>
+                                         <div className="relative w-full" style={{ paddingBottom: '56.25%' }}>
+                                              <iframe 
+                                                  className="absolute top-0 left-0 w-full h-full"
+                                                  src={`https://www.youtube.com/embed/${adminVideoId}?rel=0&modestbranding=1&origin=${encodeURIComponent(window.location.origin)}`}
+                                                  title="YouTube video player" 
+                                                  frameBorder="0" 
+                                                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+                                                  allowFullScreen
+                                                  referrerPolicy="strict-origin-when-cross-origin"
+                                              ></iframe>
+                                         </div>
+                                     </div>
+                                 )}
+
+                                 <button onClick={handleSaveBingoSettings} className="w-full bg-blue-600 text-white py-2 rounded font-bold hover:bg-blue-700">Salvar Dados</button>
+                             </div>
+                        </div>
+                    </div>
+
+                    {/* Ranking */}
+                    <div className="bg-white p-6 rounded-xl shadow border border-gray-200">
+                        <h3 className="font-bold text-gray-700 mb-4 border-b pb-2">Top 10 Jogadores</h3>
+                        <div className="overflow-y-auto max-h-[500px]">
+                            <table className="w-full text-left text-sm">
+                                <thead className="bg-gray-50 text-gray-500">
+                                    <tr>
+                                        <th className="p-2">#</th>
+                                        <th className="p-2">Usuário</th>
+                                        <th className="p-2 text-center">Acertos</th>
+                                        <th className="p-2 text-center">Faltam</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {bingoRanking.map((user, idx) => (
+                                        <tr key={idx} className={`border-b border-gray-100 ${idx < 3 ? 'bg-yellow-50' : ''}`}>
+                                            <td className="p-2 font-bold text-gray-400">{idx + 1}</td>
+                                            <td className="p-2 font-medium">{user.username}</td>
+                                            <td className="p-2 text-center font-bold text-green-600">{user.hits}</td>
+                                            <td className="p-2 text-center font-mono text-gray-500">{user.missing}</td>
+                                        </tr>
+                                    ))}
+                                    {bingoRanking.length === 0 && (
+                                        <tr><td colSpan={4} className="p-4 text-center text-gray-400">Nenhum jogador ainda.</td></tr>
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        ) : activeTab === 'settings' && !selectedDriver ? (
             <div className="max-w-4xl mx-auto p-8">
                  <div className="md:hidden mb-4">
                     <button onClick={handleBackToList} className="flex items-center text-gray-600"><span className="material-icons mr-2">arrow_back</span> Voltar</button>

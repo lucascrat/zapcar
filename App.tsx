@@ -4,6 +4,7 @@ import { ChatWindow } from './components/ChatWindow';
 import { AdminDashboard } from './components/AdminDashboard';
 import { InstallPrompt } from './components/InstallPrompt'; // Importar componente
 import { AndroidSetup } from './components/AndroidSetup'; // Importar componente Android
+import { BingoUserView } from './components/BingoUserView'; // Importar Bingo
 import { 
   registerClientWithPhoto, 
   fetchOnlineDrivers, 
@@ -21,7 +22,32 @@ import { UserProfile, UserRole, DriverStatus, Message } from './types';
 import { APP_NAME } from './constants';
 import { soundService } from './services/soundService';
 
-const APP_VERSION = "2.9 (Message Priority Fix)";
+const APP_VERSION = "3.1 (Prêmios Update)";
+
+const MarqueeBanner = () => (
+  <div className="bg-gradient-to-r from-purple-900 via-indigo-800 to-purple-900 overflow-hidden relative h-8 flex items-center shadow-md z-30 shrink-0">
+     <div className="animate-marquee whitespace-nowrap flex gap-10 items-center w-full">
+         <span className="text-yellow-300 font-bold text-sm flex items-center gap-2">
+             <span className="material-icons text-sm">stars</span>
+             ENTRE E CONCORRA A PRÊMIOS TODA SEMANA! - PRÊMIOS CHEGOJÁ
+         </span>
+         <span className="text-white font-medium text-xs">Instale o App e participe dos sorteios exclusivos.</span>
+         <span className="text-yellow-300 font-bold text-sm flex items-center gap-2">
+             <span className="material-icons text-sm">emoji_events</span>
+             SORTEIO ATIVO AGORA!
+         </span>
+         <span className="text-white font-medium text-xs">Clique no ícone do Bingo para ver sua cartela.</span>
+         {/* Duplicate for seamless loop */}
+         <span className="text-yellow-300 font-bold text-sm flex items-center gap-2 ml-10">
+             <span className="material-icons text-sm">stars</span>
+             ENTRE E CONCORRA A PRÊMIOS TODA SEMANA! - PRÊMIOS CHEGOJÁ
+         </span>
+         <span className="text-white font-medium text-xs">Instale o App e participe dos sorteios exclusivos.</span>
+     </div>
+     {/* Shine Effect */}
+     <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent w-1/2 h-full -skew-x-12 animate-shimmer pointer-events-none"></div>
+  </div>
+);
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
@@ -52,6 +78,9 @@ export default function App() {
   // Mobile View State
   const [showChatOnMobile, setShowChatOnMobile] = useState(false);
   const [showAndroidSetup, setShowAndroidSetup] = useState(false); // Estado do modal Android
+  
+  // BINGO STATE
+  const [showBingo, setShowBingo] = useState(false);
 
   // Refs
   const avatarInputRef = useRef<HTMLInputElement>(null);
@@ -494,8 +523,8 @@ export default function App() {
                             <span className="material-icons text-white">hourglass_empty</span>
                         </div>
                         <div className="flex flex-col">
-                            <span className="font-bold text-sm">Cadastro em Análise</span>
-                            <span className="text-xs opacity-90">Aguarde aprovação do Admin.</span>
+                            <span className="font-bold text-sm">Cadastro Realizado!</span>
+                            <span className="text-xs opacity-90">Aguardando liberação do Admin.</span>
                         </div>
                     </div>
                     <button onClick={handleLogout} className="text-white/80 hover:text-white">
@@ -523,7 +552,7 @@ export default function App() {
                     </button>
                 </div>
                 <p className="text-[10px] text-white/80 text-center mt-1">
-                    Baixe o App Nativo para tocar alarme mesmo com tela bloqueada.
+                    Fale com o suporte abaixo para agilizar sua aprovação.
                 </p>
             </div>
 
@@ -752,186 +781,205 @@ export default function App() {
 
   // --- Render: Main App (Client/Driver Chat) ---
   return (
-    <div className="h-[100dvh] w-full flex overflow-hidden bg-app-bg relative">
-      <InstallPrompt />
-      {showAndroidSetup && <AndroidSetup onClose={() => setShowAndroidSetup(false)} />}
+    <div className="h-[100dvh] w-full flex flex-col overflow-hidden bg-app-bg relative">
+      <MarqueeBanner />
       
-      {/* Sidebar */}
-      <div className={`w-full md:w-[400px] bg-whatsapp-dark border-r border-gray-800 flex flex-col ${showChatOnMobile ? 'hidden md:flex' : 'flex'}`}>
-        {/* My Profile Header */}
-        <div className="h-16 px-4 flex items-center justify-between shrink-0 bg-whatsapp-panel shadow-sm z-10">
-          <div className="flex items-center gap-3">
-             <img src={currentUser.avatar_url || 'https://via.placeholder.com/40'} alt="Me" className="w-10 h-10 rounded-full border border-gray-600 object-cover" />
-             <div>
-               <p className="text-gray-200 font-medium truncate max-w-[150px]">{currentUser.username}</p>
-               <span className="text-xs text-gray-400 uppercase font-bold tracking-wider">
-                 {currentUser.role === 'driver' ? 'Motorista' : 'Cliente'}
-               </span>
-             </div>
-          </div>
-          <div className="flex gap-2 text-gray-400 items-center">
-             {currentUser.role === UserRole.DRIVER && (
-                 <>
-                    {/* Status Toggle Button - HIGHLIGHTED */}
-                    <button 
-                        onClick={handleStatusToggle}
-                        className={`px-4 py-2 rounded-full text-xs font-bold transition flex items-center gap-2 shadow-sm ${
-                            currentUser.status === DriverStatus.AVAILABLE 
-                            ? 'bg-green-600 text-white hover:bg-green-500 ring-2 ring-green-600/30' 
-                            : 'bg-red-600 text-white hover:bg-red-500 ring-2 ring-red-600/30'
-                        }`}
-                        title="Toque para mudar status"
-                    >
-                        <span className="material-icons text-sm">{currentUser.status === DriverStatus.AVAILABLE ? 'lock_open' : 'lock'}</span>
-                        {currentUser.status === DriverStatus.AVAILABLE ? 'LIVRE' : 'OCUPADO'}
-                    </button>
-                    
-                    {/* Admin Contact Button / Native App Button - HIGHLIGHTED */}
-                    <button 
-                        onClick={() => setShowAndroidSetup(true)}
-                        className="bg-green-700 hover:bg-green-600 text-white p-2 rounded-full transition flex items-center justify-center animate-pulse" 
-                        title="Baixar App Nativo Android"
-                    >
-                        <span className="material-icons text-sm">android</span>
-                    </button>
-                 </>
-             )}
-            <button className="p-2 rounded-full hover:bg-gray-700 transition" title="Configurações"><span className="material-icons">settings</span></button>
-            <button className="p-2 rounded-full hover:bg-red-900/30 hover:text-red-400 transition" title="Sair" onClick={handleLogout}><span className="material-icons">logout</span></button>
-          </div>
-        </div>
-
-        {/* Search Bar */}
-        <div className="p-2 bg-whatsapp-dark border-b border-gray-800/50">
-            <div className="bg-whatsapp-panel rounded-lg flex items-center px-4 py-2 transition focus-within:bg-[#2a3942]">
-               <span className="material-icons text-gray-400 text-sm">search</span>
-               <input 
-                 type="text" 
-                 placeholder={currentUser.role === 'client' ? "Buscar motorista..." : "Buscar cliente..."}
-                 className="bg-transparent text-gray-200 placeholder-gray-500 ml-4 w-full text-sm outline-none"
-               />
+      <div className="flex-1 flex overflow-hidden relative">
+        <InstallPrompt />
+        {showAndroidSetup && <AndroidSetup onClose={() => setShowAndroidSetup(false)} />}
+        
+        {/* BINGO OVERLAY */}
+        {showBingo && currentUser && (
+            <div className="absolute inset-0 z-[100]">
+                <BingoUserView currentUser={currentUser} onClose={() => setShowBingo(false)} />
             </div>
-        </div>
-
-        {/* List */}
-        <div className="flex-1 overflow-y-auto custom-scrollbar">
-          {contactList.map(contact => (
-            <div 
-              key={contact.id}
-              onClick={() => handleContactSelect(contact)}
-              className={`flex items-center px-4 py-3 cursor-pointer hover:bg-whatsapp-panel border-b border-gray-800 transition active:bg-[#2a3942] ${activeContact?.id === contact.id ? 'bg-whatsapp-panel' : ''}`}
-            >
-              <div className="relative w-12 h-12 mr-4 shrink-0">
-                <img src={contact.avatar_url || 'https://via.placeholder.com/150'} alt={contact.username} className="w-full h-full rounded-full object-cover" />
-                {contact.role === UserRole.DRIVER && (
-                  <span className={`absolute bottom-0 right-0 w-3.5 h-3.5 rounded-full border-2 border-whatsapp-dark ${
-                    contact.status === DriverStatus.AVAILABLE ? 'bg-green-500' : 
-                    contact.status === DriverStatus.BUSY ? 'bg-red-500' : 'bg-gray-500'
-                  }`}></span>
-                )}
-              </div>
-              
-              <div className="flex-1 min-w-0 flex flex-col justify-center">
-                <div className="flex justify-between items-center mb-1">
-                  <div className="flex items-center gap-1">
-                      <h3 className="text-gray-100 font-medium truncate text-[16px]">{contact.username}</h3>
-                      {contact.role === UserRole.DRIVER && (
-                          <span 
-                            className={`material-icons text-sm ml-1 ${contact.vehicle_type === 'motorcycle' ? 'text-orange-400' : 'text-blue-400'}`}
-                            title={contact.vehicle_type === 'motorcycle' ? 'Moto' : 'Carro'}
-                          >
-                             {contact.vehicle_type === 'motorcycle' ? 'two_wheeler' : 'directions_car'}
-                          </span>
-                      )}
-                  </div>
-                  <span className="text-xs text-gray-500">
-                     {contact.role === UserRole.DRIVER && contact.status === DriverStatus.AVAILABLE ? "Online" : "Agora"}
-                  </span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <p className="text-gray-400 text-sm truncate">
-                    {contact.role === UserRole.DRIVER 
-                        ? (contact.status === DriverStatus.AVAILABLE ? "Disponível - Toque para conversar" : "Ocupado no momento") 
-                        : `Tel: ${contact.phone || 'Sem telefone'}`}
-                  </p>
-                </div>
-              </div>
-            </div>
-          ))}
-          
-          {contactList.length === 0 && (
-             <div className="p-8 text-center text-gray-500 text-sm flex flex-col items-center">
-                <span className="material-icons text-4xl mb-2 opacity-20">
-                    {currentUser.role === UserRole.CLIENT ? 'drive_eta' : 'person_off'}
-                </span>
-                <p>
-                    {currentUser.role === UserRole.CLIENT 
-                     ? 'Nenhum motorista disponível no momento.' 
-                     : 'Nenhuma mensagem recente.'}
-                </p>
-             </div>
-          )}
-        </div>
-      </div>
-
-      {/* Chat Area */}
-      <div className={`flex-1 flex flex-col bg-whatsapp-panel relative ${!showChatOnMobile ? 'hidden md:flex' : 'flex'} h-full`}>
-        {activeContact ? (
-          <>
-              {/* Mobile Header Override */}
-              <div className="md:hidden bg-whatsapp-panel h-16 flex items-center px-2 border-b border-gray-700 shadow-sm shrink-0 z-20">
-                <button onClick={handleBackToList} className="text-gray-300 p-2 rounded-full hover:bg-gray-700 mr-1 active:scale-95 transition">
-                  <span className="material-icons">arrow_back</span>
-                </button>
-                <div className="flex items-center flex-1" onClick={() => {/* Show Contact Info */}}>
-                   <img src={activeContact.avatar_url || 'https://via.placeholder.com/40'} className="w-9 h-9 rounded-full mr-3 object-cover" alt="" />
-                   <div className="flex flex-col">
-                     <span className="text-white font-medium text-base leading-tight flex items-center gap-1">
-                        {activeContact.username}
-                        {activeContact.role === UserRole.DRIVER && (
-                          <span className={`material-icons text-xs ${activeContact.vehicle_type === 'motorcycle' ? 'text-orange-400' : 'text-blue-400'}`}>
-                             {activeContact.vehicle_type === 'motorcycle' ? 'two_wheeler' : 'directions_car'}
-                          </span>
-                        )}
-                     </span>
-                     <span className="text-xs text-gray-400 truncate">
-                        {activeContact.role === UserRole.DRIVER 
-                            ? (activeContact.status === 'available' ? 'Online' : 'Ocupado') 
-                            : activeContact.phone || 'Detalhes'}
-                     </span>
-                   </div>
-                </div>
-                <div className="flex gap-3 pr-2">
-                   <button className="text-whatsapp-green"><span className="material-icons">videocam</span></button>
-                   <button className="text-whatsapp-green"><span className="material-icons">call</span></button>
-                </div>
-              </div>
-              
-              <ChatWindow 
-                currentUser={currentUser}
-                chatPartner={activeContact}
-                messages={messages}
-                onSendMessage={(msg) => setMessages(p => [...p, msg])}
-              />
-          </>
-        ) : (
-          <div className="hidden md:flex h-full flex-col items-center justify-center text-center border-b-8 border-whatsapp-green bg-[#222e35]">
-              <div className="mb-4">
-                <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/6/6b/WhatsApp.svg/120px-WhatsApp.svg.png" alt="Welcome" className="opacity-40 w-32" />
-              </div>
-              <h1 className="text-3xl font-light text-gray-200 mb-4">{APP_NAME}</h1>
-              <p className="text-gray-400 text-sm max-w-md">
-                Envie e receba mensagens sem precisar manter seu celular conectado.<br/>
-                Otimizado para comunicação rápida entre motoristas e passageiros.
-              </p>
-              <div className="mt-8 flex items-center gap-2 text-gray-500 text-xs">
-                 <span className="material-icons text-[12px]">lock</span>
-                 Protegido com criptografia de ponta a ponta
-              </div>
-          </div>
         )}
-      </div>
+        
+        {/* Sidebar */}
+        <div className={`w-full md:w-[400px] bg-whatsapp-dark border-r border-gray-800 flex flex-col ${showChatOnMobile ? 'hidden md:flex' : 'flex'}`}>
+            {/* My Profile Header */}
+            <div className="h-16 px-4 flex items-center justify-between shrink-0 bg-whatsapp-panel shadow-sm z-10">
+            <div className="flex items-center gap-3">
+                <img src={currentUser.avatar_url || 'https://via.placeholder.com/40'} alt="Me" className="w-10 h-10 rounded-full border border-gray-600 object-cover" />
+                <div>
+                <p className="text-gray-200 font-medium truncate max-w-[150px]">{currentUser.username}</p>
+                <span className="text-xs text-gray-400 uppercase font-bold tracking-wider">
+                    {currentUser.role === 'driver' ? 'Motorista' : 'Cliente'}
+                </span>
+                </div>
+            </div>
+            <div className="flex gap-2 text-gray-400 items-center">
+                
+                {/* BINGO BUTTON */}
+                <button 
+                    onClick={() => setShowBingo(true)}
+                    className="bg-purple-700 hover:bg-purple-600 text-white p-2 rounded-full transition flex items-center justify-center animate-pulse shadow-lg"
+                    title="Jogar Bingo"
+                >
+                    <span className="material-icons text-sm">casino</span>
+                </button>
 
+                {currentUser.role === UserRole.DRIVER && (
+                    <>
+                        {/* Status Toggle Button - HIGHLIGHTED */}
+                        <button 
+                            onClick={handleStatusToggle}
+                            className={`px-4 py-2 rounded-full text-xs font-bold transition flex items-center gap-2 shadow-sm ${
+                                currentUser.status === DriverStatus.AVAILABLE 
+                                ? 'bg-green-600 text-white hover:bg-green-500 ring-2 ring-green-600/30' 
+                                : 'bg-red-600 text-white hover:bg-red-500 ring-2 ring-red-600/30'
+                            }`}
+                            title="Toque para mudar status"
+                        >
+                            <span className="material-icons text-sm">{currentUser.status === DriverStatus.AVAILABLE ? 'lock_open' : 'lock'}</span>
+                            {currentUser.status === DriverStatus.AVAILABLE ? 'LIVRE' : 'OCUPADO'}
+                        </button>
+                        
+                        {/* Admin Contact Button / Native App Button - HIGHLIGHTED */}
+                        <button 
+                            onClick={() => setShowAndroidSetup(true)}
+                            className="bg-green-700 hover:bg-green-600 text-white p-2 rounded-full transition flex items-center justify-center animate-pulse" 
+                            title="Baixar App Nativo Android"
+                        >
+                            <span className="material-icons text-sm">android</span>
+                        </button>
+                    </>
+                )}
+                <button className="p-2 rounded-full hover:bg-red-900/30 hover:text-red-400 transition" title="Sair" onClick={handleLogout}><span className="material-icons">logout</span></button>
+            </div>
+            </div>
+
+            {/* Search Bar */}
+            <div className="p-2 bg-whatsapp-dark border-b border-gray-800/50">
+                <div className="bg-whatsapp-panel rounded-lg flex items-center px-4 py-2 transition focus-within:bg-[#2a3942]">
+                <span className="material-icons text-gray-400 text-sm">search</span>
+                <input 
+                    type="text" 
+                    placeholder={currentUser.role === 'client' ? "Buscar motorista..." : "Buscar cliente..."}
+                    className="bg-transparent text-gray-200 placeholder-gray-500 ml-4 w-full text-sm outline-none"
+                />
+                </div>
+            </div>
+
+            {/* List */}
+            <div className="flex-1 overflow-y-auto custom-scrollbar">
+            {contactList.map(contact => (
+                <div 
+                key={contact.id}
+                onClick={() => handleContactSelect(contact)}
+                className={`flex items-center px-4 py-3 cursor-pointer hover:bg-whatsapp-panel border-b border-gray-800 transition active:bg-[#2a3942] ${activeContact?.id === contact.id ? 'bg-whatsapp-panel' : ''}`}
+                >
+                <div className="relative w-12 h-12 mr-4 shrink-0">
+                    <img src={contact.avatar_url || 'https://via.placeholder.com/150'} alt={contact.username} className="w-full h-full rounded-full object-cover" />
+                    {contact.role === UserRole.DRIVER && (
+                    <span className={`absolute bottom-0 right-0 w-3.5 h-3.5 rounded-full border-2 border-whatsapp-dark ${
+                        contact.status === DriverStatus.AVAILABLE ? 'bg-green-500' : 
+                        contact.status === DriverStatus.BUSY ? 'bg-red-500' : 'bg-gray-500'
+                    }`}></span>
+                    )}
+                </div>
+                
+                <div className="flex-1 min-w-0 flex flex-col justify-center">
+                    <div className="flex justify-between items-center mb-1">
+                    <div className="flex items-center gap-1">
+                        <h3 className="text-gray-100 font-medium truncate text-[16px]">{contact.username}</h3>
+                        {contact.role === UserRole.DRIVER && (
+                            <span 
+                                className={`material-icons text-sm ml-1 ${contact.vehicle_type === 'motorcycle' ? 'text-orange-400' : 'text-blue-400'}`}
+                                title={contact.vehicle_type === 'motorcycle' ? 'Moto' : 'Carro'}
+                            >
+                                {contact.vehicle_type === 'motorcycle' ? 'two_wheeler' : 'directions_car'}
+                            </span>
+                        )}
+                    </div>
+                    <span className="text-xs text-gray-500">
+                        {contact.role === UserRole.DRIVER && contact.status === DriverStatus.AVAILABLE ? "Online" : "Agora"}
+                    </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                    <p className="text-gray-400 text-sm truncate">
+                        {contact.role === UserRole.DRIVER 
+                            ? (contact.status === DriverStatus.AVAILABLE ? "Disponível - Toque para conversar" : "Ocupado no momento") 
+                            : `Tel: ${contact.phone || 'Sem telefone'}`}
+                    </p>
+                    </div>
+                </div>
+                </div>
+            ))}
+            
+            {contactList.length === 0 && (
+                <div className="p-8 text-center text-gray-500 text-sm flex flex-col items-center">
+                    <span className="material-icons text-4xl mb-2 opacity-20">
+                        {currentUser.role === UserRole.CLIENT ? 'drive_eta' : 'person_off'}
+                    </span>
+                    <p>
+                        {currentUser.role === UserRole.CLIENT 
+                        ? 'Nenhum motorista disponível no momento.' 
+                        : 'Nenhuma mensagem recente.'}
+                    </p>
+                </div>
+            )}
+            </div>
+        </div>
+
+        {/* Chat Area */}
+        <div className={`flex-1 flex flex-col bg-whatsapp-panel relative ${!showChatOnMobile ? 'hidden md:flex' : 'flex'} h-full`}>
+            {activeContact ? (
+            <>
+                {/* Mobile Header Override */}
+                <div className="md:hidden bg-whatsapp-panel h-16 flex items-center px-2 border-b border-gray-700 shadow-sm shrink-0 z-20">
+                    <button onClick={handleBackToList} className="text-gray-300 p-2 rounded-full hover:bg-gray-700 mr-1 active:scale-95 transition">
+                    <span className="material-icons">arrow_back</span>
+                    </button>
+                    <div className="flex items-center flex-1" onClick={() => {/* Show Contact Info */}}>
+                    <img src={activeContact.avatar_url || 'https://via.placeholder.com/40'} className="w-9 h-9 rounded-full mr-3 object-cover" alt="" />
+                    <div className="flex flex-col">
+                        <span className="text-white font-medium text-base leading-tight flex items-center gap-1">
+                            {activeContact.username}
+                            {activeContact.role === UserRole.DRIVER && (
+                            <span className={`material-icons text-xs ${activeContact.vehicle_type === 'motorcycle' ? 'text-orange-400' : 'text-blue-400'}`}>
+                                {activeContact.vehicle_type === 'motorcycle' ? 'two_wheeler' : 'directions_car'}
+                            </span>
+                            )}
+                        </span>
+                        <span className="text-xs text-gray-400 truncate">
+                            {activeContact.role === UserRole.DRIVER 
+                                ? (activeContact.status === 'available' ? 'Online' : 'Ocupado') 
+                                : activeContact.phone || 'Detalhes'}
+                        </span>
+                    </div>
+                    </div>
+                    <div className="flex gap-3 pr-2">
+                    <button className="text-whatsapp-green"><span className="material-icons">videocam</span></button>
+                    <button className="text-whatsapp-green"><span className="material-icons">call</span></button>
+                    </div>
+                </div>
+                
+                <ChatWindow 
+                    currentUser={currentUser}
+                    chatPartner={activeContact}
+                    messages={messages}
+                    onSendMessage={(msg) => setMessages(p => [...p, msg])}
+                />
+            </>
+            ) : (
+            <div className="hidden md:flex h-full flex-col items-center justify-center text-center border-b-8 border-whatsapp-green bg-[#222e35]">
+                <div className="mb-4">
+                    <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/6/6b/WhatsApp.svg/120px-WhatsApp.svg.png" alt="Welcome" className="opacity-40 w-32" />
+                </div>
+                <h1 className="text-3xl font-light text-gray-200 mb-4">{APP_NAME}</h1>
+                <p className="text-gray-400 text-sm max-w-md">
+                    Envie e receba mensagens sem precisar manter seu celular conectado.<br/>
+                    Otimizado para comunicação rápida entre motoristas e passageiros.
+                </p>
+                <div className="mt-8 flex items-center gap-2 text-gray-500 text-xs">
+                    <span className="material-icons text-[12px]">lock</span>
+                    Protegido com criptografia de ponta a ponta
+                </div>
+            </div>
+            )}
+        </div>
+      </div>
     </div>
   );
 }

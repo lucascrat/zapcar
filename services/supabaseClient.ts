@@ -1,7 +1,7 @@
 
 import { createClient } from '@supabase/supabase-js';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from '../constants';
-import { Message, UserProfile, UserRole, DriverStatus, AppSettings } from '../types';
+import { Message, UserProfile, UserRole, DriverStatus, AppSettings, BingoSettings, BingoCard, BingoRankingUser } from '../types';
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
@@ -25,7 +25,11 @@ const handleDbError = (error: any, context: string): string => {
   let msg = 'Erro desconhecido';
   
   if (error) {
-    if (typeof error === 'string') {
+    // Erro específico de Tabela não encontrada (Postgres 42P01)
+    if (error.code === '42P01') {
+        msg = "Tabela não encontrada no banco de dados. Por favor, execute o script SQL atualizado (supa.ts) no Supabase.";
+    } 
+    else if (typeof error === 'string') {
         msg = error;
     } else if (error.message) {
         msg = error.message;
@@ -37,6 +41,10 @@ const handleDbError = (error: any, context: string): string => {
     } else {
         try {
             msg = JSON.stringify(error);
+            // Evita o [object Object] se o stringify falhar ou retornar genérico
+            if (msg === '{}' || msg === '[object Object]') {
+                msg = `Erro Código: ${error.code || 'N/A'} - Status: ${error.status || 'N/A'} - ${error.statusText || ''}`;
+            }
         } catch (e) {
             msg = String(error);
         }
@@ -327,6 +335,159 @@ export const updateAppSettings = async (settings: AppSettings): Promise<boolean>
     return false;
   }
   return true;
+};
+
+// --- BINGO FUNCTIONS ---
+
+export const fetchBingoSettings = async (): Promise<BingoSettings> => {
+    const { data, error } = await supabase.from('bingo_settings').select('*').limit(1).maybeSingle();
+    
+    if (error) {
+        // Se a tabela não existir, o erro já foi logado. Retornamos null para evitar crash.
+        handleDbError(error, "fetchBingoSettings");
+    }
+
+    if (!data) {
+        // Retorna padrão se não existir ou se der erro
+        return {
+            prize_image: 'https://placehold.co/600x400/png?text=Pr%C3%AAmio',
+            prize_description: 'Prêmio do Sorteio',
+            youtube_link: '',
+            drawn_numbers: [],
+            is_active: true
+        };
+    }
+    return data as BingoSettings;
+};
+
+export const updateBingoSettings = async (settings: Partial<BingoSettings>): Promise<boolean> => {
+    const { data: existing, error: fetchError } = await supabase.from('bingo_settings').select('id').limit(1);
+    
+    if (fetchError && fetchError.code === '42P01') {
+        alert("A tabela do Bingo não foi criada. Execute o SQL em 'supa.ts'.");
+        return false;
+    }
+    
+    let error;
+    if (existing && existing.length > 0) {
+        const { error: up } = await supabase.from('bingo_settings').update(settings).eq('id', existing[0].id);
+        error = up;
+    } else {
+        const { error: ins } = await supabase.from('bingo_settings').insert([settings]);
+        error = ins;
+    }
+
+    if (error) {
+        handleDbError(error, "updateBingoSettings");
+        return false;
+    }
+    return true;
+};
+
+export const drawBingoNumber = async (): Promise<number | null> => {
+    const settings = await fetchBingoSettings();
+    if (!settings) return null;
+
+    let available = [];
+    for(let i=1; i<=75; i++) {
+        if (!settings.drawn_numbers.includes(i)) available.push(i);
+    }
+
+    if (available.length === 0) return null;
+
+    const randomIndex = Math.floor(Math.random() * available.length);
+    const newNumber = available[randomIndex];
+    const newDrawn = [...settings.drawn_numbers, newNumber];
+
+    await updateBingoSettings({ drawn_numbers: newDrawn });
+    return newNumber;
+};
+
+export const drawSpecificBingoNumber = async (numberToDraw: number): Promise<boolean> => {
+    const settings = await fetchBingoSettings();
+    if (!settings) return false;
+
+    // Se já foi sorteado, ignora
+    if (settings.drawn_numbers.includes(numberToDraw)) return false;
+
+    const newDrawn = [...settings.drawn_numbers, numberToDraw];
+    return await updateBingoSettings({ drawn_numbers: newDrawn });
+};
+
+export const resetBingo = async (): Promise<boolean> => {
+    return await updateBingoSettings({ drawn_numbers: [] });
+};
+
+export const getOrCreateBingoCard = async (userId: string): Promise<BingoCard | null> => {
+    // 1. Check exists
+    const { data, error } = await supabase.from('bingo_cards').select('*').eq('user_id', userId).maybeSingle();
+    
+    if (error) {
+        handleDbError(error, "getBingoCard_check");
+        // Se a tabela não existir, o erro já foi logado. Retornamos null para evitar crash.
+        return null;
+    }
+    
+    if (data) return data as BingoCard;
+
+    // 2. Create new card
+    // Gera 24 números aleatórios únicos entre 1 e 75
+    const numbers = new Set<number>();
+    while(numbers.size < 24) {
+        numbers.add(Math.floor(Math.random() * 75) + 1);
+    }
+    const numbersArray = Array.from(numbers).sort((a,b) => a - b);
+
+    const { data: newCard, error: createError } = await supabase
+        .from('bingo_cards')
+        .insert([{ user_id: userId, numbers: numbersArray }])
+        .select()
+        .single();
+    
+    if (createError) {
+        handleDbError(createError, "createBingoCard");
+        return null;
+    }
+    return newCard as BingoCard;
+};
+
+export const fetchBingoRanking = async (): Promise<BingoRankingUser[]> => {
+    // Busca settings para saber numeros sorteados
+    const settings = await fetchBingoSettings();
+    const drawnSet = new Set(settings.drawn_numbers);
+
+    // Busca todas as cartelas com info do usuario
+    const { data: cards, error } = await supabase
+        .from('bingo_cards')
+        .select('*, profiles:user_id(username)');
+
+    if (error) {
+        handleDbError(error, "fetchBingoRanking");
+        return [];
+    }
+
+    if (!cards) return [];
+
+    const ranking: BingoRankingUser[] = cards.map((card: any) => {
+        const myNumbers: number[] = card.numbers;
+        const hits = myNumbers.filter(n => drawnSet.has(n)).length;
+        return {
+            username: card.profiles?.username || 'Desconhecido',
+            hits: hits,
+            missing: myNumbers.length - hits
+        };
+    });
+
+    // Ordena por acertos (Decrescente)
+    return ranking.sort((a,b) => b.hits - a.hits).slice(0, 10); // Top 10
+};
+
+export const subscribeToBingo = (onUpdate: () => void) => {
+    return supabase
+    .channel('public:bingo')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'bingo_settings' }, onUpdate)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'bingo_cards' }, onUpdate)
+    .subscribe();
 };
 
 // --- Storage Functions ---
