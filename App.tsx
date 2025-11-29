@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { ChatWindow } from './components/ChatWindow';
 import { AdminDashboard } from './components/AdminDashboard';
@@ -16,13 +15,14 @@ import {
   fetchMessages,
   updateDriverStatus, // Import for status toggle
   fetchAdminContact,
-  fetchUserProfile // Nova função importada
+  fetchUserProfile, // Nova função importada
+  subscribeToBroadcasts // Importar função de broadcast
 } from './services/supabaseClient';
-import { UserProfile, UserRole, DriverStatus, Message } from './types';
+import { UserProfile, UserRole, DriverStatus, Message, BroadcastMessage } from './types';
 import { APP_NAME } from './constants';
 import { soundService } from './services/soundService';
 
-const APP_VERSION = "3.1 (Prêmios Update)";
+const APP_VERSION = "3.2 (Broadcast Update)";
 
 const MarqueeBanner = () => (
   <div className="bg-gradient-to-r from-purple-900 via-indigo-800 to-purple-900 overflow-hidden relative h-8 flex items-center shadow-md z-30 shrink-0">
@@ -289,6 +289,42 @@ export default function App() {
     };
   }, [currentUser, activeContact, contactList]);
 
+  // --- NOVA LÓGICA DE BROADCAST (Notificações Globais) ---
+  useEffect(() => {
+    if (!currentUser || currentUser.role === UserRole.ADMIN) return;
+
+    const handleBroadcast = (broadcast: BroadcastMessage) => {
+        // Verifica se a mensagem é para mim
+        if (broadcast.target_role === 'all' || broadcast.target_role === currentUser.role) {
+            
+            // Exibe notificação do sistema se em segundo plano
+            if (document.visibilityState === 'hidden' || !document.hasFocus()) {
+                soundService.sendNotification(broadcast.title, broadcast.message);
+            }
+
+            // Toca som específico do perfil
+            if (currentUser.role === UserRole.DRIVER) {
+                // Para motoristas, usamos o som de alerta/chamada (ALTO)
+                soundService.playRingtone();
+                setTimeout(() => soundService.stopRingtone(), 5000); // Para após 5s
+            } else {
+                // Para clientes, usamos o som de notificação padrão (SUAVE)
+                soundService.playReceived();
+            }
+
+            // Exibe um alerta visual simples dentro do app
+            alert(`[Notificação do Admin]\n${broadcast.title}\n\n${broadcast.message}`);
+        }
+    };
+
+    const sub = subscribeToBroadcasts(handleBroadcast);
+
+    return () => {
+        sub.unsubscribe();
+    };
+
+  }, [currentUser]);
+
   // --- Handlers ---
 
   const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -448,7 +484,7 @@ export default function App() {
   };
 
   const handleStatusToggle = async () => {
-    if (!currentUser || currentUser.role !== UserRole.DRIVER) return;
+    if (!currentUser || currentUser.role !== UserRole.DRIVER || !currentUser.is_approved) return;
     
     const newStatus = currentUser.status === DriverStatus.AVAILABLE ? DriverStatus.BUSY : DriverStatus.AVAILABLE;
     
@@ -825,11 +861,13 @@ export default function App() {
                         <button 
                             onClick={handleStatusToggle}
                             className={`px-4 py-2 rounded-full text-xs font-bold transition flex items-center gap-2 shadow-sm ${
+                                !currentUser.is_approved ? 'bg-gray-500 cursor-not-allowed' :
                                 currentUser.status === DriverStatus.AVAILABLE 
                                 ? 'bg-green-600 text-white hover:bg-green-500 ring-2 ring-green-600/30' 
                                 : 'bg-red-600 text-white hover:bg-red-500 ring-2 ring-red-600/30'
                             }`}
-                            title="Toque para mudar status"
+                            title={!currentUser.is_approved ? "Aguardando Aprovação" : "Toque para mudar status"}
+                            disabled={!currentUser.is_approved}
                         >
                             <span className="material-icons text-sm">{currentUser.status === DriverStatus.AVAILABLE ? 'lock_open' : 'lock'}</span>
                             {currentUser.status === DriverStatus.AVAILABLE ? 'LIVRE' : 'OCUPADO'}
@@ -881,15 +919,20 @@ export default function App() {
                 
                 <div className="flex-1 min-w-0 flex flex-col justify-center">
                     <div className="flex justify-between items-center mb-1">
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-2">
                         <h3 className="text-gray-100 font-medium truncate text-[16px]">{contact.username}</h3>
                         {contact.role === UserRole.DRIVER && (
-                            <span 
+                           <>
+                             <span 
                                 className={`material-icons text-sm ml-1 ${contact.vehicle_type === 'motorcycle' ? 'text-orange-400' : 'text-blue-400'}`}
                                 title={contact.vehicle_type === 'motorcycle' ? 'Moto' : 'Carro'}
                             >
                                 {contact.vehicle_type === 'motorcycle' ? 'two_wheeler' : 'directions_car'}
                             </span>
+                            <span className={`text-xs font-bold uppercase ${contact.vehicle_type === 'motorcycle' ? 'text-orange-400' : 'text-blue-400'}`}>
+                                {contact.vehicle_type === 'motorcycle' ? 'Moto' : 'Carro'}
+                            </span>
+                           </>
                         )}
                     </div>
                     <span className="text-xs text-gray-500">

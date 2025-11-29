@@ -1,7 +1,6 @@
-
 import React, { useEffect, useState, useRef } from 'react';
-import { fetchAllDriversForAdmin, deleteDriver, updateDriverStatus, updateDriverVehicle, updateDriverPassword, fetchAppSettings, updateAppSettings, approveDriver, fetchMessages, subscribeToMessages, subscribeToProfiles, fetchBingoSettings, updateBingoSettings, drawBingoNumber, drawSpecificBingoNumber, resetBingo, fetchBingoRanking, subscribeToBingo } from '../services/supabaseClient';
-import { UserProfile, DriverStatus, CallRecord, AppSettings, Message, BingoSettings, BingoRankingUser } from '../types';
+import { fetchAllDriversForAdmin, deleteDriver, updateDriverStatus, updateDriverVehicle, updateDriverPassword, fetchAppSettings, updateAppSettings, approveDriver, fetchMessages, subscribeToMessages, subscribeToProfiles, fetchBingoSettings, updateBingoSettings, drawBingoNumber, drawSpecificBingoNumber, resetBingo, fetchBingoRanking, subscribeToBingo, sendBroadcast } from '../services/supabaseClient';
+import { UserProfile, DriverStatus, CallRecord, AppSettings, Message, BingoSettings, BingoRankingUser, AdminTab } from '../types';
 import { soundService } from '../services/soundService';
 import { ChatWindow } from './ChatWindow'; // Importar ChatWindow
 
@@ -12,9 +11,6 @@ interface AdminDashboardProps {
   currentUser: UserProfile;
   onLogout: () => void;
 }
-
-// Adicionada aba 'approvals'
-type AdminTab = 'details' | 'map' | 'history' | 'settings' | 'chat' | 'bingo' | 'approvals';
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onLogout }) => {
   const [drivers, setDrivers] = useState<UserProfile[]>([]);
@@ -41,6 +37,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onL
       moto_base_price: 0, moto_price_km: 0, moto_price_min: 0, moto_start_distance_limit: 0
   });
   const [isSavingSettings, setIsSavingSettings] = useState(false);
+  
+  // Broadcast State
+  const [broadcastTitle, setBroadcastTitle] = useState('');
+  const [broadcastMessage, setBroadcastMessage] = useState('');
+  const [broadcastTarget, setBroadcastTarget] = useState<'driver' | 'client' | 'all'>('all');
+  const [isSendingBroadcast, setIsSendingBroadcast] = useState(false);
 
   // BINGO STATE
   const [bingoSettings, setBingoSettings] = useState<BingoSettings | null>(null);
@@ -75,7 +77,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onL
     
     return () => {
         sub.unsubscribe();
-        soundService.stopRingtone();
+        soundService.stopAdminCallSound();
     };
   }, []);
 
@@ -102,7 +104,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onL
       // Reset call state on driver switch
       setIsCalling(false); 
       setCallDuration(0);
-      soundService.stopRingtone(); 
+      soundService.stopAdminCallSound(); 
       
       // Initialize mock location if none exists
       if (selectedDriver.lat && selectedDriver.lng) {
@@ -172,11 +174,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onL
   const toggleCall = () => {
       if (isCalling) {
           setIsCalling(false);
-          soundService.stopRingtone();
+          soundService.stopAdminCallSound();
       } else {
           setIsCalling(true);
           // Play loop sound
-          soundService.playRingtone();
+          soundService.playAdminCallSound();
       }
   };
 
@@ -283,6 +285,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onL
       await updateAppSettings(appSettings);
       alert("Configurações atualizadas!");
       setIsSavingSettings(false);
+  };
+  
+  const handleSendBroadcast = async () => {
+      if (!broadcastTitle.trim() || !broadcastMessage.trim()) {
+          alert("Por favor, preencha o título e a mensagem.");
+          return;
+      }
+      setIsSendingBroadcast(true);
+      const success = await sendBroadcast(broadcastTitle, broadcastMessage, broadcastTarget);
+      if (success) {
+          alert("Notificação enviada para todos os usuários online!");
+          setBroadcastTitle('');
+          setBroadcastMessage('');
+      } else {
+          alert("Erro ao enviar notificação.");
+      }
+      setIsSendingBroadcast(false);
   };
 
   const handleSaveBingoSettings = async () => {
@@ -499,13 +518,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onL
                >
                 <span className="material-icons text-sm">casino</span> Bingo
                </button>
+               <button 
+                onClick={() => { setActiveTab('notifications'); setSelectedDriver(null); setShowDetailMobile(true); }}
+                className="col-span-2 py-3 bg-blue-50 hover:bg-blue-100 rounded-lg text-xs font-bold text-blue-700 flex items-center justify-center gap-2 border border-blue-200"
+               >
+                <span className="material-icons text-sm">campaign</span> Enviar Notificações
+               </button>
            </div>
         </div>
 
         <div className="flex-1 overflow-y-auto custom-scrollbar">
           {isLoading ? (
-             <div className="p-8 text-center text-gray-400 animate-pulse">Carregando...</div>
-          ) : (
+            <div className="p-8 text-center text-gray-400 animate-pulse">Carregando...</div>
+          ) : filteredDrivers.length > 0 ? (
             filteredDrivers.map(driver => (
               <div 
                 key={driver.id}
@@ -540,6 +565,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onL
                 <span className="material-icons text-gray-300 text-sm">chevron_right</span>
               </div>
             ))
+          ) : (
+             <div className="h-full flex flex-col items-center justify-center text-center p-8 text-gray-500">
+                <span className="material-icons text-6xl text-gray-300 mb-4">search_off</span>
+                <h3 className="font-bold text-gray-800 text-lg">Nenhum Motorista Encontrado</h3>
+                <p className="text-sm">Verifique os filtros aplicados ou o termo de busca.</p>
+            </div>
           )}
         </div>
       </div>
@@ -616,6 +647,66 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onL
                         ))}
                     </div>
                 )}
+            </div>
+        ) : activeTab === 'notifications' && !selectedDriver ? (
+            <div className="max-w-4xl mx-auto p-4 md:p-8">
+                <div className="md:hidden mb-4">
+                    <button onClick={handleBackToList} className="flex items-center text-gray-600"><span className="material-icons mr-2">arrow_back</span> Voltar</button>
+                </div>
+                <h2 className="text-2xl font-bold text-gray-800 mb-6 flex items-center gap-2">
+                     <span className="material-icons text-blue-600">campaign</span> Enviar Notificação Global
+                </h2>
+                
+                <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+                    <div className="space-y-4">
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Título da Notificação</label>
+                            <input 
+                                type="text"
+                                value={broadcastTitle}
+                                onChange={e => setBroadcastTitle(e.target.value)}
+                                placeholder="Ex: Novo Sorteio!"
+                                className="w-full p-2 border rounded text-gray-900" 
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Mensagem</label>
+                            <textarea
+                                value={broadcastMessage}
+                                onChange={e => setBroadcastMessage(e.target.value)}
+                                placeholder="Descreva a novidade aqui..."
+                                className="w-full p-2 border rounded text-gray-900 h-24"
+                            ></textarea>
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">Enviar Para:</label>
+                            <div className="flex gap-4">
+                                <label className="flex items-center gap-2">
+                                    <input type="radio" name="target" value="all" checked={broadcastTarget === 'all'} onChange={() => setBroadcastTarget('all')} className="form-radio text-blue-600" />
+                                    <span>Todos</span>
+                                </label>
+                                <label className="flex items-center gap-2">
+                                    <input type="radio" name="target" value="driver" checked={broadcastTarget === 'driver'} onChange={() => setBroadcastTarget('driver')} className="form-radio text-blue-600" />
+                                    <span>Apenas Motoristas</span>
+                                </label>
+                                <label className="flex items-center gap-2">
+                                    <input type="radio" name="target" value="client" checked={broadcastTarget === 'client'} onChange={() => setBroadcastTarget('client')} className="form-radio text-blue-600" />
+                                    <span>Apenas Clientes</span>
+                                </label>
+                            </div>
+                        </div>
+                        <div className="pt-4 border-t border-gray-100 flex justify-end">
+                            <button
+                                onClick={handleSendBroadcast}
+                                disabled={isSendingBroadcast}
+                                className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg shadow-md flex items-center gap-2"
+                            >
+                                {isSendingBroadcast ? 'Enviando...' : 'Enviar Notificação'}
+                                {!isSendingBroadcast && <span className="material-icons">send</span>}
+                            </button>
+                        </div>
+                    </div>
+                </div>
             </div>
         ) : activeTab === 'bingo' && !selectedDriver ? (
             <div className="max-w-4xl mx-auto p-4 md:p-8">
@@ -739,19 +830,31 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onL
                                         <th className="p-2">Usuário</th>
                                         <th className="p-2 text-center">Acertos</th>
                                         <th className="p-2 text-center">Faltam</th>
+                                        <th className="p-2 text-center">Ação</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {bingoRanking.map((user, idx) => (
                                         <tr key={idx} className={`border-b border-gray-100 ${idx < 3 ? 'bg-yellow-50' : ''}`}>
                                             <td className="p-2 font-bold text-gray-400">{idx + 1}</td>
-                                            <td className="p-2 font-medium">{user.username}</td>
+                                            <td className="p-2 font-medium flex items-center gap-2">
+                                                <img src={user.avatar_url} className="w-6 h-6 rounded-full" alt="" />
+                                                {user.username}
+                                            </td>
                                             <td className="p-2 text-center font-bold text-green-600">{user.hits}</td>
                                             <td className="p-2 text-center font-mono text-gray-500">{user.missing}</td>
+                                            <td className="p-2 text-center">
+                                                <button 
+                                                    onClick={() => handleDriverClick({ id: user.user_id, username: user.username, role: 'client' } as UserProfile)}
+                                                    className="bg-blue-100 text-blue-700 px-2 py-1 rounded text-xs hover:bg-blue-200"
+                                                >
+                                                    Chat
+                                                </button>
+                                            </td>
                                         </tr>
                                     ))}
                                     {bingoRanking.length === 0 && (
-                                        <tr><td colSpan={4} className="p-4 text-center text-gray-400">Nenhum jogador ainda.</td></tr>
+                                        <tr><td colSpan={5} className="p-4 text-center text-gray-400">Nenhum jogador ainda.</td></tr>
                                     )}
                                 </tbody>
                             </table>

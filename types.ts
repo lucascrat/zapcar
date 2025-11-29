@@ -1,4 +1,3 @@
-
 // 🛑 PARE! 🛑
 // ESTE É UM ARQUIVO TYPESCRIPT (.ts) PARA A APLICAÇÃO REACT.
 // ⚠️ NÃO COPIE ESTE CÓDIGO PARA O SUPABASE SQL EDITOR. ⚠️
@@ -92,9 +91,23 @@ export interface BingoCard {
 
 export interface BingoRankingUser {
   username: string;
+  user_id: string;
+  avatar_url?: string;
   hits: number; // Quantos números acertou
   missing: number; // Quantos faltam
 }
+
+// Nova interface para notificações em massa
+export interface BroadcastMessage {
+    id: string;
+    title: string;
+    message: string;
+    target_role: 'client' | 'driver' | 'all';
+    created_at: string;
+}
+
+// Tipo para as abas do Painel Admin
+export type AdminTab = 'details' | 'map' | 'history' | 'settings' | 'chat' | 'bingo' | 'approvals' | 'notifications';
 
 // Interface global para comunicação com Android Nativo
 declare global {
@@ -135,6 +148,11 @@ export interface Database {
         Row: AppSettings
         Insert: AppSettings
         Update: Partial<AppSettings>
+      }
+      broadcasts: { // Nova tabela
+        Row: BroadcastMessage
+        Insert: Partial<BroadcastMessage>
+        Update: Partial<BroadcastMessage>
       }
     }
   }

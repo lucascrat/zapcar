@@ -1,7 +1,6 @@
-
 import { createClient } from '@supabase/supabase-js';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from '../constants';
-import { Message, UserProfile, UserRole, DriverStatus, AppSettings, BingoSettings, BingoCard, BingoRankingUser } from '../types';
+import { Message, UserProfile, UserRole, DriverStatus, AppSettings, BingoSettings, BingoCard, BingoRankingUser, BroadcastMessage } from '../types';
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
@@ -580,6 +579,30 @@ export const subscribeToProfiles = (
     .subscribe();
 }
 
+// --- BROADCAST FUNCTIONS (NOVO) ---
+export const sendBroadcast = async (title: string, message: string, target_role: 'client' | 'driver' | 'all'): Promise<boolean> => {
+    const { error } = await supabase
+      .from('broadcasts')
+      .insert([{ title, message, target_role }]);
+    
+    if (error) {
+        handleDbError(error, "sendBroadcast");
+        return false;
+    }
+    return true;
+};
+
+export const subscribeToBroadcasts = (
+    onBroadcast: (broadcast: BroadcastMessage) => void
+) => {
+    return supabase
+      .channel('public:broadcasts')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'broadcasts' }, (payload) => {
+          onBroadcast(payload.new as BroadcastMessage);
+      })
+      .subscribe();
+};
+
 // Updated Client Registration/Login
 export const registerClientWithPhoto = async (username: string, phone: string, avatarFile?: File): Promise<UserProfile | null> => {
   try {
@@ -685,7 +708,7 @@ export const registerDriver = async (
       username: username.trim(),
       password: password, // Save password
       role: UserRole.DRIVER,
-      status: DriverStatus.AVAILABLE,
+      status: DriverStatus.OFFLINE, // MOTORISTAS COMEÇAM OFFLINE
       is_approved: false, // MOTORISTA PRECISA DE APROVAÇÃO
       vehicle_type: vehicleType,
       vehicle_model: vehicleModel || '',
