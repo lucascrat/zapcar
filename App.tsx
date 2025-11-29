@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { ChatWindow } from './components/ChatWindow';
 import { AdminDashboard } from './components/AdminDashboard';
@@ -22,7 +23,7 @@ import { UserProfile, UserRole, DriverStatus, Message, BroadcastMessage } from '
 import { APP_NAME } from './constants';
 import { soundService } from './services/soundService';
 
-const APP_VERSION = "3.2 (Broadcast Update)";
+const APP_VERSION = "3.3 (PushAlert)";
 
 const MarqueeBanner = () => (
   <div className="bg-gradient-to-r from-purple-900 via-indigo-800 to-purple-900 overflow-hidden relative h-8 flex items-center shadow-md z-30 shrink-0">
@@ -206,7 +207,7 @@ export default function App() {
         
         // --- NOTIFICAÇÃO GENÉRICA (CLIENTE OU MOTORISTA) ---
         // Se o app estiver em segundo plano, manda notificação push
-        if (document.visibilityState === 'hidden' || !document.hasFocus() || window.Android) {
+        if (document.visibilityState === 'hidden' || !document.hasFocus()) {
              const senderName = contactList.find(c => c.id === newMsg.sender_id)?.username || "Novo Cliente";
              soundService.sendNotification(
                  `Mensagem de ${senderName}`, 
@@ -484,7 +485,10 @@ export default function App() {
   };
 
   const handleStatusToggle = async () => {
-    if (!currentUser || currentUser.role !== UserRole.DRIVER || !currentUser.is_approved) return;
+    if (!currentUser || currentUser.role !== UserRole.DRIVER || !currentUser.is_approved) {
+        alert("Você precisa ser aprovado pelo admin para ficar online.");
+        return;
+    }
     
     const newStatus = currentUser.status === DriverStatus.AVAILABLE ? DriverStatus.BUSY : DriverStatus.AVAILABLE;
     
@@ -559,7 +563,7 @@ export default function App() {
                             <span className="material-icons text-white">hourglass_empty</span>
                         </div>
                         <div className="flex flex-col">
-                            <span className="font-bold text-sm">Cadastro Realizado!</span>
+                            <span className="font-bold text-sm">Cadastro Enviado!</span>
                             <span className="text-xs opacity-90">Aguardando liberação do Admin.</span>
                         </div>
                     </div>
@@ -575,7 +579,7 @@ export default function App() {
                         className="w-full bg-blue-600 hover:bg-blue-700 active:scale-95 text-white font-bold py-3 rounded-lg shadow-lg flex items-center justify-center gap-2 animate-pulse border-2 border-white/30"
                     >
                         <span className="material-icons">notifications_active</span>
-                        PERMISSÕES WEB
+                        ATIVAR PERMISSÕES
                     </button>
                     
                     {/* BOTÃO PARA APP NATIVO */}
@@ -873,13 +877,13 @@ export default function App() {
                             {currentUser.status === DriverStatus.AVAILABLE ? 'LIVRE' : 'OCUPADO'}
                         </button>
                         
-                        {/* Admin Contact Button / Native App Button - HIGHLIGHTED */}
+                        {/* Notification Permission Button */}
                         <button 
-                            onClick={() => setShowAndroidSetup(true)}
-                            className="bg-green-700 hover:bg-green-600 text-white p-2 rounded-full transition flex items-center justify-center animate-pulse" 
-                            title="Baixar App Nativo Android"
+                            onClick={() => soundService.requestPermission()}
+                            className="bg-blue-600 hover:bg-blue-500 text-white p-2 rounded-full transition flex items-center justify-center" 
+                            title="Ativar Sinos (Notificações)"
                         >
-                            <span className="material-icons text-sm">android</span>
+                            <span className="material-icons text-sm">notifications_active</span>
                         </button>
                     </>
                 )}

@@ -118,7 +118,9 @@ declare global {
       stopNativeAlert: () => void;
       showToast: (msg: string) => void;
       bringToFront: () => void;
-    }
+    };
+    // FIX: Add pushalert to window to solve TypeScript errors.
+    pushalert?: any;
   }
 }
 
