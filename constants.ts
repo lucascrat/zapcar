@@ -14,3 +14,38 @@ export const SUPABASE_ANON_KEY = (import.meta as any).env?.VITE_SUPABASE_ANON_KE
 
 // O nome da aplicação usado em toda a interface
 export const APP_NAME = "ChegoJá";
+
+// MERCADO PAGO CONFIG
+export const MP_PUBLIC_KEY = "APP_USR-8c0ec0f9-7ebd-4f40-aa15-af833ba6c60d";
+export const MP_ACCESS_TOKEN = "APP_USR-1939457864483191-010313-c30b9728ff8f0b7d7766bfa707db2149-166153505";
+
+export const DRIVER_PLANS = [
+    {
+        id: 'plan_24h',
+        title: 'Plano Diário',
+        description: 'Acesso total por 24 horas',
+        price: 5.00,
+        days: 1
+    },
+    {
+        id: 'plan_7d',
+        title: 'Plano Semanal',
+        description: 'Acesso total por 7 dias',
+        price: 33.00,
+        days: 7
+    },
+    {
+        id: 'plan_15d',
+        title: 'Plano Quinzenal',
+        description: 'Acesso total por 15 dias',
+        price: 66.00,
+        days: 15
+    },
+    {
+        id: 'plan_30d',
+        title: 'Plano Mensal',
+        description: 'Acesso total por 30 dias',
+        price: 100.00,
+        days: 30
+    }
+];

@@ -1,3 +1,4 @@
+
 // 🛑 PARE! 🛑
 // ESTE É UM ARQUIVO TYPESCRIPT (.ts) PARA A APLICAÇÃO REACT.
 // ⚠️ NÃO COPIE ESTE CÓDIGO PARA O SUPABASE SQL EDITOR. ⚠️
@@ -24,6 +25,7 @@ export interface UserProfile {
   role: UserRole;
   status: DriverStatus;
   is_approved?: boolean; // Novo campo para aprovação
+  subscription_expires_at?: string; // Data de validade da assinatura
   avatar_url?: string;
   created_at?: string;
   vehicle_model?: string;
@@ -104,6 +106,25 @@ export interface BroadcastMessage {
     message: string;
     target_role: 'client' | 'driver' | 'all';
     created_at: string;
+}
+
+// Interfaces para Pagamento Pix Transparente
+export interface PayerFormData {
+    firstName: string;
+    lastName: string;
+    email: string;
+    cpf: string;
+}
+
+export interface PixPaymentResponse {
+    id: number;
+    status: string;
+    point_of_interaction: {
+        transaction_data: {
+            qr_code: string; // Copia e Cola
+            qr_code_base64: string; // Imagem
+        }
+    }
 }
 
 // Tipo para as abas do Painel Admin

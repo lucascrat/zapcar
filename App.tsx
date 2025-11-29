@@ -5,6 +5,7 @@ import { AdminDashboard } from './components/AdminDashboard';
 import { InstallPrompt } from './components/InstallPrompt'; // Importar componente
 import { AndroidSetup } from './components/AndroidSetup'; // Importar componente Android
 import { BingoUserView } from './components/BingoUserView'; // Importar Bingo
+import { DriverSubscription } from './components/DriverSubscription'; // Importar Planos
 import { 
   registerClientWithPhoto, 
   fetchOnlineDrivers, 
@@ -19,11 +20,12 @@ import {
   fetchUserProfile, // Nova função importada
   subscribeToBroadcasts // Importar função de broadcast
 } from './services/supabaseClient';
+import { activatePlan, checkSubscriptionStatus } from './services/paymentService';
 import { UserProfile, UserRole, DriverStatus, Message, BroadcastMessage } from './types';
 import { APP_NAME } from './constants';
 import { soundService } from './services/soundService';
 
-const APP_VERSION = "3.3 (PushAlert)";
+const APP_VERSION = "3.5 (Fix React #310)";
 
 const MarqueeBanner = () => (
   <div className="bg-gradient-to-r from-purple-900 via-indigo-800 to-purple-900 overflow-hidden relative h-8 flex items-center shadow-md z-30 shrink-0">
@@ -82,6 +84,9 @@ export default function App() {
   
   // BINGO STATE
   const [showBingo, setShowBingo] = useState(false);
+  
+  // PLANOS STATE
+  const [showPlans, setShowPlans] = useState(false);
 
   // Refs
   const avatarInputRef = useRef<HTMLInputElement>(null);
@@ -90,7 +95,6 @@ export default function App() {
   // --- Lifecycle ---
 
   // 1. PERSISTÊNCIA DE DADOS (LOCAL STORAGE)
-  // Verifica se há usuário salvo na memória do aparelho ao iniciar
   useEffect(() => {
     const savedUser = localStorage.getItem('chegoja_user');
     if (savedUser) {
@@ -110,7 +114,34 @@ export default function App() {
     }
   }, []);
 
-  // Wake Lock for Drivers (Keep Screen On)
+  // 2. CHECK PAYMENT RETURN (Mercado Pago Redirect)
+  useEffect(() => {
+      const query = new URLSearchParams(window.location.search);
+      const status = query.get('status');
+      const planId = query.get('plan_id');
+      
+      if (status === 'approved' && planId && currentUser) {
+          const processPayment = async () => {
+              setIsLoading(true);
+              const success = await activatePlan(currentUser.id, planId);
+              if (success) {
+                  alert("Pagamento aprovado! Seu plano foi ativado.");
+                  const updatedUser = await loginDriver(currentUser.username, currentUser.password);
+                  if (updatedUser) {
+                      setCurrentUser(updatedUser);
+                      localStorage.setItem('chegoja_user', JSON.stringify(updatedUser));
+                  }
+              } else {
+                  alert("Houve um problema ao ativar seu plano. Entre em contato com o suporte.");
+              }
+              window.history.replaceState({}, document.title, "/");
+              setIsLoading(false);
+          };
+          processPayment();
+      }
+  }, [currentUser]);
+
+  // 3. Wake Lock for Drivers
   useEffect(() => {
     if (currentUser?.role === UserRole.DRIVER) {
       const requestWakeLock = async () => {
@@ -126,7 +157,6 @@ export default function App() {
 
       requestWakeLock();
 
-      // Re-request wake lock if visibility changes (e.g. user switches tabs and comes back)
       const handleVisibilityChange = () => {
         if (document.visibilityState === 'visible' && currentUser?.role === UserRole.DRIVER) {
           requestWakeLock();
@@ -145,27 +175,21 @@ export default function App() {
     }
   }, [currentUser]);
 
-  // Load Contacts based on Role and Listen for changes
+  // 4. Load Contacts
   useEffect(() => {
     if (!currentUser) return;
     
-    // Admin handles its own data fetching in the AdminDashboard component
     if (currentUser.role === UserRole.ADMIN) return;
 
-    // Check approval status immediately (if driver)
     if (currentUser.role === UserRole.DRIVER && currentUser.is_approved === false) {
-       // Do not load normal contacts if not approved. 
-       // Instead, we will fetch Admin as the contact for "Pending" screen logic below
        return;
     }
 
     const loadContacts = async () => {
       if (currentUser.role === UserRole.CLIENT) {
-        // Clients see Drivers
         const drivers = await fetchOnlineDrivers();
         setContactList(drivers);
       } else if (currentUser.role === UserRole.DRIVER) {
-        // Drivers see Clients who messaged them
         const clients = await fetchMyClients(currentUser.id);
         setContactList(clients);
       }
@@ -173,12 +197,7 @@ export default function App() {
 
     loadContacts();
     
-    // Subscribe to profile changes (e.g. new driver online, driver status change)
     const profileSub = subscribeToProfiles(() => {
-        // Refresh local user data just in case status changed externally
-        if (currentUser.role === UserRole.DRIVER) {
-             // In a full app we would sync user profile here
-        }
         loadContacts();
     });
 
@@ -187,11 +206,10 @@ export default function App() {
     };
   }, [currentUser]);
 
-  // Load History and Subscribe to Messages
+  // 5. Load History and Subscribe to Messages
   useEffect(() => {
     if (!currentUser || currentUser.role === UserRole.ADMIN) return;
 
-    // 1. Load History if a contact is active
     if (activeContact) {
         const loadHistory = async () => {
             const history = await fetchMessages(currentUser.id, activeContact.id);
@@ -200,13 +218,9 @@ export default function App() {
         loadHistory();
     }
 
-    // 2. Subscribe to new messages (Background Aware)
     const sub = subscribeToMessages(currentUser.id, async (newMsg) => {
-      // Logic for received messages
       if (newMsg.sender_id !== currentUser.id) {
         
-        // --- NOTIFICAÇÃO GENÉRICA (CLIENTE OU MOTORISTA) ---
-        // Se o app estiver em segundo plano, manda notificação push
         if (document.visibilityState === 'hidden' || !document.hasFocus()) {
              const senderName = contactList.find(c => c.id === newMsg.sender_id)?.username || "Novo Cliente";
              soundService.sendNotification(
@@ -215,33 +229,22 @@ export default function App() {
              );
         }
 
-        // ============================================================
-        // 🔥 LÓGICA DE ALERTA E SOM
-        // ============================================================
         if (currentUser.role === UserRole.DRIVER && currentUser.is_approved) {
-             
-             // 1. DETECÇÃO DE CHAMADA ENTRANTE (PELO TEXTO DE ALERTA)
              const isIncomingCallAlert = newMsg.content && (
                 newMsg.content.includes("Cliente ligando") || 
                 newMsg.content.includes("ligando...")
              );
 
              if (isIncomingCallAlert) {
-                 console.log("ALERTA DE CHAMADA RECEBIDO: Disparando som nativo imediatamente.");
                  soundService.playRingtone();
              } else {
-                 // 2. MENSAGEM DE TEXTO COMUM PARA MOTORISTA
-                 // Aqui usamos a nova lógica de PRIORIDADE PARA MENSAGEM
-                 console.log("MENSAGEM DE TEXTO RECEBIDA: Disparando alerta de mensagem.");
                  soundService.playMessageAlert();
              }
 
-             // 3. Força o app Android a vir para frente (PRIORIDADE VISUAL)
              if (window.Android && window.Android.bringToFront) {
                  window.Android.bringToFront();
              }
 
-             // 4. Busca o perfil de quem enviou (pode ser novo cliente)
              let senderProfile = contactList.find(c => c.id === newMsg.sender_id);
              
              if (!senderProfile) {
@@ -251,8 +254,6 @@ export default function App() {
                  }
              }
 
-             // 5. SETA O CONTATO ATIVO (Auto-Open)
-             // Se for Chamada, abre na hora. Se for mensagem, também abre para o motorista responder rápido.
              if (senderProfile) {
                  setTimeout(() => {
                      setActiveContact(senderProfile);
@@ -261,7 +262,6 @@ export default function App() {
              }
         }
         else {
-            // Se for cliente, comportamento padrão (som suave)
              soundService.playReceived();
              
              if (currentUser.role === UserRole.DRIVER) { 
@@ -276,7 +276,6 @@ export default function App() {
         }
       }
 
-      // If this message belongs to the active chat, append it
       if ((activeContact && (newMsg.sender_id === activeContact.id || newMsg.receiver_id === activeContact.id)) || (newMsg.sender_id === activeContact?.id)) {
           setMessages(prev => {
               if (prev.some(m => m.id === newMsg.id)) return prev;
@@ -290,30 +289,24 @@ export default function App() {
     };
   }, [currentUser, activeContact, contactList]);
 
-  // --- NOVA LÓGICA DE BROADCAST (Notificações Globais) ---
+  // 6. Broadcast Listener
   useEffect(() => {
     if (!currentUser || currentUser.role === UserRole.ADMIN) return;
 
     const handleBroadcast = (broadcast: BroadcastMessage) => {
-        // Verifica se a mensagem é para mim
         if (broadcast.target_role === 'all' || broadcast.target_role === currentUser.role) {
             
-            // Exibe notificação do sistema se em segundo plano
             if (document.visibilityState === 'hidden' || !document.hasFocus()) {
                 soundService.sendNotification(broadcast.title, broadcast.message);
             }
 
-            // Toca som específico do perfil
             if (currentUser.role === UserRole.DRIVER) {
-                // Para motoristas, usamos o som de alerta/chamada (ALTO)
                 soundService.playRingtone();
-                setTimeout(() => soundService.stopRingtone(), 5000); // Para após 5s
+                setTimeout(() => soundService.stopRingtone(), 5000); 
             } else {
-                // Para clientes, usamos o som de notificação padrão (SUAVE)
                 soundService.playReceived();
             }
 
-            // Exibe um alerta visual simples dentro do app
             alert(`[Notificação do Admin]\n${broadcast.title}\n\n${broadcast.message}`);
         }
     };
@@ -324,6 +317,37 @@ export default function App() {
         sub.unsubscribe();
     };
 
+  }, [currentUser]);
+
+  // 7. Pending Driver Logic: Auto-select Admin Contact (MOVED TO TOP LEVEL)
+  useEffect(() => {
+    if (currentUser && currentUser.role === UserRole.DRIVER && currentUser.is_approved === false && !activeContact) {
+        fetchAdminContact().then(admin => {
+            if (admin) setActiveContact(admin);
+        });
+    }
+  }, [currentUser, activeContact]);
+
+  // 8. Pending Driver Logic: Realtime Self-Approval Listener (MOVED TO TOP LEVEL)
+  useEffect(() => {
+      let sub: any;
+      if (currentUser && currentUser.role === UserRole.DRIVER && currentUser.is_approved === false) {
+          console.log("Monitorando aprovação do motorista...");
+          sub = subscribeToProfiles(async () => {
+              if (currentUser) {
+                  const me = await loginDriver(currentUser.username, currentUser.password || undefined);
+                  if (me && me.is_approved) {
+                      console.log("Motorista aprovado! Atualizando tela...");
+                      setCurrentUser(me);
+                      localStorage.setItem('chegoja_user', JSON.stringify(me));
+                      window.location.reload(); 
+                  }
+              }
+          });
+      }
+      return () => {
+          if (sub) sub.unsubscribe();
+      };
   }, [currentUser]);
 
   // --- Handlers ---
@@ -339,21 +363,16 @@ export default function App() {
   const requestDriverPermissions = async () => {
     console.log("Iniciando solicitação de permissões completas do motorista...");
     try {
-      // 1. Notificações (Som e Pop-up) - Crucial para segundo plano
       await soundService.requestPermission();
 
-      // 2. Microfone E Camera (Pedir TUDO de uma vez para não bloquear)
-      // Nota: Em dispositivos móveis, isso deve ser feito em resposta a um clique
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        // Para imediatamente, só queremos a permissão concedida no navegador
         stream.getTracks().forEach(track => track.stop()); 
         console.log("Permissão Microfone: OK");
       } catch (err) {
         console.warn("Permissão de Microfone negada:", err);
       }
 
-      // 3. Geolocalização (Essencial)
       if ('geolocation' in navigator) {
         navigator.geolocation.getCurrentPosition(
           (pos) => console.log("GPS Ativo e Permitido", pos.coords),
@@ -382,18 +401,15 @@ export default function App() {
             setIsLoading(false);
             return;
         }
-        // Registra ou Loga Cliente com Foto e Telefone
         user = await registerClientWithPhoto(entryName, entryPhone, entryAvatarFile || undefined);
       } 
       else if (loginMode === 'driver') {
         if (isRegisteringDriver) {
-          // Validação básica
           if (!entryVehicleModel || !entryVehiclePlate || !entryPassword) {
               alert("Por favor, preencha todos os campos obrigatórios, incluindo a senha.");
               setIsLoading(false);
               return;
           }
-          // Pass extended info with password
           user = await registerDriver(
               entryName, 
               entryPassword,
@@ -404,7 +420,6 @@ export default function App() {
               entryAvatarFile || undefined
           );
         } else {
-          // Login com Senha
           if (!authPassword) {
             alert("Por favor, digite sua senha.");
             setIsLoading(false);
@@ -414,7 +429,6 @@ export default function App() {
           user = await loginDriver(entryName, authPassword);
           
           if (!user) {
-            // Se falhou login
             alert(`Usuário ou senha incorretos. Verifique suas credenciais.`);
             setIsLoading(false);
             return; 
@@ -422,14 +436,11 @@ export default function App() {
         }
       }
       else if (loginMode === 'admin') {
-        // Credenciais atualizadas
         if (entryName === 'Holanda2025' && authPassword === '01Deus02@@@@') { 
-          // Tentamos pegar o admin real do DB se existir, senão usamos o mock
           const realAdmin = await fetchAdminContact();
           if (realAdmin) {
               user = realAdmin;
           } else {
-            // Fallback (não ideal para chat, mas permite gestão)
             user = {
                 id: 'admin-master',
                 username: 'Holanda2025',
@@ -444,11 +455,9 @@ export default function App() {
       }
 
       if (user) {
-        // SALVA NA MEMÓRIA DO APARELHO (PERSISTÊNCIA)
         localStorage.setItem('chegoja_user', JSON.stringify(user));
         setCurrentUser(user);
         
-        // Solicita permissões logo após login se for motorista
         if (user.role === UserRole.DRIVER) {
              requestDriverPermissions();
         }
@@ -463,7 +472,6 @@ export default function App() {
   };
 
   const handleLogout = () => {
-      // LIMPA MEMÓRIA DO APARELHO
       localStorage.removeItem('chegoja_user');
       setCurrentUser(null);
       setContactList([]);
@@ -475,7 +483,7 @@ export default function App() {
     if (currentUser?.role === UserRole.ADMIN) return;
 
     setActiveContact(contact);
-    setMessages([]); // Clear previous messages while loading new ones
+    setMessages([]); 
     setShowChatOnMobile(true);
   };
 
@@ -489,15 +497,20 @@ export default function App() {
         alert("Você precisa ser aprovado pelo admin para ficar online.");
         return;
     }
+
+    const subStatus = checkSubscriptionStatus(currentUser.subscription_expires_at);
+    if (!subStatus.isValid) {
+        alert("Sua assinatura venceu! Renove para ficar online.");
+        setShowPlans(true);
+        return;
+    }
     
     const newStatus = currentUser.status === DriverStatus.AVAILABLE ? DriverStatus.BUSY : DriverStatus.AVAILABLE;
     
-    // Optimistic Update
     const updatedUser = { ...currentUser, status: newStatus };
     setCurrentUser(updatedUser);
     localStorage.setItem('chegoja_user', JSON.stringify(updatedUser));
     
-    // Update DB
     await updateDriverStatus(currentUser.id, newStatus);
   };
 
@@ -520,36 +533,6 @@ export default function App() {
 
   // --- Render: Pending Approval Screen (Drivers) WITH CHAT ---
   if (currentUser && currentUser.role === UserRole.DRIVER && currentUser.is_approved === false) {
-      
-      // Auto-load Admin as contact if not set
-      if (!activeContact) {
-         fetchAdminContact().then(admin => {
-             if (admin) setActiveContact(admin);
-         });
-      }
-
-      // Realtime listener for self-approval
-      // Isso atualiza a tela do motorista automaticamente quando o admin aprovar
-      useEffect(() => {
-          console.log("Monitorando aprovação do motorista...");
-          const sub = subscribeToProfiles(async () => {
-              if (currentUser) {
-                  // Re-fetch my own data to check approval
-                  const me = await loginDriver(currentUser.username, currentUser.password || undefined);
-                  if (me && me.is_approved) {
-                      console.log("Motorista aprovado! Atualizando tela...");
-                      setCurrentUser(me);
-                      localStorage.setItem('chegoja_user', JSON.stringify(me));
-                      // Force reload to clean up states
-                      window.location.reload(); 
-                  }
-              }
-          });
-          return () => {
-              sub.unsubscribe();
-          };
-      }, [currentUser]);
-
       return (
           <div className="flex h-[100dvh] w-full flex-col bg-gray-100 relative overflow-hidden">
             <InstallPrompt />
@@ -835,6 +818,11 @@ export default function App() {
             </div>
         )}
         
+        {/* PLANS OVERLAY */}
+        {showPlans && currentUser && (
+            <DriverSubscription currentUser={currentUser} onClose={() => setShowPlans(false)} />
+        )}
+        
         {/* Sidebar */}
         <div className={`w-full md:w-[400px] bg-whatsapp-dark border-r border-gray-800 flex flex-col ${showChatOnMobile ? 'hidden md:flex' : 'flex'}`}>
             {/* My Profile Header */}
@@ -861,6 +849,15 @@ export default function App() {
 
                 {currentUser.role === UserRole.DRIVER && (
                     <>
+                        {/* Plans Button */}
+                        <button 
+                            onClick={() => setShowPlans(true)}
+                            className="bg-yellow-600 hover:bg-yellow-500 text-white p-2 rounded-full transition flex items-center justify-center shadow-lg"
+                            title="Meus Planos"
+                        >
+                            <span className="material-icons text-sm">monetization_on</span>
+                        </button>
+
                         {/* Status Toggle Button - HIGHLIGHTED */}
                         <button 
                             onClick={handleStatusToggle}

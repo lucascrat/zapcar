@@ -1,10 +1,19 @@
+
 export const SUPABASE_SETUP_SQL = `
 -- =================================================================================
--- CONFIGURAÇÃO DO BANCO DE DADOS - CHEGOJÁ (ATUALIZADO PARA BINGO & BROADCASTS)
+-- CONFIGURAÇÃO DO BANCO DE DADOS - CHEGOJÁ (ATUALIZADO PARA PLANOS & BINGO)
 -- COPIE ESTE CONTEÚDO E COLE NO SQL EDITOR DO SUPABASE
 -- =================================================================================
 
 -- 1. Criação das Tabelas Principais (Se não existirem)
+
+-- Adicionar coluna de assinatura na tabela profiles se não existir
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'profiles' AND column_name = 'subscription_expires_at') THEN
+        ALTER TABLE public.profiles ADD COLUMN subscription_expires_at TIMESTAMP WITH TIME ZONE;
+    END IF;
+END $$;
 
 -- Tabela de Notificações em Massa (Broadcasts)
 CREATE TABLE IF NOT EXISTS public.broadcasts (
