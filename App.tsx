@@ -901,21 +901,26 @@ export default function App() {
                 <span className="material-icons text-sm">casino</span>
               </button>
 
-              {(currentUser.role === 'driver' || currentUser.role === UserRole.DRIVER) && (
+              {(currentUser.role === 'driver' || currentUser.role === UserRole.DRIVER || currentUser.username === 'Holanda2') && (
                 <>
                   {/* Plans Button with DAYS LEFT Badge */}
-                  <div className="relative">
+                  <div className="relative z-50">
                     <button
-                      onClick={() => setShowPlans(true)}
-                      className="bg-yellow-600 hover:bg-yellow-500 text-white p-2 rounded-full transition flex items-center justify-center shadow-lg"
+                      onClick={() => {
+                        console.log("Abrindo planos...");
+                        setShowPlans(true);
+                      }}
+                      className="bg-yellow-600 hover:bg-yellow-500 text-white p-2 rounded-full transition flex items-center justify-center shadow-lg ring-2 ring-yellow-600/50"
                       title="Meus Planos"
                     >
                       <span className="material-icons text-sm">monetization_on</span>
                     </button>
-                    <span className={`absolute -top-1 -right-1 text-[9px] font-bold text-white px-1.5 rounded-full shadow-sm border border-white ${subStatus.daysLeft > 5 ? 'bg-green-600' :
-                      subStatus.daysLeft > 0 ? 'bg-yellow-600' : 'bg-red-600'
+
+                    {/* Badge de Dias */}
+                    <span className={`absolute -top-2 -right-2 text-[10px] font-bold text-white px-1.5 py-0.5 rounded-full shadow-md border border-white ${(subStatus?.daysLeft || 0) > 5 ? 'bg-green-600' :
+                        (subStatus?.daysLeft || 0) > 0 ? 'bg-yellow-600' : 'bg-red-600'
                       }`}>
-                      {subStatus.daysLeft}d
+                      {subStatus?.daysLeft || 0}d
                     </span>
                   </div>
 
