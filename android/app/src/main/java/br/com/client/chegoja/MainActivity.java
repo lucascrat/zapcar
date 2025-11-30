@@ -14,6 +14,7 @@ public class MainActivity extends BridgeActivity {
         super.onStart();
         // Injeta a interface JS "Android" no WebView do Capacitor
         if (this.bridge != null && this.bridge.getWebView() != null) {
+            this.bridge.getWebView().getSettings().setMediaPlaybackRequiresUserGesture(false);
             this.bridge.getWebView().addJavascriptInterface(new WebAppInterface(this), "Android");
         }
     }

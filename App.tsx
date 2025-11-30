@@ -332,14 +332,25 @@ export default function App() {
   useEffect(() => {
     const handlePipExit = () => {
       console.log("Saiu do PiP - Tocando alerta");
+      window.focus();
       setTimeout(() => {
         soundService.playPipExitSound();
-      }, 300);
+      }, 500);
     };
 
     window.addEventListener('pipExit', handlePipExit);
     return () => window.removeEventListener('pipExit', handlePipExit);
   }, []);
+
+  // --- Handlers ---
+
+  // ... (outros handlers)
+
+  const handleBackToList = () => {
+    console.log("Voltando para lista...");
+    setShowChatOnMobile(false);
+    setActiveContact(null);
+  };
 
   // 6. Broadcast Listener
   useEffect(() => {
@@ -542,10 +553,7 @@ export default function App() {
     setShowChatOnMobile(true);
   };
 
-  const handleBackToList = () => {
-    setShowChatOnMobile(false);
-    setActiveContact(null);
-  };
+
 
   const handleStatusToggle = async () => {
     if (!currentUser || currentUser.role !== UserRole.DRIVER || !currentUser.is_approved) {
