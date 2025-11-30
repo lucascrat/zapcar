@@ -155,8 +155,9 @@ class SoundService {
       window.Android.triggerNativeMessageSound();
       return;
     }
-    this.receivedAudio.currentTime = 0;
-    this.receivedAudio.play().catch(e => console.log("Audio blocked:", e));
+    // USANDO O TOQUE (ubb.mp3) PARA ALERTAS
+    this.pipExitAudio.currentTime = 0;
+    this.pipExitAudio.play().catch(e => console.log("Audio blocked:", e));
     if (navigator.vibrate) {
       navigator.vibrate([200, 100, 200, 100, 200]);
     }

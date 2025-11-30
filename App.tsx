@@ -332,7 +332,9 @@ export default function App() {
   useEffect(() => {
     const handlePipExit = () => {
       console.log("Saiu do PiP - Tocando alerta");
-      soundService.playPipExitSound();
+      setTimeout(() => {
+        soundService.playPipExitSound();
+      }, 300);
     };
 
     window.addEventListener('pipExit', handlePipExit);
