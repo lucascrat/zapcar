@@ -1,20 +1,21 @@
 
-import { MP_ACCESS_TOKEN, DRIVER_PLANS } from '../constants';
+import { DRIVER_PLANS, MP_ACCESS_TOKEN } from '../constants';
 import { supabase } from './supabaseClient';
 import { UserProfile, PayerFormData, PixPaymentResponse } from '../types';
 
-// Cria um pagamento Pix direto (Checkout Transparente)
-export const createPixPayment = async (
+// --- FALLBACK METHODS (Direct API via Proxy) ---
+// Usados quando a Edge Function não está implantada ou falha
+
+const createPixPaymentDirect = async (
     planId: string, 
     user: UserProfile, 
     payerData: PayerFormData
-): Promise<PixPaymentResponse | null> => {
-    const plan = DRIVER_PLANS.find(p => p.id === planId);
-    if (!plan) throw new Error("Plano não encontrado");
-
-    const url = "https://api.mercadopago.com/v1/payments";
+): Promise<PixPaymentResponse> => {
+    console.log("Usando método de pagamento: Fallback (Proxy)");
     
-    // Limpar CPF (apenas números)
+    const plan = DRIVER_PLANS.find(p => p.id === planId);
+    if (!plan) throw new Error("Plano inválido");
+
     const cleanCpf = payerData.cpf.replace(/\D/g, '');
 
     const body = {
@@ -33,47 +34,99 @@ export const createPixPayment = async (
         external_reference: user.id
     };
 
-    try {
-        const response = await fetch(url, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "Authorization": `Bearer ${MP_ACCESS_TOKEN}`,
-                "X-Idempotency-Key": `${user.id}-${Date.now()}` // Evita duplicação
-            },
-            body: JSON.stringify(body)
-        });
+    // Usa corsproxy.io para contornar o bloqueio CORS do navegador
+    const response = await fetch(`https://corsproxy.io/?https://api.mercadopago.com/v1/payments`, {
+        method: "POST",
+        headers: {
+            "Authorization": `Bearer ${MP_ACCESS_TOKEN}`,
+            "Content-Type": "application/json",
+            "X-Idempotency-Key": `${user.id}-${Date.now()}`
+        },
+        body: JSON.stringify(body)
+    });
 
-        const data = await response.json();
-        
-        if (data.id && data.point_of_interaction) {
-            return data as PixPaymentResponse;
-        } else {
-            console.error("MP Error:", data);
-            throw new Error(data.message || "Erro ao gerar Pix");
-        }
-    } catch (error) {
-        console.error("Payment Service Error:", error);
-        throw error;
+    const data = await response.json();
+
+    if (!response.ok) {
+        console.error("MP Fallback Error:", data);
+        throw new Error(data.message || "Erro ao comunicar com Mercado Pago via Proxy");
     }
+
+    return data as PixPaymentResponse;
 };
 
-// Verifica o status do pagamento (Polling)
-export const getPaymentStatus = async (paymentId: number): Promise<string> => {
-    const url = `https://api.mercadopago.com/v1/payments/${paymentId}`;
-    
+const getPaymentStatusDirect = async (paymentId: number): Promise<string> => {
     try {
-        const response = await fetch(url, {
+        const response = await fetch(`https://corsproxy.io/?https://api.mercadopago.com/v1/payments/${paymentId}`, {
             method: "GET",
             headers: {
                 "Authorization": `Bearer ${MP_ACCESS_TOKEN}`
             }
         });
+
         const data = await response.json();
-        return data.status; // 'approved', 'pending', etc.
+        return data.status || 'unknown';
     } catch (error) {
-        console.error("Erro ao verificar status:", error);
+        console.error("Fallback Status Check Error:", error);
         return 'unknown';
+    }
+};
+
+// --- MAIN EXPORTED METHODS ---
+
+export const createPixPayment = async (
+    planId: string, 
+    user: UserProfile, 
+    payerData: PayerFormData
+): Promise<PixPaymentResponse | null> => {
+    
+    // Tenta Edge Function Primeiro
+    try {
+        const { data, error } = await supabase.functions.invoke('payment-manager', {
+            body: {
+                action: 'create',
+                planId,
+                user,
+                payerData
+            }
+        });
+
+        if (error) throw error; // Força cair no catch se der erro na function
+        if (data.error) throw new Error(data.error);
+        
+        if (data.id && data.point_of_interaction) {
+            return data as PixPaymentResponse;
+        } else {
+            throw new Error("Resposta inválida do servidor.");
+        }
+
+    } catch (edgeError: any) {
+        console.warn("Edge Function falhou, ativando fallback local...", edgeError);
+        // Fallback para chamada direta via Proxy
+        try {
+            return await createPixPaymentDirect(planId, user, payerData);
+        } catch (fallbackError: any) {
+            console.error("Payment Service Final Error:", fallbackError);
+            throw new Error("Não foi possível gerar o pagamento. Tente novamente.");
+        }
+    }
+};
+
+export const getPaymentStatus = async (paymentId: number): Promise<string> => {
+    try {
+        const { data, error } = await supabase.functions.invoke('payment-manager', {
+            body: {
+                action: 'check',
+                paymentId
+            }
+        });
+
+        if (error) throw error;
+        return data.status || 'unknown';
+
+    } catch (error) {
+        // Silently fallback to direct check
+        return await getPaymentStatusDirect(paymentId);
     }
 };
 

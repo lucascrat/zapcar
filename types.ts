@@ -34,6 +34,7 @@ export interface UserProfile {
   vehicle_type?: 'car' | 'motorcycle'; // Novo campo para tipo de veículo
   lat?: number;
   lng?: number;
+  unread_count?: number; // Contador de mensagens não lidas (Frontend Only)
 }
 
 export interface Message {

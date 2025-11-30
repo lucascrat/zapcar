@@ -25,7 +25,7 @@ import { UserProfile, UserRole, DriverStatus, Message, BroadcastMessage } from '
 import { APP_NAME } from './constants';
 import { soundService } from './services/soundService';
 
-const APP_VERSION = "3.5 (Fix React #310)";
+const APP_VERSION = "3.7 (No Interrupt)";
 
 const MarqueeBanner = () => (
   <div className="bg-gradient-to-r from-purple-900 via-indigo-800 to-purple-900 overflow-hidden relative h-8 flex items-center shadow-md z-30 shrink-0">
@@ -91,6 +91,11 @@ export default function App() {
   // Refs
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const wakeLockRef = useRef<any>(null);
+
+  // Computed Subscription Status
+  const subStatus = currentUser?.role === UserRole.DRIVER
+      ? checkSubscriptionStatus(currentUser.subscription_expires_at)
+      : { isValid: true, daysLeft: 0 };
 
   // --- Lifecycle ---
 
@@ -235,6 +240,34 @@ export default function App() {
                 newMsg.content.includes("ligando...")
              );
 
+             // LÓGICA DE INTERRUPÇÃO (NOVA)
+             // Se o motorista já estiver falando com alguém E a nova mensagem for de OUTRA pessoa
+             if (activeContact && activeContact.id !== newMsg.sender_id) {
+                 // 1. Toca som discreto (Notificação)
+                 soundService.playReceived();
+                 
+                 // 2. Incrementa contador na lista (Badge)
+                 setContactList(prev => {
+                     const exists = prev.some(c => c.id === newMsg.sender_id);
+                     if (exists) {
+                         return prev.map(c => c.id === newMsg.sender_id ? { ...c, unread_count: (c.unread_count || 0) + 1 } : c);
+                     } else {
+                         // Se não estiver na lista, busca e adiciona com contador
+                         fetchUserProfile(newMsg.sender_id).then(profile => {
+                             if(profile) {
+                                 setContactList(current => [{...profile, unread_count: 1}, ...current]);
+                             }
+                         });
+                         return prev;
+                     }
+                 });
+                 
+                 // 3. NÃO INTERROMPE (Não chama bringToFront agressivo nem setActiveContact)
+                 return; 
+             }
+
+             // SE ESTIVER LIVRE OU A MENSAGEM FOR DO CHAT ATUAL:
+             
              if (isIncomingCallAlert) {
                  soundService.playRingtone();
              } else {
@@ -255,13 +288,18 @@ export default function App() {
              }
 
              if (senderProfile) {
-                 setTimeout(() => {
-                     setActiveContact(senderProfile);
-                     setShowChatOnMobile(true);
-                 }, 200);
+                 // Se já estiver no chat com ele, não precisa "abrir" de novo, já está aberto.
+                 // Só força a abertura se não estiver ativo.
+                 if (!activeContact) {
+                     setTimeout(() => {
+                         setActiveContact(senderProfile);
+                         setShowChatOnMobile(true);
+                     }, 200);
+                 }
              }
         }
         else {
+             // Lógica para Clientes ou Motoristas não aprovados
              soundService.playReceived();
              
              if (currentUser.role === UserRole.DRIVER) { 
@@ -482,6 +520,9 @@ export default function App() {
   const handleContactSelect = (contact: UserProfile) => {
     if (currentUser?.role === UserRole.ADMIN) return;
 
+    // Reset unread count when opening chat
+    setContactList(prev => prev.map(c => c.id === contact.id ? { ...c, unread_count: 0 } : c));
+
     setActiveContact(contact);
     setMessages([]); 
     setShowChatOnMobile(true);
@@ -498,7 +539,6 @@ export default function App() {
         return;
     }
 
-    const subStatus = checkSubscriptionStatus(currentUser.subscription_expires_at);
     if (!subStatus.isValid) {
         alert("Sua assinatura venceu! Renove para ficar online.");
         setShowPlans(true);
@@ -529,6 +569,18 @@ export default function App() {
   // --- Render: Admin Dashboard (Dedicated Page) ---
   if (currentUser && currentUser.role === UserRole.ADMIN) {
     return <AdminDashboard currentUser={currentUser} onLogout={handleLogout} />;
+  }
+
+  // --- Render: Hard Block for Expired Drivers ---
+  // Se o motorista está aprovado MAS a assinatura venceu, bloqueia tudo
+  if (currentUser && currentUser.role === UserRole.DRIVER && currentUser.is_approved && !subStatus.isValid) {
+      return (
+          <DriverSubscription 
+              currentUser={currentUser} 
+              onClose={() => {}} 
+              isBlocked={true} 
+          />
+      );
   }
 
   // --- Render: Pending Approval Screen (Drivers) WITH CHAT ---
@@ -849,14 +901,22 @@ export default function App() {
 
                 {currentUser.role === UserRole.DRIVER && (
                     <>
-                        {/* Plans Button */}
-                        <button 
-                            onClick={() => setShowPlans(true)}
-                            className="bg-yellow-600 hover:bg-yellow-500 text-white p-2 rounded-full transition flex items-center justify-center shadow-lg"
-                            title="Meus Planos"
-                        >
-                            <span className="material-icons text-sm">monetization_on</span>
-                        </button>
+                        {/* Plans Button with DAYS LEFT Badge */}
+                        <div className="relative">
+                            <button 
+                                onClick={() => setShowPlans(true)}
+                                className="bg-yellow-600 hover:bg-yellow-500 text-white p-2 rounded-full transition flex items-center justify-center shadow-lg"
+                                title="Meus Planos"
+                            >
+                                <span className="material-icons text-sm">monetization_on</span>
+                            </button>
+                            <span className={`absolute -top-1 -right-1 text-[9px] font-bold text-white px-1.5 rounded-full shadow-sm border border-white ${
+                                subStatus.daysLeft > 5 ? 'bg-green-600' : 
+                                subStatus.daysLeft > 0 ? 'bg-yellow-600' : 'bg-red-600'
+                            }`}>
+                                {subStatus.daysLeft}d
+                            </span>
+                        </div>
 
                         {/* Status Toggle Button - HIGHLIGHTED */}
                         <button 
@@ -936,12 +996,20 @@ export default function App() {
                            </>
                         )}
                     </div>
-                    <span className="text-xs text-gray-500">
-                        {contact.role === UserRole.DRIVER && contact.status === DriverStatus.AVAILABLE ? "Online" : "Agora"}
-                    </span>
+                    <div className="flex flex-col items-end gap-1">
+                        <span className="text-xs text-gray-500">
+                            {contact.role === UserRole.DRIVER && contact.status === DriverStatus.AVAILABLE ? "Online" : "Agora"}
+                        </span>
+                        {/* UNREAD BADGE */}
+                        {contact.unread_count && contact.unread_count > 0 && (
+                            <span className="bg-green-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[20px] text-center shadow-sm animate-pulse">
+                                {contact.unread_count}
+                            </span>
+                        )}
+                    </div>
                     </div>
                     <div className="flex justify-between items-center">
-                    <p className="text-gray-400 text-sm truncate">
+                    <p className={`text-sm truncate ${contact.unread_count && contact.unread_count > 0 ? 'text-gray-100 font-semibold' : 'text-gray-400'}`}>
                         {contact.role === UserRole.DRIVER 
                             ? (contact.status === DriverStatus.AVAILABLE ? "Disponível - Toque para conversar" : "Ocupado no momento") 
                             : `Tel: ${contact.phone || 'Sem telefone'}`}

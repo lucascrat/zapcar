@@ -7,11 +7,12 @@ import { UserProfile, PayerFormData, PixPaymentResponse } from '../types';
 interface DriverSubscriptionProps {
     currentUser: UserProfile;
     onClose: () => void;
+    isBlocked?: boolean; // Nova propriedade para forçar pagamento
 }
 
 type Step = 'select_plan' | 'enter_data' | 'payment_qr' | 'success';
 
-export const DriverSubscription: React.FC<DriverSubscriptionProps> = ({ currentUser, onClose }) => {
+export const DriverSubscription: React.FC<DriverSubscriptionProps> = ({ currentUser, onClose, isBlocked = false }) => {
     const [step, setStep] = useState<Step>('select_plan');
     const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(false);
@@ -100,19 +101,25 @@ export const DriverSubscription: React.FC<DriverSubscriptionProps> = ({ currentU
     return (
         <div className="fixed inset-0 z-[100] bg-black/90 flex flex-col items-center justify-center p-4">
             <div className="w-full max-w-4xl bg-white rounded-2xl overflow-hidden flex flex-col max-h-[90vh]">
-                <div className="bg-blue-600 p-4 md:p-6 text-white shrink-0 flex justify-between items-center">
+                <div className={`${isBlocked ? 'bg-red-600' : 'bg-blue-600'} p-4 md:p-6 text-white shrink-0 flex justify-between items-center`}>
                     <div>
-                        <h2 className="text-xl md:text-2xl font-bold">Assinatura Motorista</h2>
+                        <h2 className="text-xl md:text-2xl font-bold">
+                            {isBlocked ? 'Acesso Bloqueado' : 'Assinatura Motorista'}
+                        </h2>
                         <p className="opacity-90 text-xs md:text-sm">
-                            {step === 'select_plan' && "Escolha seu plano"}
-                            {step === 'enter_data' && "Dados para Pagamento"}
-                            {step === 'payment_qr' && "Pagamento Pix"}
-                            {step === 'success' && "Sucesso!"}
+                            {isBlocked && "Sua assinatura venceu. Renove para continuar."}
+                            {!isBlocked && step === 'select_plan' && "Escolha seu plano"}
+                            {!isBlocked && step === 'enter_data' && "Dados para Pagamento"}
+                            {!isBlocked && step === 'payment_qr' && "Pagamento Pix"}
+                            {!isBlocked && step === 'success' && "Sucesso!"}
                         </p>
                     </div>
-                    <button onClick={onClose} className="p-2 hover:bg-blue-700 rounded-full transition">
-                        <span className="material-icons">close</span>
-                    </button>
+                    {/* Só mostra botão de fechar se NÃO estiver bloqueado */}
+                    {!isBlocked && (
+                        <button onClick={onClose} className="p-2 hover:bg-white/20 rounded-full transition">
+                            <span className="material-icons">close</span>
+                        </button>
+                    )}
                 </div>
 
                 <div className="p-4 md:p-6 overflow-y-auto bg-gray-50 flex-1 custom-scrollbar">
@@ -259,7 +266,10 @@ export const DriverSubscription: React.FC<DriverSubscriptionProps> = ({ currentU
                             <h2 className="text-2xl font-bold text-gray-800 mb-2">Pagamento Aprovado!</h2>
                             <p className="text-gray-600 mb-6">Sua assinatura foi ativada com sucesso. Você já pode ficar online e aceitar corridas.</p>
                             <button 
-                                onClick={() => { onClose(); window.location.reload(); }}
+                                onClick={() => { 
+                                    if(onClose) onClose(); 
+                                    window.location.reload(); 
+                                }}
                                 className="w-full py-3 bg-green-600 hover:bg-green-700 text-white font-bold rounded-lg shadow-lg"
                             >
                                 Começar a Trabalhar
