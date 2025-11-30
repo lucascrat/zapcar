@@ -1080,6 +1080,20 @@ export default function App() {
       {/* FLOATING PLANS BUTTON (DRIVER ONLY) */}
       {(currentUser.role === 'driver' || currentUser.role === UserRole.DRIVER || currentUser.username === 'Holanda2') && (
         <div className="absolute bottom-24 right-6 z-[60] flex flex-col items-center gap-1 animate-bounce-in">
+          {/* Botão PiP (Minimizar) */}
+          <button
+            onClick={() => {
+              if ((window as any).Android && (window as any).Android.enterPipMode) {
+                (window as any).Android.enterPipMode();
+              } else {
+                console.warn("PiP mode not supported or Android interface missing");
+              }
+            }}
+            className="bg-blue-600 hover:bg-blue-500 text-white w-10 h-10 rounded-full transition flex items-center justify-center shadow-lg mb-2 active:scale-90"
+            title="Minimizar Janela"
+          >
+            <span className="material-icons text-lg">picture_in_picture_alt</span>
+          </button>
           {/* Badge de Dias Flutuante */}
           <span className={`text-xs font-bold text-white px-2 py-0.5 rounded-full shadow-md border border-white/20 mb-1 backdrop-blur-sm ${(subStatus?.daysLeft || 0) > 5 ? 'bg-green-600/90' :
             (subStatus?.daysLeft || 0) > 0 ? 'bg-yellow-600/90' : 'bg-red-600/90'
