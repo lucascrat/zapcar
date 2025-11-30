@@ -901,6 +901,15 @@ export default function App() {
                 <span className="material-icons text-sm">casino</span>
               </button>
 
+              {/* DEBUG: Botão de Planos FORA da condicional para teste */}
+              <button
+                onClick={() => setShowPlans(true)}
+                className="bg-yellow-600 hover:bg-yellow-500 text-white px-3 py-2 rounded-full transition flex items-center justify-center shadow-lg font-bold text-xs"
+                title="Meus Planos"
+              >
+                PLANOS
+              </button>
+
               {(currentUser.role === 'driver' || currentUser.role === UserRole.DRIVER || currentUser.username === 'Holanda2') && (
                 <>
                   {/* Plans Button with DAYS LEFT Badge */}
@@ -918,7 +927,7 @@ export default function App() {
 
                     {/* Badge de Dias */}
                     <span className={`absolute -top-2 -right-2 text-[10px] font-bold text-white px-1.5 py-0.5 rounded-full shadow-md border border-white ${(subStatus?.daysLeft || 0) > 5 ? 'bg-green-600' :
-                        (subStatus?.daysLeft || 0) > 0 ? 'bg-yellow-600' : 'bg-red-600'
+                      (subStatus?.daysLeft || 0) > 0 ? 'bg-yellow-600' : 'bg-red-600'
                       }`}>
                       {subStatus?.daysLeft || 0}d
                     </span>
