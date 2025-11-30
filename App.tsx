@@ -903,26 +903,7 @@ export default function App() {
 
               {(currentUser.role === 'driver' || currentUser.role === UserRole.DRIVER || currentUser.username === 'Holanda2') && (
                 <>
-                  {/* Plans Button with DAYS LEFT Badge */}
-                  <div className="relative z-50">
-                    <button
-                      onClick={() => {
-                        console.log("Abrindo planos...");
-                        setShowPlans(true);
-                      }}
-                      className="bg-yellow-600 hover:bg-yellow-500 text-white p-2 rounded-full transition flex items-center justify-center shadow-lg ring-2 ring-yellow-600/50"
-                      title="Meus Planos"
-                    >
-                      <span className="material-icons text-sm">monetization_on</span>
-                    </button>
 
-                    {/* Badge de Dias */}
-                    <span className={`absolute -top-2 -right-2 text-[10px] font-bold text-white px-1.5 py-0.5 rounded-full shadow-md border border-white ${(subStatus?.daysLeft || 0) > 5 ? 'bg-green-600' :
-                      (subStatus?.daysLeft || 0) > 0 ? 'bg-yellow-600' : 'bg-red-600'
-                      }`}>
-                      {subStatus?.daysLeft || 0}d
-                    </span>
-                  </div>
 
                   {/* Status Toggle Button - HIGHLIGHTED */}
                   <button
@@ -1096,6 +1077,25 @@ export default function App() {
           )}
         </div>
       </div>
+      {/* FLOATING PLANS BUTTON (DRIVER ONLY) */}
+      {(currentUser.role === 'driver' || currentUser.role === UserRole.DRIVER || currentUser.username === 'Holanda2') && (
+        <div className="absolute bottom-24 right-6 z-[60] flex flex-col items-center gap-1 animate-bounce-in">
+          {/* Badge de Dias Flutuante */}
+          <span className={`text-xs font-bold text-white px-2 py-0.5 rounded-full shadow-md border border-white/20 mb-1 backdrop-blur-sm ${(subStatus?.daysLeft || 0) > 5 ? 'bg-green-600/90' :
+            (subStatus?.daysLeft || 0) > 0 ? 'bg-yellow-600/90' : 'bg-red-600/90'
+            }`}>
+            {subStatus?.daysLeft || 0} dias
+          </span>
+
+          <button
+            onClick={() => setShowPlans(true)}
+            className="bg-gradient-to-br from-yellow-500 to-yellow-700 text-white w-14 h-14 rounded-full transition flex items-center justify-center shadow-2xl ring-4 ring-yellow-500/30 active:scale-95 hover:scale-105"
+            title="Meus Planos e Recargas"
+          >
+            <span className="material-icons text-3xl drop-shadow-md">monetization_on</span>
+          </button>
+        </div>
+      )}
     </div>
   );
 }
