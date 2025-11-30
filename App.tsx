@@ -93,7 +93,8 @@ export default function App() {
   const wakeLockRef = useRef<any>(null);
 
   // Computed Subscription Status
-  const subStatus = currentUser?.role === UserRole.DRIVER
+  // Computed Subscription Status
+  const subStatus = (currentUser?.role === UserRole.DRIVER || currentUser?.role === 'driver')
     ? checkSubscriptionStatus(currentUser.subscription_expires_at)
     : { isValid: true, daysLeft: 0 };
 
@@ -900,7 +901,7 @@ export default function App() {
                 <span className="material-icons text-sm">casino</span>
               </button>
 
-              {currentUser.role === UserRole.DRIVER && (
+              {(currentUser.role === 'driver' || currentUser.role === UserRole.DRIVER) && (
                 <>
                   {/* Plans Button with DAYS LEFT Badge */}
                   <div className="relative">
@@ -912,7 +913,7 @@ export default function App() {
                       <span className="material-icons text-sm">monetization_on</span>
                     </button>
                     <span className={`absolute -top-1 -right-1 text-[9px] font-bold text-white px-1.5 rounded-full shadow-sm border border-white ${subStatus.daysLeft > 5 ? 'bg-green-600' :
-                        subStatus.daysLeft > 0 ? 'bg-yellow-600' : 'bg-red-600'
+                      subStatus.daysLeft > 0 ? 'bg-yellow-600' : 'bg-red-600'
                       }`}>
                       {subStatus.daysLeft}d
                     </span>
@@ -922,9 +923,9 @@ export default function App() {
                   <button
                     onClick={handleStatusToggle}
                     className={`px-4 py-2 rounded-full text-xs font-bold transition flex items-center gap-2 shadow-sm ${!currentUser.is_approved ? 'bg-gray-500 cursor-not-allowed' :
-                        currentUser.status === DriverStatus.AVAILABLE
-                          ? 'bg-green-600 text-white hover:bg-green-500 ring-2 ring-green-600/30'
-                          : 'bg-red-600 text-white hover:bg-red-500 ring-2 ring-red-600/30'
+                      currentUser.status === DriverStatus.AVAILABLE
+                        ? 'bg-green-600 text-white hover:bg-green-500 ring-2 ring-green-600/30'
+                        : 'bg-red-600 text-white hover:bg-red-500 ring-2 ring-red-600/30'
                       }`}
                     title={!currentUser.is_approved ? "Aguardando Aprovação" : "Toque para mudar status"}
                     disabled={!currentUser.is_approved}
@@ -971,7 +972,7 @@ export default function App() {
                   <img src={contact.avatar_url || 'https://via.placeholder.com/150'} alt={contact.username} className="w-full h-full rounded-full object-cover" />
                   {contact.role === UserRole.DRIVER && (
                     <span className={`absolute bottom-0 right-0 w-3.5 h-3.5 rounded-full border-2 border-whatsapp-dark ${contact.status === DriverStatus.AVAILABLE ? 'bg-green-500' :
-                        contact.status === DriverStatus.BUSY ? 'bg-red-500' : 'bg-gray-500'
+                      contact.status === DriverStatus.BUSY ? 'bg-red-500' : 'bg-gray-500'
                       }`}></span>
                   )}
                 </div>
