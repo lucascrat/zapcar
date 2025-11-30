@@ -185,6 +185,21 @@
     <div id="root" class="h-full w-full"></div>
     <script type="module" src="/index.tsx"></script>
     
+    <!-- Failsafe: Remove splash screen after 3 seconds -->
+    <script>
+      window.addEventListener('load', function() {
+        setTimeout(function() {
+          var splash = document.getElementById('splash-screen');
+          if (splash) {
+            splash.style.opacity = '0';
+            setTimeout(function() {
+              splash.remove();
+            }, 500);
+          }
+        }, 3000);
+      });
+    </script>
+    
     <!-- Google Maps API Integration -->
     <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDdvtKSifC86bk0cDcPSqsD5UyBFQhn_ao&libraries=places"></script>
   </body>
