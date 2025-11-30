@@ -73,6 +73,7 @@ export interface AppSettings {
   moto_price_km: number;
   moto_price_min: number;
   moto_start_distance_limit: number; // Distância (km) incluída na bandeirada
+  marquee_text?: string; // Texto da tarjeta
 }
 
 // Interfaces do Bingo
@@ -102,36 +103,36 @@ export interface BingoRankingUser {
 
 // Nova interface para notificações em massa
 export interface BroadcastMessage {
-    id: string;
-    title: string;
-    message: string;
-    target_role: 'client' | 'driver' | 'all';
-    created_at: string;
+  id: string;
+  title: string;
+  message: string;
+  target_role: 'client' | 'driver' | 'all';
+  created_at: string;
 }
 
 // Interfaces para Pagamento Pix Transparente
 export interface PayerFormData {
-    firstName: string;
-    lastName: string;
-    email: string;
-    cpf: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  cpf: string;
 }
 
 export interface PixPaymentResponse {
-    id: number;
-    status: string;
-    point_of_interaction: {
-        transaction_data: {
-            qr_code: string; // Copia e Cola
-            qr_code_base64: string; // Imagem
-        }
+  id: number;
+  status: string;
+  point_of_interaction: {
+    transaction_data: {
+      qr_code: string; // Copia e Cola
+      qr_code_base64: string; // Imagem
     }
+  }
 }
 
 // Tipo para as abas do Painel Admin
 export type AdminTab = 'details' | 'map' | 'history' | 'settings' | 'chat' | 'bingo' | 'approvals' | 'notifications';
 
-// Interface global para comunicação com Android Nativo
+// Interface global para comunicação com Android Nativo e Google Maps
 declare global {
   interface Window {
     Android?: {
@@ -140,9 +141,10 @@ declare global {
       stopNativeAlert: () => void;
       showToast: (msg: string) => void;
       bringToFront: () => void;
+      enterPipMode: () => void; // Novo método PiP
     };
-    // FIX: Add pushalert to window to solve TypeScript errors.
     pushalert?: any;
+    google?: any; // Google Maps API
   }
 }
 

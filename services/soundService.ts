@@ -20,7 +20,6 @@ class SoundService {
   private receivedAudio: HTMLAudioElement;
   private callAudio: HTMLAudioElement;
   private adminCallAudio: HTMLAudioElement;
-  private pipExitAudio: HTMLAudioElement;
   private hasNotificationPermission: boolean = false;
   private activeNotification: Notification | null = null;
 
@@ -43,23 +42,9 @@ class SoundService {
     this.callAudio.load();
     this.adminCallAudio.load();
 
-    // Configuração específica para PiP Exit (mesmo som, sem loop)
-    this.pipExitAudio = new Audio(CALL_SOUND_URL);
-    this.pipExitAudio.loop = false;
-    this.pipExitAudio.volume = 1.0;
-    this.pipExitAudio.load();
-
     // Verifica permissão nativa no início
     if ("Notification" in window) {
       this.hasNotificationPermission = Notification.permission === "granted";
-    }
-  }
-
-  playPipExitSound() {
-    this.pipExitAudio.currentTime = 0;
-    this.pipExitAudio.play().catch(e => console.log("Audio blocked:", e));
-    if (navigator.vibrate) {
-      navigator.vibrate([500, 200, 500]);
     }
   }
 
@@ -155,9 +140,8 @@ class SoundService {
       window.Android.triggerNativeMessageSound();
       return;
     }
-    // USANDO O TOQUE (ubb.mp3) PARA ALERTAS
-    this.pipExitAudio.currentTime = 0;
-    this.pipExitAudio.play().catch(e => console.log("Audio blocked:", e));
+    this.receivedAudio.currentTime = 0;
+    this.receivedAudio.play().catch(e => console.log("Audio blocked:", e));
     if (navigator.vibrate) {
       navigator.vibrate([200, 100, 200, 100, 200]);
     }
@@ -198,6 +182,16 @@ class SoundService {
   stopAdminCallSound() {
     this.adminCallAudio.pause();
     this.adminCallAudio.currentTime = 0;
+  }
+
+  playPipExitSound() {
+    console.log("Playing PiP Exit Sound (ubb.mp3)");
+    this.callAudio.currentTime = 0;
+    this.callAudio.loop = false;
+    this.callAudio.play().catch(e => console.log("Audio blocked:", e));
+    if (navigator.vibrate) {
+      navigator.vibrate([500, 200, 500]);
+    }
   }
 }
 

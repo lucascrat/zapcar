@@ -1,0 +1,10 @@
+{
+  "name": "chegoja",
+  "description": "O melhor aplicativo de mobilidade urbana do Brasil",
+  "requestFramePermissions": [
+    "microphone",
+    "camera",
+    "geolocation",
+    "clipboard-read"
+  ]
+}

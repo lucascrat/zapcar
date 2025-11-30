@@ -18,21 +18,26 @@ import {
   updateDriverStatus, // Import for status toggle
   fetchAdminContact,
   fetchUserProfile, // Nova função importada
-  subscribeToBroadcasts // Importar função de broadcast
+  subscribeToBroadcasts, // Importar função de broadcast
+  fetchAppSettings // Import fetchAppSettings
 } from './services/supabaseClient';
 import { activatePlan, checkSubscriptionStatus } from './services/paymentService';
 import { UserProfile, UserRole, DriverStatus, Message, BroadcastMessage } from './types';
 import { APP_NAME } from './constants';
 import { soundService } from './services/soundService';
 
-const APP_VERSION = "3.7 (No Interrupt)";
+const APP_VERSION = "3.9 (Nav Fluid)";
 
-const MarqueeBanner = () => (
+interface MarqueeProps {
+  text: string;
+}
+
+const MarqueeBanner: React.FC<MarqueeProps> = ({ text }) => (
   <div className="bg-gradient-to-r from-purple-900 via-indigo-800 to-purple-900 overflow-hidden relative h-8 flex items-center shadow-md z-30 shrink-0">
     <div className="animate-marquee whitespace-nowrap flex gap-10 items-center w-full">
       <span className="text-yellow-300 font-bold text-sm flex items-center gap-2">
         <span className="material-icons text-sm">stars</span>
-        ENTRE E CONCORRA A PRÊMIOS TODA SEMANA! - PRÊMIOS CHEGOJÁ
+        {text}
       </span>
       <span className="text-white font-medium text-xs">Instale o App e participe dos sorteios exclusivos.</span>
       <span className="text-yellow-300 font-bold text-sm flex items-center gap-2">
@@ -43,7 +48,7 @@ const MarqueeBanner = () => (
       {/* Duplicate for seamless loop */}
       <span className="text-yellow-300 font-bold text-sm flex items-center gap-2 ml-10">
         <span className="material-icons text-sm">stars</span>
-        ENTRE E CONCORRA A PRÊMIOS TODA SEMANA! - PRÊMIOS CHEGOJÁ
+        {text}
       </span>
       <span className="text-white font-medium text-xs">Instale o App e participe dos sorteios exclusivos.</span>
     </div>
@@ -88,17 +93,39 @@ export default function App() {
   // PLANOS STATE
   const [showPlans, setShowPlans] = useState(false);
 
+  // MARQUEE STATE
+  const [bannerText, setBannerText] = useState('ENTRE E CONCORRA A PRÊMIOS TODA SEMANA! - PRÊMIOS CHEGOJÁ');
+
   // Refs
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const wakeLockRef = useRef<any>(null);
 
   // Computed Subscription Status
-  // Computed Subscription Status
-  const subStatus = (currentUser?.role === UserRole.DRIVER || currentUser?.role === 'driver')
+  const subStatus = currentUser?.role === UserRole.DRIVER
     ? checkSubscriptionStatus(currentUser.subscription_expires_at)
     : { isValid: true, daysLeft: 0 };
 
   // --- Lifecycle ---
+
+  // 0. LOAD APP SETTINGS (Marquee Text)
+  useEffect(() => {
+    const loadSettings = async () => {
+      const settings = await fetchAppSettings();
+      if (settings.marquee_text) {
+        setBannerText(settings.marquee_text);
+      }
+    };
+    loadSettings();
+
+    // Remove Splash Screen
+    const splash = document.getElementById('splash-screen');
+    if (splash) {
+      splash.style.opacity = '0';
+      setTimeout(() => {
+        splash.remove();
+      }, 500);
+    }
+  }, []);
 
   // 1. PERSISTÊNCIA DE DADOS (LOCAL STORAGE)
   useEffect(() => {
@@ -180,6 +207,20 @@ export default function App() {
       };
     }
   }, [currentUser]);
+
+  // 3.5 PiP Exit Listener (Native)
+  useEffect(() => {
+    const handlePipExit = () => {
+      console.log("Saiu do PiP - Tocando alerta");
+      window.focus();
+      setTimeout(() => {
+        soundService.playPipExitSound();
+      }, 500);
+    };
+
+    window.addEventListener('pipExit', handlePipExit);
+    return () => window.removeEventListener('pipExit', handlePipExit);
+  }, []);
 
   // 4. Load Contacts
   useEffect(() => {
@@ -327,30 +368,6 @@ export default function App() {
       sub.unsubscribe();
     };
   }, [currentUser, activeContact, contactList]);
-
-  // 7. PiP Exit Listener
-  useEffect(() => {
-    const handlePipExit = () => {
-      console.log("Saiu do PiP - Tocando alerta");
-      window.focus();
-      setTimeout(() => {
-        soundService.playPipExitSound();
-      }, 500);
-    };
-
-    window.addEventListener('pipExit', handlePipExit);
-    return () => window.removeEventListener('pipExit', handlePipExit);
-  }, []);
-
-  // --- Handlers ---
-
-  // ... (outros handlers)
-
-  const handleBackToList = () => {
-    console.log("Voltando para lista...");
-    setShowChatOnMobile(false);
-    setActiveContact(null);
-  };
 
   // 6. Broadcast Listener
   useEffect(() => {
@@ -553,7 +570,10 @@ export default function App() {
     setShowChatOnMobile(true);
   };
 
-
+  const handleBackToList = () => {
+    setShowChatOnMobile(false);
+    setActiveContact(null);
+  };
 
   const handleStatusToggle = async () => {
     if (!currentUser || currentUser.role !== UserRole.DRIVER || !currentUser.is_approved) {
@@ -718,7 +738,7 @@ export default function App() {
                   {avatarPreview ? (
                     <img src={avatarPreview} alt="Preview" className="w-full h-full object-cover" />
                   ) : (
-                    <span className="material-icons text-5xl text-gray-400">add_a_photo</span>
+                    <img src="/logo.png" alt="Logo" className="w-full h-full object-cover" />
                   )}
                 </div>
                 <div className="absolute bottom-0 right-0 bg-whatsapp-green p-2 rounded-full text-white shadow-sm transform scale-75">
@@ -734,9 +754,11 @@ export default function App() {
               </div>
             ) : (
               <div className={`w-20 h-20 rounded-full flex items-center justify-center shadow-lg ${loginMode === 'admin' ? 'bg-blue-600' : 'bg-whatsapp-green'}`}>
-                <span className="material-icons text-4xl text-white">
-                  {loginMode === 'driver' ? 'directions_car' : 'security'}
-                </span>
+                {loginMode === 'driver' ? (
+                  <img src="/logo.png" alt="Logo" className="w-full h-full object-cover rounded-full" />
+                ) : (
+                  <span className="material-icons text-4xl text-white">security</span>
+                )}
               </div>
             )}
           </div>
@@ -878,7 +900,7 @@ export default function App() {
   // --- Render: Main App (Client/Driver Chat) ---
   return (
     <div className="h-[100dvh] w-full flex flex-col overflow-hidden bg-app-bg relative">
-      <MarqueeBanner />
+      <MarqueeBanner text={bannerText} />
 
       <div className="flex-1 flex overflow-hidden relative">
         <InstallPrompt />
@@ -886,15 +908,19 @@ export default function App() {
 
         {/* BINGO OVERLAY */}
         {showBingo && currentUser && (
-          <div className="absolute inset-0 z-[100]">
-            <BingoUserView currentUser={currentUser} onClose={() => setShowBingo(false)} />
+          <div className="absolute inset-0 z-[100] bg-black/90 animate-fade-in flex flex-col">
+            <div className="flex-1 overflow-y-auto">
+              <BingoUserView currentUser={currentUser} onClose={() => setShowBingo(false)} />
+            </div>
           </div>
         )}
 
         {/* PLANS OVERLAY */}
         {showPlans && currentUser && (
-          <div className="absolute inset-0 z-[100]">
-            <DriverSubscription currentUser={currentUser} onClose={() => setShowPlans(false)} />
+          <div className="absolute inset-0 z-[100] bg-black/90 animate-fade-in flex flex-col">
+            <div className="flex-1 overflow-y-auto">
+              <DriverSubscription currentUser={currentUser} onClose={() => setShowPlans(false)} />
+            </div>
           </div>
         )}
 
@@ -922,9 +948,23 @@ export default function App() {
                 <span className="material-icons text-sm">casino</span>
               </button>
 
-              {(currentUser.role === 'driver' || currentUser.role === UserRole.DRIVER || currentUser.username === 'Holanda2') && (
+              {currentUser.role === UserRole.DRIVER && (
                 <>
-
+                  {/* Plans Button with DAYS LEFT Badge */}
+                  <div className="relative">
+                    <button
+                      onClick={() => setShowPlans(true)}
+                      className="bg-yellow-600 hover:bg-yellow-500 text-white p-2 rounded-full transition flex items-center justify-center shadow-lg"
+                      title="Meus Planos"
+                    >
+                      <span className="material-icons text-sm">monetization_on</span>
+                    </button>
+                    <span className={`absolute -top-1 -right-1 text-[9px] font-bold text-white px-1.5 rounded-full shadow-sm border border-white ${subStatus.daysLeft > 5 ? 'bg-green-600' :
+                      subStatus.daysLeft > 0 ? 'bg-yellow-600' : 'bg-red-600'
+                      }`}>
+                      {subStatus.daysLeft}d
+                    </span>
+                  </div>
 
                   {/* Status Toggle Button - HIGHLIGHTED */}
                   <button
@@ -1038,46 +1078,37 @@ export default function App() {
               </div>
             )}
           </div>
+
+          {/* PiP Footer Button (Driver Only) */}
+          {currentUser.role === UserRole.DRIVER && (
+            <div className="p-4 bg-whatsapp-panel border-t border-gray-800 shrink-0">
+              <button
+                onClick={() => {
+                  if (window.Android && window.Android.enterPipMode) {
+                    window.Android.enterPipMode();
+                  } else {
+                    alert("PiP não suportado neste dispositivo.");
+                  }
+                }}
+                className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 px-4 rounded-lg shadow-lg flex items-center justify-center gap-2 transition active:scale-95"
+              >
+                <span className="material-icons">picture_in_picture_alt</span>
+                MODO JANELA FLUTUANTE
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Chat Area */}
         <div className={`flex-1 flex flex-col bg-whatsapp-panel relative ${!showChatOnMobile ? 'hidden md:flex' : 'flex'} h-full`}>
           {activeContact ? (
             <>
-              {/* Mobile Header Override */}
-              <div className="md:hidden bg-whatsapp-panel h-16 flex items-center px-2 border-b border-gray-700 shadow-sm shrink-0 z-20">
-                <button onClick={handleBackToList} className="text-gray-300 p-2 rounded-full hover:bg-gray-700 mr-1 active:scale-95 transition">
-                  <span className="material-icons">arrow_back</span>
-                </button>
-                <div className="flex items-center flex-1" onClick={() => {/* Show Contact Info */ }}>
-                  <img src={activeContact.avatar_url || 'https://via.placeholder.com/40'} className="w-9 h-9 rounded-full mr-3 object-cover" alt="" />
-                  <div className="flex flex-col">
-                    <span className="text-white font-medium text-base leading-tight flex items-center gap-1">
-                      {activeContact.username}
-                      {activeContact.role === UserRole.DRIVER && (
-                        <span className={`material-icons text-xs ${activeContact.vehicle_type === 'motorcycle' ? 'text-orange-400' : 'text-blue-400'}`}>
-                          {activeContact.vehicle_type === 'motorcycle' ? 'two_wheeler' : 'directions_car'}
-                        </span>
-                      )}
-                    </span>
-                    <span className="text-xs text-gray-400 truncate">
-                      {activeContact.role === UserRole.DRIVER
-                        ? (activeContact.status === 'available' ? 'Online' : 'Ocupado')
-                        : activeContact.phone || 'Detalhes'}
-                    </span>
-                  </div>
-                </div>
-                <div className="flex gap-3 pr-2">
-                  <button className="text-whatsapp-green"><span className="material-icons">videocam</span></button>
-                  <button className="text-whatsapp-green"><span className="material-icons">call</span></button>
-                </div>
-              </div>
-
               <ChatWindow
                 currentUser={currentUser}
                 chatPartner={activeContact}
                 messages={messages}
                 onSendMessage={(msg) => setMessages(p => [...p, msg])}
+                onBack={handleBackToList}
               />
             </>
           ) : (
@@ -1098,39 +1129,6 @@ export default function App() {
           )}
         </div>
       </div>
-      {/* FLOATING PLANS BUTTON (DRIVER ONLY) */}
-      {(currentUser.role === 'driver' || currentUser.role === UserRole.DRIVER || currentUser.username === 'Holanda2') && (
-        <div className="absolute bottom-24 right-6 z-[60] flex flex-col items-center gap-1 animate-bounce-in">
-          {/* Botão PiP (Minimizar) */}
-          <button
-            onClick={() => {
-              if ((window as any).Android && (window as any).Android.enterPipMode) {
-                (window as any).Android.enterPipMode();
-              } else {
-                console.warn("PiP mode not supported or Android interface missing");
-              }
-            }}
-            className="bg-blue-600 hover:bg-blue-500 text-white w-10 h-10 rounded-full transition flex items-center justify-center shadow-lg mb-2 active:scale-90"
-            title="Minimizar Janela"
-          >
-            <span className="material-icons text-lg">picture_in_picture_alt</span>
-          </button>
-          {/* Badge de Dias Flutuante */}
-          <span className={`text-xs font-bold text-white px-2 py-0.5 rounded-full shadow-md border border-white/20 mb-1 backdrop-blur-sm ${(subStatus?.daysLeft || 0) > 5 ? 'bg-green-600/90' :
-            (subStatus?.daysLeft || 0) > 0 ? 'bg-yellow-600/90' : 'bg-red-600/90'
-            }`}>
-            {subStatus?.daysLeft || 0} dias
-          </span>
-
-          <button
-            onClick={() => setShowPlans(true)}
-            className="bg-gradient-to-br from-yellow-500 to-yellow-700 text-white w-14 h-14 rounded-full transition flex items-center justify-center shadow-2xl ring-4 ring-yellow-500/30 active:scale-95 hover:scale-105"
-            title="Meus Planos e Recargas"
-          >
-            <span className="material-icons text-3xl drop-shadow-md">monetization_on</span>
-          </button>
-        </div>
-      )}
     </div>
   );
 }

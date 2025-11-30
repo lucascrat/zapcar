@@ -10,12 +10,15 @@
     "update": "powershell -ExecutionPolicy Bypass -File ./update.ps1"
   },
   "dependencies": {
+    "@capacitor/android": "^6.0.0",
+    "@capacitor/core": "^6.0.0",
     "@google/genai": "^1.30.0",
+    "@supabase/supabase-js": "^2.84.0",
     "react": "^19.2.0",
-    "react-dom": "^19.2.0",
-    "@supabase/supabase-js": "^2.84.0"
+    "react-dom": "^19.2.0"
   },
   "devDependencies": {
+    "@capacitor/cli": "^6.0.0",
     "@types/node": "^22.14.0",
     "@vitejs/plugin-react": "^5.0.0",
     "typescript": "~5.8.2",

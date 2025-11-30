@@ -50,6 +50,35 @@ public class MainActivity extends BridgeActivity {
                     | android.content.Intent.FLAG_ACTIVITY_NEW_TASK);
             mActivity.startActivity(intent);
         }
+
+        @JavascriptInterface
+        public void showToast(String toast) {
+            android.widget.Toast.makeText(mActivity, toast, android.widget.Toast.LENGTH_SHORT).show();
+        }
+
+        @JavascriptInterface
+        public void triggerNativeMessageSound() {
+            try {
+                android.net.Uri notification = android.media.RingtoneManager
+                        .getDefaultUri(android.media.RingtoneManager.TYPE_NOTIFICATION);
+                android.media.Ringtone r = android.media.RingtoneManager.getRingtone(mActivity.getApplicationContext(),
+                        notification);
+                r.play();
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+
+        @JavascriptInterface
+        public void triggerNativeAlert() {
+            // Placeholder for continuous ringtone if needed, or just play notification
+            triggerNativeMessageSound();
+        }
+
+        @JavascriptInterface
+        public void stopNativeAlert() {
+            // Placeholder
+        }
     }
 
     @Override
