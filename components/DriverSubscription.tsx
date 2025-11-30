@@ -11,12 +11,21 @@ interface DriverSubscriptionProps {
 }
 
 type Step = 'select_plan' | 'enter_data' | 'payment_qr' | 'success';
+type TabType = 'plans' | 'recharges';
+
+// Definir opções de recarga
+const RECHARGE_OPTIONS = [
+    { id: 'recharge_7d', title: '7 Dias', days: 7, price: 15.00, description: 'Recarga avulsa' },
+    { id: 'recharge_15d', title: '15 Dias', days: 15, price: 28.00, description: 'Recarga avulsa' },
+    { id: 'recharge_30d', title: '30 Dias', days: 30, price: 50.00, description: 'Recarga avulsa' },
+];
 
 export const DriverSubscription: React.FC<DriverSubscriptionProps> = ({ currentUser, onClose, isBlocked = false }) => {
     const [step, setStep] = useState<Step>('select_plan');
     const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(false);
-    
+    const [activeTab, setActiveTab] = useState<TabType>('plans');
+
     // Form Data
     const [formData, setFormData] = useState<PayerFormData>({
         firstName: currentUser.username.split(' ')[0] || '',
@@ -42,7 +51,7 @@ export const DriverSubscription: React.FC<DriverSubscriptionProps> = ({ currentU
             pollingInterval.current = setInterval(async () => {
                 const status = await getPaymentStatus(pixData.id);
                 console.log("Status Pagamento:", status);
-                
+
                 if (status === 'approved') {
                     clearInterval(pollingInterval.current);
                     setIsLoading(true);
@@ -123,38 +132,123 @@ export const DriverSubscription: React.FC<DriverSubscriptionProps> = ({ currentU
                 </div>
 
                 <div className="p-4 md:p-6 overflow-y-auto bg-gray-50 flex-1 custom-scrollbar">
-                    
+
                     {/* STEP 1: SELECT PLAN */}
                     {step === 'select_plan' && (
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                            {DRIVER_PLANS.map(plan => (
-                                <div key={plan.id} className="bg-white rounded-xl shadow-md border border-gray-200 overflow-hidden flex flex-col hover:shadow-xl transition-shadow relative">
-                                    {plan.id === 'plan_30d' && (
-                                        <div className="absolute top-0 right-0 bg-yellow-400 text-yellow-900 text-[10px] font-bold px-2 py-1 rounded-bl-lg shadow-sm">
-                                            MELHOR VALOR
-                                        </div>
-                                    )}
-                                    <div className="p-6 flex-1 text-center">
-                                        <h3 className="font-bold text-gray-800 text-lg mb-2">{plan.title}</h3>
-                                        <div className="text-3xl font-bold text-blue-600 mb-2">
-                                            R$ {plan.price.toFixed(2).replace('.', ',')}
-                                        </div>
-                                        <p className="text-gray-500 text-sm mb-4">{plan.description}</p>
-                                        <div className="text-xs text-gray-400 font-mono">
-                                            R$ {(plan.price / plan.days).toFixed(2)} / dia
-                                        </div>
-                                    </div>
-                                    <div className="p-4 bg-gray-50 border-t border-gray-100">
-                                        <button 
-                                            onClick={() => handleSelectPlan(plan.id)}
-                                            className="w-full py-3 rounded-lg font-bold text-white shadow-md transition flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 active:scale-95"
-                                        >
-                                            Selecionar
-                                            <span className="material-icons text-sm">arrow_forward</span>
-                                        </button>
+                        <div>
+                            {/* Tabs */}
+                            <div className="flex gap-2 mb-6 bg-white p-2 rounded-lg shadow-sm">
+                                <button
+                                    onClick={() => setActiveTab('plans')}
+                                    className={`flex-1 py-3 px-4 rounded-lg font-bold transition flex items-center justify-center gap-2 ${activeTab === 'plans'
+                                            ? 'bg-blue-600 text-white shadow-md'
+                                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                                        }`}
+                                >
+                                    <span className="material-icons text-sm">calendar_month</span>
+                                    Planos Mensais
+                                </button>
+                                <button
+                                    onClick={() => setActiveTab('recharges')}
+                                    className={`flex-1 py-3 px-4 rounded-lg font-bold transition flex items-center justify-center gap-2 ${activeTab === 'recharges'
+                                            ? 'bg-green-600 text-white shadow-md'
+                                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                                        }`}
+                                >
+                                    <span className="material-icons text-sm">add_card</span>
+                                    Recargas Avulsas
+                                </button>
+                            </div>
+
+                            {/* Info Banner */}
+                            <div className={`mb-4 p-4 rounded-lg ${activeTab === 'plans' ? 'bg-blue-50 border border-blue-200' : 'bg-green-50 border border-green-200'}`}>
+                                <div className="flex items-start gap-3">
+                                    <span className={`material-icons ${activeTab === 'plans' ? 'text-blue-600' : 'text-green-600'}`}>
+                                        {activeTab === 'plans' ? 'info' : 'flash_on'}
+                                    </span>
+                                    <div className="flex-1">
+                                        <h4 className={`font-bold text-sm mb-1 ${activeTab === 'plans' ? 'text-blue-900' : 'text-green-900'}`}>
+                                            {activeTab === 'plans' ? 'Planos com Melhor Custo-Benefício' : 'Recargas Rápidas e Flexíveis'}
+                                        </h4>
+                                        <p className={`text-xs ${activeTab === 'plans' ? 'text-blue-700' : 'text-green-700'}`}>
+                                            {activeTab === 'plans'
+                                                ? 'Economize mais com planos mensais! Quanto maior o período, menor o custo por dia.'
+                                                : 'Precisa de créditos rápidos? Faça uma recarga avulsa e volte a trabalhar imediatamente!'}
+                                        </p>
                                     </div>
                                 </div>
-                            ))}
+                            </div>
+
+                            {/* Plans Grid */}
+                            {activeTab === 'plans' && (
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                                    {DRIVER_PLANS.map(plan => (
+                                        <div key={plan.id} className="bg-white rounded-xl shadow-md border border-gray-200 overflow-hidden flex flex-col hover:shadow-xl transition-shadow relative">
+                                            {plan.id === 'plan_30d' && (
+                                                <div className="absolute top-0 right-0 bg-yellow-400 text-yellow-900 text-[10px] font-bold px-2 py-1 rounded-bl-lg shadow-sm">
+                                                    MELHOR VALOR
+                                                </div>
+                                            )}
+                                            <div className="p-6 flex-1 text-center">
+                                                <h3 className="font-bold text-gray-800 text-lg mb-2">{plan.title}</h3>
+                                                <div className="text-3xl font-bold text-blue-600 mb-2">
+                                                    R$ {plan.price.toFixed(2).replace('.', ',')}
+                                                </div>
+                                                <p className="text-gray-500 text-sm mb-4">{plan.description}</p>
+                                                <div className="text-xs text-gray-400 font-mono">
+                                                    R$ {(plan.price / plan.days).toFixed(2)} / dia
+                                                </div>
+                                            </div>
+                                            <div className="p-4 bg-gray-50 border-t border-gray-100">
+                                                <button
+                                                    onClick={() => handleSelectPlan(plan.id)}
+                                                    className="w-full py-3 rounded-lg font-bold text-white shadow-md transition flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 active:scale-95"
+                                                >
+                                                    Selecionar
+                                                    <span className="material-icons text-sm">arrow_forward</span>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+
+                            {/* Recharges Grid */}
+                            {activeTab === 'recharges' && (
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                    {RECHARGE_OPTIONS.map(recharge => (
+                                        <div key={recharge.id} className="bg-white rounded-xl shadow-md border-2 border-green-200 overflow-hidden flex flex-col hover:shadow-xl hover:border-green-400 transition-all relative">
+                                            <div className="absolute top-0 left-0 bg-green-500 text-white text-[10px] font-bold px-3 py-1 rounded-br-lg shadow-sm">
+                                                RECARGA
+                                            </div>
+                                            <div className="p-6 flex-1 text-center pt-10">
+                                                <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                                                    <span className="material-icons text-3xl text-green-600">bolt</span>
+                                                </div>
+                                                <h3 className="font-bold text-gray-800 text-xl mb-2">{recharge.title}</h3>
+                                                <div className="text-4xl font-bold text-green-600 mb-2">
+                                                    R$ {recharge.price.toFixed(2).replace('.', ',')}
+                                                </div>
+                                                <p className="text-gray-500 text-sm mb-3">{recharge.description}</p>
+                                                <div className="bg-green-50 rounded-lg p-2 inline-block">
+                                                    <div className="text-xs text-green-700 font-semibold">
+                                                        R$ {(recharge.price / recharge.days).toFixed(2)} / dia
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div className="p-4 bg-green-50 border-t border-green-100">
+                                                <button
+                                                    onClick={() => handleSelectPlan(recharge.id)}
+                                                    className="w-full py-3 rounded-lg font-bold text-white shadow-md transition flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 active:scale-95"
+                                                >
+                                                    <span className="material-icons text-sm">flash_on</span>
+                                                    Recarregar Agora
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
                         </div>
                     )}
 
@@ -165,20 +259,20 @@ export const DriverSubscription: React.FC<DriverSubscriptionProps> = ({ currentU
                             <div className="space-y-4">
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-1">E-mail</label>
-                                    <input 
-                                        type="email" 
+                                    <input
+                                        type="email"
                                         value={formData.email}
-                                        onChange={e => setFormData({...formData, email: e.target.value})}
+                                        onChange={e => setFormData({ ...formData, email: e.target.value })}
                                         className="w-full p-3 border border-gray-300 rounded-lg outline-none focus:ring-2 ring-blue-500"
                                         placeholder="seu@email.com"
                                     />
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-1">CPF</label>
-                                    <input 
-                                        type="text" 
+                                    <input
+                                        type="text"
                                         value={formData.cpf}
-                                        onChange={e => setFormData({...formData, cpf: formatCPF(e.target.value)})}
+                                        onChange={e => setFormData({ ...formData, cpf: formatCPF(e.target.value) })}
                                         className="w-full p-3 border border-gray-300 rounded-lg outline-none focus:ring-2 ring-blue-500"
                                         placeholder="000.000.000-00"
                                         maxLength={14}
@@ -187,19 +281,19 @@ export const DriverSubscription: React.FC<DriverSubscriptionProps> = ({ currentU
                                 <div className="grid grid-cols-2 gap-4">
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700 mb-1">Nome</label>
-                                        <input 
-                                            type="text" 
+                                        <input
+                                            type="text"
                                             value={formData.firstName}
-                                            onChange={e => setFormData({...formData, firstName: e.target.value})}
+                                            onChange={e => setFormData({ ...formData, firstName: e.target.value })}
                                             className="w-full p-3 border border-gray-300 rounded-lg outline-none focus:ring-2 ring-blue-500"
                                         />
                                     </div>
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700 mb-1">Sobrenome</label>
-                                        <input 
-                                            type="text" 
+                                        <input
+                                            type="text"
                                             value={formData.lastName}
-                                            onChange={e => setFormData({...formData, lastName: e.target.value})}
+                                            onChange={e => setFormData({ ...formData, lastName: e.target.value })}
                                             className="w-full p-3 border border-gray-300 rounded-lg outline-none focus:ring-2 ring-blue-500"
                                         />
                                     </div>
@@ -207,8 +301,8 @@ export const DriverSubscription: React.FC<DriverSubscriptionProps> = ({ currentU
                             </div>
                             <div className="mt-6 flex gap-3">
                                 <button onClick={() => setStep('select_plan')} className="flex-1 py-3 text-gray-600 bg-gray-100 rounded-lg font-bold">Voltar</button>
-                                <button 
-                                    onClick={handleGeneratePix} 
+                                <button
+                                    onClick={handleGeneratePix}
                                     disabled={isLoading}
                                     className="flex-[2] py-3 text-white bg-blue-600 hover:bg-blue-700 rounded-lg font-bold flex items-center justify-center gap-2"
                                 >
@@ -225,14 +319,14 @@ export const DriverSubscription: React.FC<DriverSubscriptionProps> = ({ currentU
                             <div className="bg-green-100 text-green-800 px-4 py-2 rounded-full text-xs font-bold inline-flex items-center gap-2 mb-4 animate-pulse">
                                 <span className="material-icons text-sm">hourglass_empty</span> Aguardando Pagamento...
                             </div>
-                            
+
                             <h3 className="font-bold text-gray-800 mb-2">Escaneie o QR Code</h3>
                             <p className="text-gray-500 text-xs mb-4">Abra o app do seu banco e escolha "Pagar com Pix"</p>
-                            
+
                             <div className="bg-gray-100 p-2 rounded-lg inline-block mb-4 border border-gray-300">
-                                <img 
-                                    src={`data:image/png;base64,${pixData.point_of_interaction.transaction_data.qr_code_base64}`} 
-                                    alt="QR Code Pix" 
+                                <img
+                                    src={`data:image/png;base64,${pixData.point_of_interaction.transaction_data.qr_code_base64}`}
+                                    alt="QR Code Pix"
                                     className="w-48 h-48 md:w-56 md:h-56 object-contain"
                                 />
                             </div>
@@ -240,8 +334,8 @@ export const DriverSubscription: React.FC<DriverSubscriptionProps> = ({ currentU
                             <div className="mb-4">
                                 <p className="text-xs text-gray-500 mb-1">Ou use o Copia e Cola:</p>
                                 <div className="flex gap-2">
-                                    <input 
-                                        readOnly 
+                                    <input
+                                        readOnly
                                         value={pixData.point_of_interaction.transaction_data.qr_code}
                                         className="flex-1 bg-gray-100 border border-gray-300 rounded px-2 text-xs text-gray-600 outline-none"
                                     />
@@ -250,7 +344,7 @@ export const DriverSubscription: React.FC<DriverSubscriptionProps> = ({ currentU
                                     </button>
                                 </div>
                             </div>
-                            
+
                             <button onClick={() => setStep('enter_data')} className="text-gray-400 text-xs hover:text-gray-600 underline">
                                 Cancelar / Voltar
                             </button>
@@ -265,10 +359,10 @@ export const DriverSubscription: React.FC<DriverSubscriptionProps> = ({ currentU
                             </div>
                             <h2 className="text-2xl font-bold text-gray-800 mb-2">Pagamento Aprovado!</h2>
                             <p className="text-gray-600 mb-6">Sua assinatura foi ativada com sucesso. Você já pode ficar online e aceitar corridas.</p>
-                            <button 
-                                onClick={() => { 
-                                    if(onClose) onClose(); 
-                                    window.location.reload(); 
+                            <button
+                                onClick={() => {
+                                    if (onClose) onClose();
+                                    window.location.reload();
                                 }}
                                 className="w-full py-3 bg-green-600 hover:bg-green-700 text-white font-bold rounded-lg shadow-lg"
                             >
