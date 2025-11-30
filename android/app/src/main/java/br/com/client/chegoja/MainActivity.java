@@ -50,4 +50,18 @@ public class MainActivity extends BridgeActivity {
             mActivity.startActivity(intent);
         }
     }
+
+    @Override
+    public void onPictureInPictureModeChanged(boolean isInPictureInPictureMode,
+            android.content.res.Configuration newConfig) {
+        super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig);
+
+        if (!isInPictureInPictureMode) {
+            // Voltou para tela cheia (saiu do PiP)
+            // Executa JS para disparar evento
+            if (this.bridge != null && this.bridge.getWebView() != null) {
+                this.bridge.getWebView().evaluateJavascript("window.dispatchEvent(new CustomEvent('pipExit'))", null);
+            }
+        }
+    }
 }

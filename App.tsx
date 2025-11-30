@@ -328,6 +328,17 @@ export default function App() {
     };
   }, [currentUser, activeContact, contactList]);
 
+  // 7. PiP Exit Listener
+  useEffect(() => {
+    const handlePipExit = () => {
+      console.log("Saiu do PiP - Tocando alerta");
+      soundService.playMessageAlert();
+    };
+
+    window.addEventListener('pipExit', handlePipExit);
+    return () => window.removeEventListener('pipExit', handlePipExit);
+  }, []);
+
   // 6. Broadcast Listener
   useEffect(() => {
     if (!currentUser || currentUser.role === UserRole.ADMIN) return;
