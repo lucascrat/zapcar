@@ -1,0 +1,34 @@
+name: Auto Update App
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v3
+        
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'npm'
+          
+      - name: Instalar dependências
+        run: npm ci
+        
+      - name: Build do projeto
+        run: npm run build
+        
+      - name: Verificar tipos TypeScript
+        run: npx tsc --noEmit
+        continue-on-error: true
