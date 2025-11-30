@@ -1,7 +1,7 @@
 {
     "logs": [
         {
-            "outputFile": "com.chegoja.driver.app-mergeDebugResources-24:/values-th/values-th.xml",
+            "outputFile": "br.com.client.chegoja.app-mergeDebugResources-24:/values-th/values-th.xml",
             "map": [
                 {
                     "source": "C:\\Users\\hldes\\.gradle\\caches\\transforms-3\\4ce7c60d257b8629ab4c81cf615a92a1\\transformed\\appcompat-1.6.1\\res\\values-th\\values-th.xml",

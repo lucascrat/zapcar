@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">chegoja</string>
+    <string name="title_activity_main">chegoja</string>
+    <string name="package_name">br.com.client.chegoja</string>
+    <string name="custom_url_scheme">br.com.client.chegoja</string>
+</resources>

@@ -2,9 +2,9 @@
 <resources>
     <color name="ic_launcher_background">#FFFFFF</color>
     <string name="app_name">chegoja</string>
-    <string name="custom_url_scheme">com.chegoja.driver</string>
-    <string name="package_name">com.chegoja.driver</string>
-    <string name="title_activity_main">ChegoJa Driver</string>
+    <string name="custom_url_scheme">br.com.client.chegoja</string>
+    <string name="package_name">br.com.client.chegoja</string>
+    <string name="title_activity_main">chegoja</string>
     <style name="AppTheme" parent="Theme.AppCompat.Light.DarkActionBar">
         
         <item name="colorPrimary">@color/colorPrimary</item>
