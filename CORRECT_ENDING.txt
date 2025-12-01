@@ -1,0 +1,6 @@
+        {/* Plans Manager Overlay */}
+        {showPlansManager && (
+            <PlansManager onClose={() => setShowPlansManager(false)} />
+        )}
+    );
+}
