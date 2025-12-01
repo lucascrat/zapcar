@@ -6,6 +6,7 @@ import { soundService } from '../services/soundService';
 import { checkSubscriptionStatus } from '../services/paymentService';
 import { ChatWindow } from './ChatWindow'; // Importar ChatWindow
 import { PlansManager } from './PlansManager'; // Importar PlansManager
+import { RideCalculator } from './RideCalculator'; // Importar RideCalculator
 
 interface AdminDashboardProps {
     currentUser: UserProfile;
@@ -19,6 +20,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onL
     const [filterStatus, setFilterStatus] = useState<DriverStatus | 'all' | 'pending'>('all');
     const [searchTerm, setSearchTerm] = useState('');
     const [activeTab, setActiveTab] = useState<AdminTab>('details');
+    const [showCalculator, setShowCalculator] = useState(false);
 
     // Mobile Responsive State
     const [showDetailMobile, setShowDetailMobile] = useState(false);
@@ -507,6 +509,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onL
 
     return (
         <div className="flex h-[100dvh] bg-gray-100 overflow-hidden relative">
+            {/* CALCULATOR OVERLAY */}
+            {showCalculator && (
+                <RideCalculator currentUser={currentUser} onClose={() => setShowCalculator(false)} />
+            )}
+
             {/* Sidebar List */}
             <div className={`w-full md:w-80 bg-white border-r border-gray-200 flex flex-col z-10 shadow-lg ${showDetailMobile ? 'hidden md:flex' : 'flex'}`}>
                 <div className="p-4 border-b border-gray-100 shrink-0">
@@ -580,6 +587,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onL
                             className="py-2 bg-green-100 hover:bg-green-200 rounded-lg text-xs font-medium text-green-700 flex items-center justify-center gap-2"
                         >
                             <span className="material-icons text-sm">monetization_on</span> Planos
+                        </button>
+                        <button
+                            onClick={() => setShowCalculator(true)}
+                            className="py-2 bg-blue-100 hover:bg-blue-200 rounded-lg text-xs font-medium text-blue-700 flex items-center justify-center gap-2"
+                        >
+                            <span className="material-icons text-sm">calculate</span> Simular
                         </button>
                         <button
                             onClick={() => { setActiveTab('notifications'); setSelectedDriver(null); setShowDetailMobile(true); }}
