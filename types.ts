@@ -110,6 +110,14 @@ export interface BroadcastMessage {
   created_at: string;
 }
 
+export interface DriverPlan {
+  id: string;
+  title: string;
+  description: string;
+  price: number;
+  days: number;
+}
+
 // Interfaces para Pagamento Pix Transparente
 export interface PayerFormData {
   firstName: string;

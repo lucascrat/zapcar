@@ -6,6 +6,7 @@ import { InstallPrompt } from './components/InstallPrompt'; // Importar componen
 import { AndroidSetup } from './components/AndroidSetup'; // Importar componente Android
 import { BingoUserView } from './components/BingoUserView'; // Importar Bingo
 import { DriverSubscription } from './components/DriverSubscription'; // Importar Planos
+import { RideCalculator } from './components/RideCalculator'; // Importar Calculadora
 import {
   registerClientWithPhoto,
   fetchOnlineDrivers,
@@ -19,7 +20,8 @@ import {
   fetchAdminContact,
   fetchUserProfile, // Nova função importada
   subscribeToBroadcasts, // Importar função de broadcast
-  fetchAppSettings // Import fetchAppSettings
+  fetchAppSettings, // Import fetchAppSettings
+  updateUserLocation // Import updateUserLocation
 } from './services/supabaseClient';
 import { activatePlan, checkSubscriptionStatus } from './services/paymentService';
 import { UserProfile, UserRole, DriverStatus, Message, BroadcastMessage } from './types';
@@ -92,6 +94,12 @@ export default function App() {
 
   // PLANOS STATE
   const [showPlans, setShowPlans] = useState(false);
+
+  // CALCULATOR STATE
+  const [showCalculator, setShowCalculator] = useState(false);
+
+  // DRIVER MENU STATE
+  const [showDriverMenu, setShowDriverMenu] = useState(false);
 
   // MARQUEE STATE
   const [bannerText, setBannerText] = useState('ENTRE E CONCORRA A PRÊMIOS TODA SEMANA! - PRÊMIOS CHEGOJÁ');
@@ -427,6 +435,39 @@ export default function App() {
     }
     return () => {
       if (sub) sub.unsubscribe();
+    };
+  }, [currentUser]);
+
+  // 9. Continuous Location Tracking (GPS)
+  useEffect(() => {
+    if (!currentUser) return;
+
+    let watchId: number | null = null;
+
+    if ('geolocation' in navigator) {
+      console.log("Iniciando rastreamento de localização contínuo...");
+      watchId = navigator.geolocation.watchPosition(
+        (position) => {
+          const { latitude, longitude } = position.coords;
+          // Atualiza no banco de dados (Silent update)
+          updateUserLocation(currentUser.id, latitude, longitude);
+        },
+        (error) => {
+          console.warn("Erro no rastreamento de localização:", error);
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 30000,
+          maximumAge: 5000
+        }
+      );
+    }
+
+    return () => {
+      if (watchId !== null) {
+        navigator.geolocation.clearWatch(watchId);
+        console.log("Rastreamento de localização parado.");
+      }
     };
   }, [currentUser]);
 
@@ -924,6 +965,11 @@ export default function App() {
           </div>
         )}
 
+        {/* CALCULATOR OVERLAY */}
+        {showCalculator && currentUser && (
+          <RideCalculator currentUser={currentUser} onClose={() => setShowCalculator(false)} />
+        )}
+
         {/* Sidebar */}
         <div className={`w-full md:w-[400px] bg-whatsapp-dark border-r border-gray-800 flex flex-col ${showChatOnMobile ? 'hidden md:flex' : 'flex'}`}>
           {/* My Profile Header */}
@@ -937,36 +983,10 @@ export default function App() {
                 </span>
               </div>
             </div>
-            <div className="flex gap-2 text-gray-400 items-center">
-
-              {/* BINGO BUTTON */}
-              <button
-                onClick={() => setShowBingo(true)}
-                className="bg-purple-700 hover:bg-purple-600 text-white p-2 rounded-full transition flex items-center justify-center animate-pulse shadow-lg"
-                title="Jogar Bingo"
-              >
-                <span className="material-icons text-sm">casino</span>
-              </button>
-
-              {currentUser.role === UserRole.DRIVER && (
+            <div className="flex gap-2 text-gray-400 items-center relative">
+              {currentUser.role === UserRole.DRIVER ? (
                 <>
-                  {/* Plans Button with DAYS LEFT Badge */}
-                  <div className="relative">
-                    <button
-                      onClick={() => setShowPlans(true)}
-                      className="bg-yellow-600 hover:bg-yellow-500 text-white p-2 rounded-full transition flex items-center justify-center shadow-lg"
-                      title="Meus Planos"
-                    >
-                      <span className="material-icons text-sm">monetization_on</span>
-                    </button>
-                    <span className={`absolute -top-1 -right-1 text-[9px] font-bold text-white px-1.5 rounded-full shadow-sm border border-white ${subStatus.daysLeft > 5 ? 'bg-green-600' :
-                      subStatus.daysLeft > 0 ? 'bg-yellow-600' : 'bg-red-600'
-                      }`}>
-                      {subStatus.daysLeft}d
-                    </span>
-                  </div>
-
-                  {/* Status Toggle Button - HIGHLIGHTED */}
+                  {/* Status Toggle Button - ALWAYS VISIBLE */}
                   <button
                     onClick={handleStatusToggle}
                     className={`px-4 py-2 rounded-full text-xs font-bold transition flex items-center gap-2 shadow-sm ${!currentUser.is_approved ? 'bg-gray-500 cursor-not-allowed' :
@@ -981,17 +1001,101 @@ export default function App() {
                     {currentUser.status === DriverStatus.AVAILABLE ? 'LIVRE' : 'OCUPADO'}
                   </button>
 
-                  {/* Notification Permission Button */}
+                  {/* MENU BUTTON */}
+                  <div className="relative">
+                    <button
+                      onClick={() => setShowDriverMenu(!showDriverMenu)}
+                      className="p-2 rounded-full hover:bg-gray-700/50 active:scale-90 transition text-gray-300"
+                    >
+                      <span className="material-icons">grid_view</span>
+                      {/* Badge for Plans if expiring */}
+                      {subStatus.daysLeft <= 5 && (
+                        <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full border border-whatsapp-panel"></span>
+                      )}
+                    </button>
+
+                    {/* DROPDOWN MENU */}
+                    {showDriverMenu && (
+                      <>
+                        <div className="fixed inset-0 z-40" onClick={() => setShowDriverMenu(false)}></div>
+                        <div className="absolute right-0 top-12 bg-[#2a3942] rounded-xl shadow-2xl border border-gray-700 p-2 w-48 z-50 flex flex-col gap-1 animate-fade-in">
+
+                          {/* Calculator */}
+                          <button
+                            onClick={() => { setShowCalculator(true); setShowDriverMenu(false); }}
+                            className="flex items-center gap-3 px-3 py-3 hover:bg-gray-700/50 rounded-lg transition text-white text-sm"
+                          >
+                            <span className="material-icons text-blue-400">calculate</span>
+                            Simular Corrida
+                          </button>
+
+                          {/* Bingo */}
+                          <button
+                            onClick={() => { setShowBingo(true); setShowDriverMenu(false); }}
+                            className="flex items-center gap-3 px-3 py-3 hover:bg-gray-700/50 rounded-lg transition text-white text-sm"
+                          >
+                            <span className="material-icons text-purple-400">casino</span>
+                            Bingo
+                          </button>
+
+                          {/* Plans */}
+                          <button
+                            onClick={() => { setShowPlans(true); setShowDriverMenu(false); }}
+                            className="flex items-center gap-3 px-3 py-3 hover:bg-gray-700/50 rounded-lg transition text-white text-sm w-full text-left"
+                          >
+                            <span className="material-icons text-yellow-400">monetization_on</span>
+                            <div className="flex flex-col">
+                              <span>Meus Planos</span>
+                              <span className={`text-[10px] font-bold ${subStatus.daysLeft > 5 ? 'text-green-400' : 'text-red-400'}`}>
+                                {subStatus.daysLeft} dias restantes
+                              </span>
+                            </div>
+                          </button>
+
+                          {/* Notifications */}
+                          <button
+                            onClick={() => { soundService.requestPermission(); setShowDriverMenu(false); }}
+                            className="flex items-center gap-3 px-3 py-3 hover:bg-gray-700/50 rounded-lg transition text-white text-sm"
+                          >
+                            <span className="material-icons text-blue-400">notifications_active</span>
+                            Ativar Sons
+                          </button>
+
+                          <div className="h-[1px] bg-gray-600 my-1"></div>
+
+                          {/* Logout */}
+                          <button
+                            onClick={handleLogout}
+                            className="flex items-center gap-3 px-3 py-3 hover:bg-red-900/30 rounded-lg transition text-red-400 text-sm"
+                          >
+                            <span className="material-icons">logout</span>
+                            Sair
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </>
+              ) : (
+                /* CLIENT BUTTONS (Keep simple or group if needed, but request was for Driver) */
+                <>
                   <button
-                    onClick={() => soundService.requestPermission()}
-                    className="bg-blue-600 hover:bg-blue-500 text-white p-2 rounded-full transition flex items-center justify-center"
-                    title="Ativar Sinos (Notificações)"
+                    onClick={() => setShowCalculator(true)}
+                    className="bg-blue-600 hover:bg-blue-500 text-white p-2 rounded-full transition flex items-center justify-center shadow-lg"
+                    title="Simular Corrida"
                   >
-                    <span className="material-icons text-sm">notifications_active</span>
+                    <span className="material-icons text-sm">calculate</span>
                   </button>
+                  <button
+                    onClick={() => setShowBingo(true)}
+                    className="bg-purple-700 hover:bg-purple-600 text-white p-2 rounded-full transition flex items-center justify-center animate-pulse shadow-lg"
+                    title="Jogar Bingo"
+                  >
+                    <span className="material-icons text-sm">casino</span>
+                  </button>
+                  <button className="p-2 rounded-full hover:bg-red-900/30 hover:text-red-400 transition" title="Sair" onClick={handleLogout}><span className="material-icons">logout</span></button>
                 </>
               )}
-              <button className="p-2 rounded-full hover:bg-red-900/30 hover:text-red-400 transition" title="Sair" onClick={handleLogout}><span className="material-icons">logout</span></button>
             </div>
           </div>
 

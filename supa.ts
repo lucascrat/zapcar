@@ -179,9 +179,56 @@ COMMIT;
 
 
 -- =================================================================================
--- 8. REALTIME (HABILITAR OUVINTES)
+-- 8. TABELAS DE PLANOS E ASSINATURAS (DRIVER PLANS & SUBSCRIPTIONS)
 -- =================================================================================
--- Remove publicação antiga e recria para garantir que todas as tabelas estejam incluídas
+CREATE TABLE IF NOT EXISTS public.driver_plans (
+    id TEXT PRIMARY KEY, -- ID manual (ex: 'basic', 'pro') ou UUID
+    title TEXT NOT NULL,
+    description TEXT,
+    price NUMERIC NOT NULL,
+    days INTEGER NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS public.subscriptions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE,
+    plan_id TEXT REFERENCES public.driver_plans(id),
+    start_date DATE DEFAULT CURRENT_DATE,
+    next_billing_date DATE,
+    active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- =================================================================================
+-- 9. SEGURANÇA (RLS) - ATUALIZAÇÃO
+-- =================================================================================
+ALTER TABLE public.driver_plans ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.subscriptions ENABLE ROW LEVEL SECURITY;
+
+BEGIN;
+  -- Políticas para driver_plans (Público pode ler, Admin pode tudo)
+  DROP POLICY IF EXISTS "Public read access" ON public.driver_plans;
+  DROP POLICY IF EXISTS "Admin full access" ON public.driver_plans;
+  
+  CREATE POLICY "Public read access" ON public.driver_plans FOR SELECT USING (true);
+  CREATE POLICY "Admin full access" ON public.driver_plans FOR ALL USING (true) WITH CHECK (true); -- Simplificado para demo
+
+  -- Políticas para subscriptions (Usuário vê/edita as suas)
+  DROP POLICY IF EXISTS "subscriptions_select" ON public.subscriptions;
+  DROP POLICY IF EXISTS "subscriptions_insert" ON public.subscriptions;
+  DROP POLICY IF EXISTS "subscriptions_update_user" ON public.subscriptions;
+  DROP POLICY IF EXISTS "subscriptions_delete" ON public.subscriptions;
+
+  CREATE POLICY "subscriptions_select" ON public.subscriptions FOR SELECT USING (auth.uid() = user_id);
+  CREATE POLICY "subscriptions_insert" ON public.subscriptions FOR INSERT WITH CHECK (auth.uid() = user_id);
+  CREATE POLICY "subscriptions_update_user" ON public.subscriptions FOR UPDATE USING (auth.uid() = user_id);
+  CREATE POLICY "subscriptions_delete" ON public.subscriptions FOR DELETE USING (auth.uid() = user_id);
+COMMIT;
+
+-- =================================================================================
+-- 10. REALTIME (ATUALIZAR OUVINTES)
+-- =================================================================================
 BEGIN;
   DROP PUBLICATION IF EXISTS supabase_realtime;
   CREATE PUBLICATION supabase_realtime FOR TABLE 
@@ -190,7 +237,9 @@ BEGIN;
     app_settings, 
     bingo_settings, 
     bingo_cards, 
-    broadcasts;
+    broadcasts,
+    driver_plans,
+    subscriptions;
 COMMIT;
 
 `;

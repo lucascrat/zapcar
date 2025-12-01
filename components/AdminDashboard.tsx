@@ -5,6 +5,7 @@ import { UserProfile, DriverStatus, CallRecord, AppSettings, Message, BingoSetti
 import { soundService } from '../services/soundService';
 import { checkSubscriptionStatus } from '../services/paymentService';
 import { ChatWindow } from './ChatWindow'; // Importar ChatWindow
+import { PlansManager } from './PlansManager'; // Importar PlansManager
 
 interface AdminDashboardProps {
     currentUser: UserProfile;
@@ -248,32 +249,28 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onL
         };
     }, [activeTab, selectedDriver]);
 
-    // Real-time location simulation (Updates the existing map)
+    // Real-time location update (From DB)
     useEffect(() => {
-        if (activeTab === 'map' && selectedDriver && window.google) {
-            const interval = setInterval(() => {
-                setDriverLocation(prev => {
-                    if (!prev) return null;
-                    // Move slightly
-                    const newLat = prev.lat + (Math.random() * 0.0002 - 0.0001);
-                    const newLng = prev.lng + (Math.random() * 0.0002 - 0.0001);
+        if (activeTab === 'map' && selectedDriver && window.google && drivers.length > 0) {
+            const updatedDriver = drivers.find(d => d.id === selectedDriver.id);
 
-                    // Update Google Marker Position
-                    if (markerRef.current) {
-                        const newPos = new window.google.maps.LatLng(newLat, newLng);
-                        markerRef.current.setPosition(newPos);
-                        if (mapInstanceRef.current) {
-                            mapInstanceRef.current.panTo(newPos);
-                        }
+            if (updatedDriver && updatedDriver.lat && updatedDriver.lng) {
+                const newLat = updatedDriver.lat;
+                const newLng = updatedDriver.lng;
+
+                setDriverLocation({ lat: newLat, lng: newLng });
+
+                // Update Google Marker Position
+                if (markerRef.current) {
+                    const newPos = new window.google.maps.LatLng(newLat, newLng);
+                    markerRef.current.setPosition(newPos);
+                    if (mapInstanceRef.current) {
+                        mapInstanceRef.current.panTo(newPos);
                     }
-
-                    return { lat: newLat, lng: newLng };
-                });
-            }, 3000); // Update every 3 seconds
-
-            return () => clearInterval(interval);
+                }
+            }
         }
-    }, [activeTab, selectedDriver]);
+    }, [drivers, activeTab, selectedDriver]);
 
 
     const loadDrivers = async () => {
@@ -579,6 +576,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onL
                             <span className="material-icons text-sm">casino</span> Bingo
                         </button>
                         <button
+                            onClick={() => { setActiveTab('plans'); setSelectedDriver(null); setShowDetailMobile(true); }}
+                            className="py-2 bg-green-100 hover:bg-green-200 rounded-lg text-xs font-medium text-green-700 flex items-center justify-center gap-2"
+                        >
+                            <span className="material-icons text-sm">monetization_on</span> Planos
+                        </button>
+                        <button
                             onClick={() => { setActiveTab('notifications'); setSelectedDriver(null); setShowDetailMobile(true); }}
                             className="col-span-2 py-3 bg-blue-50 hover:bg-blue-100 rounded-lg text-xs font-bold text-blue-700 flex items-center justify-center gap-2 border border-blue-200"
                         >
@@ -781,6 +784,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onL
                             </div>
                         </div>
                     </div>
+                ) : activeTab === 'plans' ? (
+                    <PlansManager onClose={() => setActiveTab('details')} />
                 ) : activeTab === 'bingo' && !selectedDriver ? (
                     <div className="max-w-4xl mx-auto p-4 md:p-8">
                         {/* Mobile Back Button */}
@@ -1094,7 +1099,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onL
                                             ) : (
                                                 <div className="flex items-center gap-2 mt-1">
                                                     <span className={`px-2 py-0.5 rounded text-xs font-medium uppercase ${selectedDriver.status === 'available' ? 'bg-green-100 text-green-800' :
-                                                            selectedDriver.status === 'busy' ? 'bg-red-100 text-red-800' : 'bg-gray-100 text-gray-800'
+                                                        selectedDriver.status === 'busy' ? 'bg-red-100 text-red-800' : 'bg-gray-100 text-gray-800'
                                                         }`}>
                                                         {selectedDriver.status}
                                                     </span>
@@ -1127,8 +1132,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onL
                                             <button
                                                 onClick={toggleCall}
                                                 className={`flex items-center gap-2 px-3 py-2 rounded-lg transition whitespace-nowrap shadow-md ${isCalling
-                                                        ? 'bg-red-500 text-white animate-pulse ring-4 ring-red-200'
-                                                        : 'bg-blue-600 text-white hover:bg-blue-700'
+                                                    ? 'bg-red-500 text-white animate-pulse ring-4 ring-red-200'
+                                                    : 'bg-blue-600 text-white hover:bg-blue-700'
                                                     }`}
                                             >
                                                 <span className={`material-icons text-sm ${isCalling ? 'animate-bounce' : ''}`}>
@@ -1229,12 +1234,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onL
                                                             onClick={() => handleStatusChange(status)}
                                                             disabled={selectedDriver.status === status}
                                                             className={`w-full p-3 rounded-lg border text-left flex items-center transition ${selectedDriver.status === status
-                                                                    ? 'border-blue-500 bg-blue-50 ring-1 ring-blue-500 relative z-10'
-                                                                    : 'border-gray-200 hover:border-gray-300 bg-white'
+                                                                ? 'border-blue-500 bg-blue-50 ring-1 ring-blue-500 relative z-10'
+                                                                : 'border-gray-200 hover:border-gray-300 bg-white'
                                                                 } ${selectedDriver.status === status ? 'opacity-100' : 'opacity-80 hover:opacity-100'}`}
                                                         >
                                                             <div className={`w-3 h-3 rounded-full mr-3 shrink-0 ${status === DriverStatus.AVAILABLE ? 'bg-green-500' :
-                                                                    status === DriverStatus.BUSY ? 'bg-red-500' : 'bg-gray-500'
+                                                                status === DriverStatus.BUSY ? 'bg-red-500' : 'bg-gray-500'
                                                                 }`}></div>
                                                             <span className="flex-1 font-medium text-gray-700 capitalize text-sm">
                                                                 {status === DriverStatus.AVAILABLE ? 'Disponível' : status === DriverStatus.BUSY ? 'Ocupado' : 'Offline'}
@@ -1392,7 +1397,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onL
                                                         <td className="p-4">
                                                             <div className="flex items-center gap-2">
                                                                 <span className={`material-icons text-sm ${call.status === 'missed' ? 'text-red-500' :
-                                                                        call.direction === 'incoming' ? 'text-green-500' : 'text-blue-500'
+                                                                    call.direction === 'incoming' ? 'text-green-500' : 'text-blue-500'
                                                                     }`}>
                                                                     {call.status === 'missed' ? 'call_missed' :
                                                                         call.direction === 'incoming' ? 'call_received' : 'call_made'}
@@ -1420,6 +1425,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onL
                     )
                 )}
             </div>
-        </div>
+        </div >
     );
 }

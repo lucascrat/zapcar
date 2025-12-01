@@ -1,35 +1,56 @@
 import React, { useState, useEffect } from 'react';
-import { DRIVER_PLANS } from '../constants';
-
-interface DriverPlan {
-    id: string;
-    title: string;
-    description: string;
-    price: number;
-    days: number;
-}
+import { fetchDriverPlans, updateDriverPlan, supabase } from '../services/supabaseClient';
+import { DriverPlan } from '../types';
 
 interface PlansManagerProps {
     onClose: () => void;
 }
 
 export const PlansManager: React.FC<PlansManagerProps> = ({ onClose }) => {
-    const [plans, setPlans] = useState<DriverPlan[]>(DRIVER_PLANS);
+    const [plans, setPlans] = useState<DriverPlan[]>([]);
     const [editingPlan, setEditingPlan] = useState<DriverPlan | null>(null);
-    const [isSaving, setIsSaving] = useState(false);
+    const [isLoading, setIsLoading] = useState(true);
+
+    useEffect(() => {
+        loadPlans();
+
+        // Real-time updates for plans
+        const sub = supabase
+            .channel('public:driver_plans')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'driver_plans' }, () => {
+                loadPlans();
+            })
+            .subscribe();
+
+        return () => {
+            sub.unsubscribe();
+        };
+    }, []);
+
+    const loadPlans = async () => {
+        setIsLoading(true);
+        const data = await fetchDriverPlans();
+        setPlans(data);
+        setIsLoading(false);
+    };
 
     const handleEditPlan = (plan: DriverPlan) => {
         setEditingPlan({ ...plan });
     };
 
-    const handleSavePlan = () => {
+    const handleSavePlan = async () => {
         if (!editingPlan) return;
 
-        setPlans(prev => prev.map(p =>
-            p.id === editingPlan.id ? editingPlan : p
-        ));
-        setEditingPlan(null);
-        alert('Plano atualizado! (Nota: Esta alteração é apenas local. Para persistir, será necessário atualizar o arquivo constants.ts)');
+        const success = await updateDriverPlan(editingPlan);
+        if (success) {
+            setPlans(prev => prev.map(p =>
+                p.id === editingPlan.id ? editingPlan : p
+            ));
+            setEditingPlan(null);
+            alert('Plano atualizado com sucesso!');
+        } else {
+            alert('Erro ao atualizar plano.');
+        }
     };
 
     const handleCancelEdit = () => {
@@ -58,53 +79,42 @@ export const PlansManager: React.FC<PlansManagerProps> = ({ onClose }) => {
 
                 {/* Content */}
                 <div className="flex-1 overflow-y-auto p-6">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {plans.map(plan => (
-                            <div
-                                key={plan.id}
-                                className="bg-whatsapp-panel rounded-lg p-6 border border-gray-700 hover:border-green-600 transition"
-                            >
-                                <div className="flex items-start justify-between mb-4">
-                                    <div>
-                                        <h3 className="text-lg font-bold text-white">{plan.title}</h3>
-                                        <p className="text-gray-400 text-sm">{plan.description}</p>
+                    {isLoading ? (
+                        <div className="text-center text-white p-8">Carregando planos...</div>
+                    ) : (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {plans.map(plan => (
+                                <div
+                                    key={plan.id}
+                                    className="bg-whatsapp-panel rounded-lg p-6 border border-gray-700 hover:border-green-600 transition"
+                                >
+                                    <div className="flex items-start justify-between mb-4">
+                                        <div>
+                                            <h3 className="text-lg font-bold text-white">{plan.title}</h3>
+                                            <p className="text-gray-400 text-sm">{plan.description}</p>
+                                        </div>
+                                        <button
+                                            onClick={() => handleEditPlan(plan)}
+                                            className="text-blue-400 hover:text-blue-300 transition"
+                                        >
+                                            <span className="material-icons">edit</span>
+                                        </button>
                                     </div>
-                                    <button
-                                        onClick={() => handleEditPlan(plan)}
-                                        className="text-blue-400 hover:text-blue-300 transition"
-                                    >
-                                        <span className="material-icons">edit</span>
-                                    </button>
-                                </div>
 
-                                <div className="flex items-baseline gap-2 mb-2">
-                                    <span className="text-3xl font-bold text-green-500">
-                                        R$ {plan.price.toFixed(2)}
-                                    </span>
-                                    <span className="text-gray-400">/ {plan.days} {plan.days === 1 ? 'dia' : 'dias'}</span>
-                                </div>
+                                    <div className="flex items-baseline gap-2 mb-2">
+                                        <span className="text-3xl font-bold text-green-500">
+                                            R$ {plan.price.toFixed(2)}
+                                        </span>
+                                        <span className="text-gray-400">/ {plan.days} {plan.days === 1 ? 'dia' : 'dias'}</span>
+                                    </div>
 
-                                <div className="text-sm text-gray-500">
-                                    ID: {plan.id}
+                                    <div className="text-sm text-gray-500">
+                                        ID: {plan.id}
+                                    </div>
                                 </div>
-                            </div>
-                        ))}
-                    </div>
-
-                    {/* Nota Informativa */}
-                    <div className="mt-6 p-4 bg-yellow-900/20 border border-yellow-700 rounded-lg">
-                        <div className="flex gap-3">
-                            <span className="material-icons text-yellow-500">info</span>
-                            <div className="flex-1">
-                                <h4 className="font-bold text-yellow-500 mb-1">Nota Importante</h4>
-                                <p className="text-sm text-gray-300">
-                                    Atualmente, os planos são definidos no arquivo <code className="bg-black/30 px-2 py-1 rounded">constants.ts</code>.
-                                    Para persistir alterações, você precisará atualizar manualmente esse arquivo e fazer o deploy.
-                                    Em uma versão futura, os planos serão armazenados no banco de dados.
-                                </p>
-                            </div>
+                            ))}
                         </div>
-                    </div>
+                    )}
                 </div>
             </div>
 
