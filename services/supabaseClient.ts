@@ -665,7 +665,7 @@ export const subscribeToProfiles = (
     .channel('public:profiles')
     .on(
       'postgres_changes',
-      { event: '*', schema: 'public', table: 'profiles' },
+      { event: 'INSERT', schema: 'public', table: 'profiles' }, // Apenas novos registros
       () => {
         onUpdate();
       }

@@ -73,12 +73,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onL
 
         // Subscribe to profile changes (Real-time updates for new drivers)
         console.log("Admin assinando updates de perfil...");
+
+        // Debounce para evitar múltiplos recarregamentos
+        let debounceTimer: any = null;
+
         const sub = subscribeToProfiles(() => {
             console.log("Recebido update de perfil em tempo real");
-            loadDrivers(); // Reload list when profiles change
+
+            // Limpa timer anterior
+            if (debounceTimer) clearTimeout(debounceTimer);
+
+            // Aguarda 500ms antes de recarregar
+            debounceTimer = setTimeout(() => {
+                loadDrivers(); // Reload list when profiles change
+            }, 500);
         });
 
         return () => {
+            if (debounceTimer) clearTimeout(debounceTimer);
             sub.unsubscribe();
             soundService.stopAdminCallSound();
         };
