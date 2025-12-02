@@ -24,7 +24,7 @@ export const DRIVER_PLANS = [
         id: 'plan_24h',
         title: 'Plano Diário',
         description: 'Acesso total por 24 horas',
-        price: 5.00,
+        price: 10.00,
         days: 1
     },
     {
