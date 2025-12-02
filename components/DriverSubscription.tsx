@@ -1,8 +1,8 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { DRIVER_PLANS } from '../constants';
+import { fetchDriverPlans } from '../services/supabaseClient';
 import { createPixPayment, getPaymentStatus, activatePlan } from '../services/paymentService';
-import { UserProfile, PayerFormData, PixPaymentResponse } from '../types';
+import { UserProfile, PayerFormData, PixPaymentResponse, DriverPlan } from '../types';
 
 interface DriverSubscriptionProps {
     currentUser: UserProfile;
@@ -16,7 +16,9 @@ export const DriverSubscription: React.FC<DriverSubscriptionProps> = ({ currentU
     const [step, setStep] = useState<Step>('select_plan');
     const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(false);
-    
+    const [plans, setPlans] = useState<DriverPlan[]>([]);
+    const [isLoadingPlans, setIsLoadingPlans] = useState(true);
+
     // Form Data
     const [formData, setFormData] = useState<PayerFormData>({
         firstName: currentUser.username.split(' ')[0] || '',
@@ -28,6 +30,17 @@ export const DriverSubscription: React.FC<DriverSubscriptionProps> = ({ currentU
     // Pix Data
     const [pixData, setPixData] = useState<PixPaymentResponse | null>(null);
     const pollingInterval = useRef<any>(null);
+
+    // Carregar planos do Supabase
+    useEffect(() => {
+        const loadPlans = async () => {
+            setIsLoadingPlans(true);
+            const data = await fetchDriverPlans();
+            setPlans(data);
+            setIsLoadingPlans(false);
+        };
+        loadPlans();
+    }, []);
 
     // Limpar polling ao desmontar
     useEffect(() => {
@@ -42,7 +55,7 @@ export const DriverSubscription: React.FC<DriverSubscriptionProps> = ({ currentU
             pollingInterval.current = setInterval(async () => {
                 const status = await getPaymentStatus(pixData.id);
                 console.log("Status Pagamento:", status);
-                
+
                 if (status === 'approved') {
                     clearInterval(pollingInterval.current);
                     setIsLoading(true);
@@ -120,8 +133,8 @@ export const DriverSubscription: React.FC<DriverSubscriptionProps> = ({ currentU
                 {/* HEADER */}
                 <div className={`${isBlocked ? 'bg-red-600' : 'bg-blue-600'} p-4 text-white shrink-0 flex items-center shadow-md relative`}>
                     {/* Botão Voltar (Esquerda) */}
-                    <button 
-                        onClick={handleBack} 
+                    <button
+                        onClick={handleBack}
                         className={`mr-3 p-2 rounded-full hover:bg-white/20 transition ${isBlocked && step === 'select_plan' ? 'invisible' : ''}`}
                     >
                         <span className="material-icons">arrow_back</span>
@@ -139,7 +152,7 @@ export const DriverSubscription: React.FC<DriverSubscriptionProps> = ({ currentU
                             {!isBlocked && step === 'success' && "Sucesso!"}
                         </p>
                     </div>
-                    
+
                     {/* Botão Fechar (Direita) - Apenas se não bloqueado */}
                     {!isBlocked && (
                         <button onClick={onClose} className="p-2 hover:bg-white/20 rounded-full transition ml-2">
@@ -149,39 +162,50 @@ export const DriverSubscription: React.FC<DriverSubscriptionProps> = ({ currentU
                 </div>
 
                 <div className="p-4 md:p-6 overflow-y-auto bg-gray-50 flex-1 custom-scrollbar">
-                    
+
                     {/* STEP 1: SELECT PLAN */}
                     {step === 'select_plan' && (
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                            {DRIVER_PLANS.map(plan => (
-                                <div key={plan.id} className="bg-white rounded-xl shadow-md border border-gray-200 overflow-hidden flex flex-col hover:shadow-xl transition-shadow relative">
-                                    {plan.id === 'plan_30d' && (
-                                        <div className="absolute top-0 right-0 bg-yellow-400 text-yellow-900 text-[10px] font-bold px-2 py-1 rounded-bl-lg shadow-sm">
-                                            MELHOR VALOR
+                        isLoadingPlans ? (
+                            <div className="text-center py-12">
+                                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                                <p className="text-gray-600">Carregando planos...</p>
+                            </div>
+                        ) : plans.length === 0 ? (
+                            <div className="text-center py-12">
+                                <p className="text-gray-600">Nenhum plano disponível no momento.</p>
+                            </div>
+                        ) : (
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                                {plans.map(plan => (
+                                    <div key={plan.id} className="bg-white rounded-xl shadow-md border border-gray-200 overflow-hidden flex flex-col hover:shadow-xl transition-shadow relative">
+                                        {plan.id === 'plan_30d' && (
+                                            <div className="absolute top-0 right-0 bg-yellow-400 text-yellow-900 text-[10px] font-bold px-2 py-1 rounded-bl-lg shadow-sm">
+                                                MELHOR VALOR
+                                            </div>
+                                        )}
+                                        <div className="p-6 flex-1 text-center">
+                                            <h3 className="font-bold text-gray-800 text-lg mb-2">{plan.title}</h3>
+                                            <div className="text-3xl font-bold text-blue-600 mb-2">
+                                                R$ {plan.price.toFixed(2).replace('.', ',')}
+                                            </div>
+                                            <p className="text-gray-500 text-sm mb-4">{plan.description}</p>
+                                            <div className="text-xs text-gray-400 font-mono">
+                                                R$ {(plan.price / plan.days).toFixed(2)} / dia
+                                            </div>
                                         </div>
-                                    )}
-                                    <div className="p-6 flex-1 text-center">
-                                        <h3 className="font-bold text-gray-800 text-lg mb-2">{plan.title}</h3>
-                                        <div className="text-3xl font-bold text-blue-600 mb-2">
-                                            R$ {plan.price.toFixed(2).replace('.', ',')}
-                                        </div>
-                                        <p className="text-gray-500 text-sm mb-4">{plan.description}</p>
-                                        <div className="text-xs text-gray-400 font-mono">
-                                            R$ {(plan.price / plan.days).toFixed(2)} / dia
+                                        <div className="p-4 bg-gray-50 border-t border-gray-100">
+                                            <button
+                                                onClick={() => handleSelectPlan(plan.id)}
+                                                className="w-full py-3 rounded-lg font-bold text-white shadow-md transition flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 active:scale-95"
+                                            >
+                                                Selecionar
+                                                <span className="material-icons text-sm">arrow_forward</span>
+                                            </button>
                                         </div>
                                     </div>
-                                    <div className="p-4 bg-gray-50 border-t border-gray-100">
-                                        <button 
-                                            onClick={() => handleSelectPlan(plan.id)}
-                                            className="w-full py-3 rounded-lg font-bold text-white shadow-md transition flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 active:scale-95"
-                                        >
-                                            Selecionar
-                                            <span className="material-icons text-sm">arrow_forward</span>
-                                        </button>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
+                                ))}
+                            </div>
+                        )
                     )}
 
                     {/* STEP 2: ENTER DATA */}
@@ -191,20 +215,20 @@ export const DriverSubscription: React.FC<DriverSubscriptionProps> = ({ currentU
                             <div className="space-y-4">
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-1">E-mail</label>
-                                    <input 
-                                        type="email" 
+                                    <input
+                                        type="email"
                                         value={formData.email}
-                                        onChange={e => setFormData({...formData, email: e.target.value})}
+                                        onChange={e => setFormData({ ...formData, email: e.target.value })}
                                         className="w-full p-3 border border-gray-300 rounded-lg outline-none focus:ring-2 ring-blue-500"
                                         placeholder="seu@email.com"
                                     />
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-1">CPF</label>
-                                    <input 
-                                        type="text" 
+                                    <input
+                                        type="text"
                                         value={formData.cpf}
-                                        onChange={e => setFormData({...formData, cpf: formatCPF(e.target.value)})}
+                                        onChange={e => setFormData({ ...formData, cpf: formatCPF(e.target.value) })}
                                         className="w-full p-3 border border-gray-300 rounded-lg outline-none focus:ring-2 ring-blue-500"
                                         placeholder="000.000.000-00"
                                         maxLength={14}
@@ -213,19 +237,19 @@ export const DriverSubscription: React.FC<DriverSubscriptionProps> = ({ currentU
                                 <div className="grid grid-cols-2 gap-4">
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700 mb-1">Nome</label>
-                                        <input 
-                                            type="text" 
+                                        <input
+                                            type="text"
                                             value={formData.firstName}
-                                            onChange={e => setFormData({...formData, firstName: e.target.value})}
+                                            onChange={e => setFormData({ ...formData, firstName: e.target.value })}
                                             className="w-full p-3 border border-gray-300 rounded-lg outline-none focus:ring-2 ring-blue-500"
                                         />
                                     </div>
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700 mb-1">Sobrenome</label>
-                                        <input 
-                                            type="text" 
+                                        <input
+                                            type="text"
                                             value={formData.lastName}
-                                            onChange={e => setFormData({...formData, lastName: e.target.value})}
+                                            onChange={e => setFormData({ ...formData, lastName: e.target.value })}
                                             className="w-full p-3 border border-gray-300 rounded-lg outline-none focus:ring-2 ring-blue-500"
                                         />
                                     </div>
@@ -233,8 +257,8 @@ export const DriverSubscription: React.FC<DriverSubscriptionProps> = ({ currentU
                             </div>
                             <div className="mt-6 flex gap-3">
                                 <button onClick={() => setStep('select_plan')} className="flex-1 py-3 text-gray-600 bg-gray-100 rounded-lg font-bold">Voltar</button>
-                                <button 
-                                    onClick={handleGeneratePix} 
+                                <button
+                                    onClick={handleGeneratePix}
                                     disabled={isLoading}
                                     className="flex-[2] py-3 text-white bg-blue-600 hover:bg-blue-700 rounded-lg font-bold flex items-center justify-center gap-2"
                                 >
@@ -251,14 +275,14 @@ export const DriverSubscription: React.FC<DriverSubscriptionProps> = ({ currentU
                             <div className="bg-green-100 text-green-800 px-4 py-2 rounded-full text-xs font-bold inline-flex items-center gap-2 mb-4 animate-pulse">
                                 <span className="material-icons text-sm">hourglass_empty</span> Aguardando Pagamento...
                             </div>
-                            
+
                             <h3 className="font-bold text-gray-800 mb-2">Escaneie o QR Code</h3>
                             <p className="text-gray-500 text-xs mb-4">Abra o app do seu banco e escolha "Pagar com Pix"</p>
-                            
+
                             <div className="bg-gray-100 p-2 rounded-lg inline-block mb-4 border border-gray-300">
-                                <img 
-                                    src={`data:image/png;base64,${pixData.point_of_interaction.transaction_data.qr_code_base64}`} 
-                                    alt="QR Code Pix" 
+                                <img
+                                    src={`data:image/png;base64,${pixData.point_of_interaction.transaction_data.qr_code_base64}`}
+                                    alt="QR Code Pix"
                                     className="w-48 h-48 md:w-56 md:h-56 object-contain"
                                 />
                             </div>
@@ -266,8 +290,8 @@ export const DriverSubscription: React.FC<DriverSubscriptionProps> = ({ currentU
                             <div className="mb-4">
                                 <p className="text-xs text-gray-500 mb-1">Ou use o Copia e Cola:</p>
                                 <div className="flex gap-2">
-                                    <input 
-                                        readOnly 
+                                    <input
+                                        readOnly
                                         value={pixData.point_of_interaction.transaction_data.qr_code}
                                         className="flex-1 bg-gray-100 border border-gray-300 rounded px-2 text-xs text-gray-600 outline-none"
                                     />
@@ -276,7 +300,7 @@ export const DriverSubscription: React.FC<DriverSubscriptionProps> = ({ currentU
                                     </button>
                                 </div>
                             </div>
-                            
+
                             <button onClick={() => setStep('enter_data')} className="text-gray-400 text-xs hover:text-gray-600 underline">
                                 Cancelar / Voltar
                             </button>
@@ -291,10 +315,10 @@ export const DriverSubscription: React.FC<DriverSubscriptionProps> = ({ currentU
                             </div>
                             <h2 className="text-2xl font-bold text-gray-800 mb-2">Pagamento Aprovado!</h2>
                             <p className="text-gray-600 mb-6">Sua assinatura foi ativada com sucesso. Você já pode ficar online e aceitar corridas.</p>
-                            <button 
-                                onClick={() => { 
-                                    if(onClose) onClose(); 
-                                    window.location.reload(); 
+                            <button
+                                onClick={() => {
+                                    if (onClose) onClose();
+                                    window.location.reload();
                                 }}
                                 className="w-full py-3 bg-green-600 hover:bg-green-700 text-white font-bold rounded-lg shadow-lg"
                             >

@@ -1,19 +1,20 @@
 
-import { DRIVER_PLANS, MP_ACCESS_TOKEN } from '../constants';
-import { supabase } from './supabaseClient';
+import { MP_ACCESS_TOKEN } from '../constants';
+import { supabase, fetchDriverPlans } from './supabaseClient';
 import { UserProfile, PayerFormData, PixPaymentResponse } from '../types';
 
 // --- FALLBACK METHODS (Direct API via Proxy) ---
 // Usados quando a Edge Function não está implantada ou falha
 
 const createPixPaymentDirect = async (
-    planId: string, 
-    user: UserProfile, 
+    planId: string,
+    user: UserProfile,
     payerData: PayerFormData
 ): Promise<PixPaymentResponse> => {
     console.log("Usando método de pagamento: Fallback (Proxy)");
-    
-    const plan = DRIVER_PLANS.find(p => p.id === planId);
+
+    const plans = await fetchDriverPlans();
+    const plan = plans.find(p => p.id === planId);
     if (!plan) throw new Error("Plano inválido");
 
     const cleanCpf = payerData.cpf.replace(/\D/g, '');
@@ -75,11 +76,11 @@ const getPaymentStatusDirect = async (paymentId: number): Promise<string> => {
 // --- MAIN EXPORTED METHODS ---
 
 export const createPixPayment = async (
-    planId: string, 
-    user: UserProfile, 
+    planId: string,
+    user: UserProfile,
     payerData: PayerFormData
 ): Promise<PixPaymentResponse | null> => {
-    
+
     // Tenta Edge Function Primeiro
     try {
         const { data, error } = await supabase.functions.invoke('payment-manager', {
@@ -93,7 +94,7 @@ export const createPixPayment = async (
 
         if (error) throw error; // Força cair no catch se der erro na function
         if (data.error) throw new Error(data.error);
-        
+
         if (data.id && data.point_of_interaction) {
             return data as PixPaymentResponse;
         } else {
@@ -131,13 +132,14 @@ export const getPaymentStatus = async (paymentId: number): Promise<string> => {
 };
 
 export const activatePlan = async (userId: string, planId: string): Promise<boolean> => {
-    const plan = DRIVER_PLANS.find(p => p.id === planId);
+    const plans = await fetchDriverPlans();
+    const plan = plans.find(p => p.id === planId);
     if (!plan) return false;
 
     const now = new Date();
-    
+
     const { data: user, error: fetchError } = await supabase.from('profiles').select('subscription_expires_at').eq('id', userId).single();
-    
+
     if (fetchError) {
         if (fetchError.code === '42703') {
             console.error("CRITICAL DB ERROR: Column 'subscription_expires_at' missing.", fetchError);
@@ -147,7 +149,7 @@ export const activatePlan = async (userId: string, planId: string): Promise<bool
         }
         return false;
     }
-    
+
     let baseDate = now;
     if (user && user.subscription_expires_at) {
         const currentExpire = new Date(user.subscription_expires_at);
@@ -170,19 +172,19 @@ export const activatePlan = async (userId: string, planId: string): Promise<bool
         alert("Erro ao salvar assinatura. Tente novamente.");
         return false;
     }
-    
+
     return true;
 };
 
 export const checkSubscriptionStatus = (expiresAt?: string): { isValid: boolean, daysLeft: number } => {
     if (!expiresAt) return { isValid: false, daysLeft: 0 };
-    
+
     const now = new Date();
     const expire = new Date(expiresAt);
-    
+
     const diffTime = expire.getTime() - now.getTime();
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    
+
     return {
         isValid: diffTime > 0,
         daysLeft: diffDays > 0 ? diffDays : 0
