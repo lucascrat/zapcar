@@ -1088,10 +1088,10 @@ export default function App() {
                   </button>
                   <button
                     onClick={() => setShowBingo(true)}
-                    className="bg-purple-700 hover:bg-purple-600 text-white p-2 rounded-full transition flex items-center justify-center animate-pulse shadow-lg"
-                    title="Jogar Bingo"
+                    className="bg-gradient-to-r from-yellow-500 via-orange-500 to-red-500 text-white p-2 rounded-full transition flex items-center justify-center animate-bounce shadow-lg ring-2 ring-yellow-400 ring-offset-2 ring-offset-whatsapp-panel"
+                    title="Jogar Bingo - Ganhe Prêmios!"
                   >
-                    <span className="material-icons text-sm">casino</span>
+                    <span className="material-icons text-sm font-bold drop-shadow-md">emoji_events</span>
                   </button>
                   <button className="p-2 rounded-full hover:bg-red-900/30 hover:text-red-400 transition" title="Sair" onClick={handleLogout}><span className="material-icons">logout</span></button>
                 </>
