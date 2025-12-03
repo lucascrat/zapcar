@@ -877,3 +877,45 @@ export const loginDriver = async (username: string, password?: string): Promise<
     return null;
   }
 };
+
+export const checkUserExists = async (field: 'username' | 'phone', value: string): Promise<boolean> => {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id')
+    .eq(field, value)
+    .maybeSingle();
+
+  if (error) {
+    console.warn(`Error checking ${field} existence:`, error);
+    return false;
+  }
+
+  return !!data;
+};
+
+export const updateUserAvatar = async (userId: string, avatarFile: File): Promise<string | null> => {
+  try {
+    const ext = avatarFile.name.split('.').pop() || 'jpg';
+    const url = await uploadFile(avatarFile, 'images', ext);
+
+    if (!url) {
+      console.error("Failed to upload avatar file");
+      return null;
+    }
+
+    const { error } = await supabase
+      .from('profiles')
+      .update({ avatar_url: url })
+      .eq('id', userId);
+
+    if (error) {
+      handleDbError(error, "updateUserAvatar");
+      return null;
+    }
+
+    return url;
+  } catch (e) {
+    handleDbError(e, "updateUserAvatar_EXCEPTION");
+    return null;
+  }
+};

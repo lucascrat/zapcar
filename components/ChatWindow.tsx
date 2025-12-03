@@ -1,4 +1,4 @@
-
+﻿
 import React, { useState, useEffect, useRef } from 'react';
 import { Message, UserProfile, UserRole } from '../types';
 import { AudioRecorder } from './AudioRecorder';
@@ -6,6 +6,7 @@ import { AudioMessage } from './AudioMessage';
 import { sendMessage, generateUUID, uploadFile, supabase, updateUserLocation } from '../services/supabaseClient';
 import { generateSmartReply, analyzeImage } from '../services/geminiService';
 import { soundService } from '../services/soundService';
+import { AdBanner } from './AdBanner';
 import { Taximeter } from './Taximeter';
 
 interface ChatWindowProps {
@@ -13,7 +14,7 @@ interface ChatWindowProps {
   chatPartner: UserProfile | null;
   messages: Message[];
   onSendMessage: (msg: Message) => void;
-  onBack?: () => void; // Prop para navegação de voltar
+  onBack?: () => void; // Prop para navegaÃ§Ã£o de voltar
 }
 
 export const ChatWindow: React.FC<ChatWindowProps> = ({ currentUser, chatPartner, messages, onSendMessage, onBack }) => {
@@ -48,6 +49,8 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ currentUser, chatPartner
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+
 
   // Cleanup on unmount (Calls & Ringtones)
   useEffect(() => {
@@ -197,11 +200,11 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ currentUser, chatPartner
   const startCall = async () => {
     if (!chatPartner) return;
 
-    // --- LÓGICA DE ALERTA PRÉ-CHAMADA (WAKE UP) ---
+    // --- LÃ“GICA DE ALERTA PRÃ‰-CHAMADA (WAKE UP) ---
     // 1. Envia mensagem de texto para "acordar" o app do motorista (Auto-Open)
     const alertText = currentUser.role === UserRole.CLIENT
-      ? "📞 Cliente ligando..."
-      : "📞 Motorista ligando...";
+      ? "ðŸ“ž Cliente ligando..."
+      : "ðŸ“ž Motorista ligando...";
 
     const alertMsg: Message = {
       id: generateUUID(),
@@ -217,10 +220,10 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ currentUser, chatPartner
     onSendMessage(alertMsg);
     soundService.playSent();
 
-    // Envia para o banco (Isso dispara o Auto-Open no destinatário)
+    // Envia para o banco (Isso dispara o Auto-Open no destinatÃ¡rio)
     await sendMessage(alertMsg);
 
-    // 2. Aguarda 1 segundo para garantir que o app do destinatário abriu
+    // 2. Aguarda 1 segundo para garantir que o app do destinatÃ¡rio abriu
     await new Promise(resolve => setTimeout(resolve, 1000));
     // --------------------------------------------------
 
@@ -228,7 +231,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ currentUser, chatPartner
     soundService.playRingtone(); // Play outgoing ringtone
 
     try {
-      // Configuração para evitar eco e ruído (Modo Real)
+      // ConfiguraÃ§Ã£o para evitar eco e ruÃ­do (Modo Real)
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           echoCancellation: true,
@@ -248,7 +251,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ currentUser, chatPartner
       sendSignal({ type: 'offer', sdp: offer, target: chatPartner.id });
     } catch (err) {
       console.error("Error starting call:", err);
-      alert("Erro ao acessar microfone. Verifique permissões.");
+      alert("Erro ao acessar microfone. Verifique permissÃµes.");
       endCallLogic();
     }
   };
@@ -324,7 +327,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ currentUser, chatPartner
         id: generateUUID(),
         sender_id: currentUser.id,
         receiver_id: chatPartner.id,
-        content: "📞 Chamada encerrada",
+        content: "ðŸ“ž Chamada encerrada",
         media_type: 'text',
         created_at: new Date().toISOString(),
         is_read: false
@@ -348,7 +351,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ currentUser, chatPartner
           (pos) => {
             updateUserLocation(currentUser.id, pos.coords.latitude, pos.coords.longitude);
           },
-          (err) => console.warn("GPS silencioso falhou (permissão negada?)", err),
+          (err) => console.warn("GPS silencioso falhou (permissÃ£o negada?)", err),
           { enableHighAccuracy: true, timeout: 5000 }
         );
       }
@@ -376,7 +379,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ currentUser, chatPartner
   };
 
   const handleRequestLocation = () => {
-    handleSendText("📍 Por favor, envie sua localização atual clicando no botão de localização.");
+    handleSendText("ðŸ“ Por favor, envie sua localizaÃ§Ã£o atual clicando no botÃ£o de localizaÃ§Ã£o.");
   };
 
   const handleSendLocation = async () => {
@@ -384,7 +387,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ currentUser, chatPartner
     setIsGettingLocation(true);
 
     if (!navigator.geolocation) {
-      alert("Geolocalização não suportada pelo seu navegador.");
+      alert("GeolocalizaÃ§Ã£o nÃ£o suportada pelo seu navegador.");
       setIsGettingLocation(false);
       return;
     }
@@ -393,14 +396,14 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ currentUser, chatPartner
       const { latitude, longitude } = position.coords;
       const googleMapsUrl = `https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}`;
 
-      // Também atualiza o perfil (garantia dupla)
+      // TambÃ©m atualiza o perfil (garantia dupla)
       updateUserLocation(currentUser.id, latitude, longitude);
 
       const newMessage: Message = {
         id: generateUUID(),
         sender_id: currentUser.id,
         receiver_id: chatPartner.id,
-        content: "📍 Localização Atual",
+        content: "ðŸ“ LocalizaÃ§Ã£o Atual",
         media_url: googleMapsUrl,
         media_type: 'location',
         created_at: new Date().toISOString(),
@@ -413,7 +416,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ currentUser, chatPartner
       setIsGettingLocation(false);
     }, (error) => {
       console.error("Erro GPS:", error);
-      alert("Não foi possível obter sua localização. Verifique as permissões do navegador.");
+      alert("NÃ£o foi possÃ­vel obter sua localizaÃ§Ã£o. Verifique as permissÃµes do navegador.");
       setIsGettingLocation(false);
     }, {
       enableHighAccuracy: true,
@@ -449,7 +452,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ currentUser, chatPartner
       soundService.playSent();
       await sendMessage(newMessage);
     } else {
-      alert("Erro ao enviar áudio. Tente novamente.");
+      alert("Erro ao enviar Ã¡udio. Tente novamente.");
     }
     setIsUploading(false);
   };
@@ -516,6 +519,8 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ currentUser, chatPartner
 
   return (
     <div className="flex-1 flex flex-col h-full bg-[#0b141a] relative">
+      {/* AdMob Banner */}
+      <AdBanner />
       {/* Hidden Audio Element for WebRTC */}
       <audio ref={remoteAudioRef} autoPlay playsInline />
 
@@ -617,13 +622,13 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ currentUser, chatPartner
                   onClick={() => setShowTaximeter(true)}
                   className="px-3 py-1.5 rounded-full bg-gray-700 hover:bg-gray-600 text-green-400 text-xs font-bold uppercase tracking-wide border border-green-400/30 flex items-center gap-2"
                 >
-                  <span className="material-icons text-sm">local_taxi</span> Taxímetro
+                  <span className="material-icons text-sm">local_taxi</span> TaxÃ­metro
                 </button>
 
                 <button
                   onClick={handleRequestLocation}
                   className="px-3 py-1.5 rounded-full bg-blue-900/40 hover:bg-blue-900/60 text-blue-400 text-xs font-bold uppercase tracking-wide border border-blue-400/30 flex items-center gap-2"
-                  title="Pedir Localização ao Cliente"
+                  title="Pedir LocalizaÃ§Ã£o ao Cliente"
                 >
                   <span className="material-icons text-sm">place</span> Pedir Loc.
                 </button>
@@ -659,10 +664,10 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ currentUser, chatPartner
           <div className="flex items-center gap-1 pr-1">
             {currentUser.role === UserRole.DRIVER && (
               <>
-                <button onClick={() => setShowTaximeter(true)} className="p-2 text-green-400 active:bg-gray-700 rounded-full" title="Taxímetro">
+                <button onClick={() => setShowTaximeter(true)} className="p-2 text-green-400 active:bg-gray-700 rounded-full" title="TaxÃ­metro">
                   <span className="material-icons">local_taxi</span>
                 </button>
-                <button onClick={handleRequestLocation} className="p-2 text-blue-400 active:bg-gray-700 rounded-full" title="Pedir Localização">
+                <button onClick={handleRequestLocation} className="p-2 text-blue-400 active:bg-gray-700 rounded-full" title="Pedir LocalizaÃ§Ã£o">
                   <span className="material-icons">place</span>
                 </button>
               </>
@@ -720,13 +725,13 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ currentUser, chatPartner
                         <div className="h-32 bg-gray-700 opacity-90 flex items-center justify-center overflow-hidden">
                           <img
                             src={getStaticMapUrl(msg.media_url)}
-                            alt="Localização"
+                            alt="LocalizaÃ§Ã£o"
                             className="w-full h-full object-cover"
                           />
                         </div>
                         <div className="p-2 flex items-center gap-2 bg-[#202c33]">
                           <span className="material-icons text-red-400">location_on</span>
-                          <span className="text-blue-300 text-sm hover:underline">Ver localização em tempo real</span>
+                          <span className="text-blue-300 text-sm hover:underline">Ver localizaÃ§Ã£o em tempo real</span>
                         </div>
                       </div>
                     </div>
@@ -775,7 +780,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ currentUser, chatPartner
               className="flex items-center gap-3 px-4 py-3 hover:bg-gray-700/50 rounded-lg transition"
             >
               <span className="material-icons text-green-400">location_on</span>
-              <span className="text-white text-sm">Localiza��o</span>
+              <span className="text-white text-sm">Localização</span>
             </button>
           </div>
         )}
@@ -808,7 +813,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ currentUser, chatPartner
             onClick={triggerSmartReply}
             disabled={isProcessingAI}
             className={`p-2 mb-1.5 rounded-full transition active:scale-90 shrink-0 ${isProcessingAI ? 'text-yellow-500 animate-spin' : 'text-emerald-400 bg-emerald-900/20 hover:bg-emerald-900/40'}`}
-            title="Sugest�o IA"
+            title="Sugestão IA"
           >
             <span className="material-icons">auto_awesome</span>
           </button>
@@ -844,3 +849,5 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ currentUser, chatPartner
     </div>
   );
 };
+
+

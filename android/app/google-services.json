@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "754808403920",
+    "project_id": "chegoja-pro",
+    "storage_bucket": "chegoja-pro.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:754808403920:android:f2fab7c873959fa623ebd5",
+        "android_client_info": {
+          "package_name": "br.com.client.chegoja"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDnpWYoMw8VNLPCcfBbp2lEyPHHLmxx0bk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

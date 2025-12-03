@@ -3,6 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { fetchDriverPlans } from '../services/supabaseClient';
 import { createPixPayment, getPaymentStatus, activatePlan } from '../services/paymentService';
 import { UserProfile, PayerFormData, PixPaymentResponse, DriverPlan } from '../types';
+import { AdBanner } from './AdBanner';
 
 interface DriverSubscriptionProps {
     currentUser: UserProfile;
@@ -130,6 +131,8 @@ export const DriverSubscription: React.FC<DriverSubscriptionProps> = ({ currentU
     return (
         <div className="fixed inset-0 z-[100] bg-black/90 flex flex-col items-center justify-center p-0 md:p-4">
             <div className="w-full max-w-4xl bg-white md:rounded-2xl overflow-hidden flex flex-col h-full md:max-h-[90vh]">
+                {/* AdMob Banner */}
+                <AdBanner />
                 {/* HEADER */}
                 <div className={`${isBlocked ? 'bg-red-600' : 'bg-blue-600'} p-4 text-white shrink-0 flex items-center shadow-md relative`}>
                     {/* Botão Voltar (Esquerda) */}

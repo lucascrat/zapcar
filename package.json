@@ -10,10 +10,12 @@
     "update": "powershell -ExecutionPolicy Bypass -File ./update.ps1"
   },
   "dependencies": {
+    "@capacitor-community/admob": "^6.2.0",
     "@capacitor/android": "^6.0.0",
     "@capacitor/core": "^6.0.0",
     "@google/genai": "^1.30.0",
     "@supabase/supabase-js": "^2.84.0",
+    "onesignal-cordova-plugin": "^5.2.19",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"
   },

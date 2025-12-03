@@ -7,6 +7,7 @@ import { AndroidSetup } from './components/AndroidSetup'; // Importar componente
 import { BingoUserView } from './components/BingoUserView'; // Importar Bingo
 import { DriverSubscription } from './components/DriverSubscription'; // Importar Planos
 import { RideCalculator } from './components/RideCalculator'; // Importar Calculadora
+import { AdBanner } from './components/AdBanner'; // Importar Banner AdMob
 import {
   registerClientWithPhoto,
   fetchOnlineDrivers,
@@ -21,12 +22,16 @@ import {
   fetchUserProfile, // Nova função importada
   subscribeToBroadcasts, // Importar função de broadcast
   fetchAppSettings, // Import fetchAppSettings
-  updateUserLocation // Import updateUserLocation
+  updateUserLocation, // Import updateUserLocation
+  checkUserExists, // Import checkUserExists
+  updateUserAvatar // Import updateUserAvatar
 } from './services/supabaseClient';
 import { activatePlan, checkSubscriptionStatus } from './services/paymentService';
 import { UserProfile, UserRole, DriverStatus, Message, BroadcastMessage } from './types';
 import { APP_NAME } from './constants';
 import { soundService } from './services/soundService';
+import { OneSignalInit } from './services/oneSignalService';
+import { AdMobService } from './services/adMobService';
 
 const APP_VERSION = "3.9 (Nav Fluid)";
 
@@ -106,6 +111,7 @@ export default function App() {
 
   // Refs
   const avatarInputRef = useRef<HTMLInputElement>(null);
+  const profileAvatarRef = useRef<HTMLInputElement>(null);
   const wakeLockRef = useRef<any>(null);
 
   // Computed Subscription Status
@@ -117,6 +123,12 @@ export default function App() {
 
   // 0. LOAD APP SETTINGS (Marquee Text)
   useEffect(() => {
+    // Initialize OneSignal
+    OneSignalInit();
+    // Initialize AdMob
+    AdMobService.initialize();
+    AdMobService.showBanner();
+
     const loadSettings = async () => {
       const settings = await fetchAppSettings();
       if (settings.marquee_text) {
@@ -473,6 +485,24 @@ export default function App() {
 
   // --- Handlers ---
 
+  const handleUpdateProfileAvatar = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file && currentUser) {
+      const confirmUpdate = window.confirm("Deseja alterar sua foto de perfil?");
+      if (!confirmUpdate) return;
+
+      const newUrl = await updateUserAvatar(currentUser.id, file);
+      if (newUrl) {
+        const updated = { ...currentUser, avatar_url: newUrl };
+        setCurrentUser(updated);
+        localStorage.setItem('chegoja_user', JSON.stringify(updated));
+        alert("Foto de perfil atualizada com sucesso!");
+      } else {
+        alert("Erro ao atualizar foto. Tente novamente.");
+      }
+    }
+  };
+
   const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -506,6 +536,49 @@ export default function App() {
 
     } catch (e) {
       console.warn("Erro geral ao solicitar permissões:", e);
+    }
+  };
+
+  const formatPhoneNumber = (value: string) => {
+    const numbers = value.replace(/\D/g, '');
+    let formatted = numbers;
+    if (numbers.length > 0) {
+      formatted = `(${numbers.slice(0, 2)}`;
+      if (numbers.length > 2) {
+        formatted += `) ${numbers.slice(2, 7)}`;
+      }
+      if (numbers.length > 7) {
+        formatted += `-${numbers.slice(7, 11)}`;
+      }
+    }
+    return formatted;
+  };
+
+  const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setEntryPhone(formatPhoneNumber(e.target.value));
+  };
+
+  const handleCheckUser = async (field: 'username' | 'phone', value: string) => {
+    if (!value) return;
+    // Only check if we are in registration mode (or client login which is registration-like)
+    if (loginMode === 'client' || (loginMode === 'driver' && isRegisteringDriver)) {
+      // For phone, we might want to check the clean version if that's how it's stored, 
+      // but registerClientWithPhoto uses the value passed. 
+      // If we format it, we should probably store it formatted or clean it before sending.
+      // Let's assume for now we check the value as is (formatted) if that's what we send, 
+      // OR we clean it. 
+      // Ideally we should clean it before saving.
+      // Let's check the exact value.
+      const exists = await checkUserExists(field, value);
+      if (exists) {
+        if (loginMode === 'client' && field === 'phone') {
+          // Clients are auto-logged in if exists, so maybe just warn?
+          // User said: "sempre verifique se tem outro igual se tiver avise o cliente para tentar outro"
+          alert("Este telefone já possui cadastro. Se for você, o login será feito automaticamente.");
+        } else {
+          alert(`Este ${field === 'username' ? 'nome de usuário' : 'telefone'} já está em uso. Por favor, tente outro.`);
+        }
+      }
     }
   };
 
@@ -670,6 +743,8 @@ export default function App() {
   if (currentUser && currentUser.role === UserRole.DRIVER && currentUser.is_approved === false) {
     return (
       <div className="flex h-[100dvh] w-full flex-col bg-gray-100 relative overflow-hidden">
+        {/* AdMob Banner */}
+        <AdBanner />
         <InstallPrompt />
         {showAndroidSetup && <AndroidSetup onClose={() => setShowAndroidSetup(false)} />}
 
@@ -736,7 +811,11 @@ export default function App() {
   // --- Render: Login Screen ---
   if (!currentUser) {
     return (
-      <div className="h-[100dvh] w-full bg-gray-100 flex items-center justify-center relative overflow-hidden">
+      <div className="h-[100dvh] w-full bg-gray-100 flex flex-col items-center justify-center relative overflow-hidden">
+        {/* AdMob Banner */}
+        <div className="absolute top-0 left-0 right-0 z-30">
+          <AdBanner />
+        </div>
 
         {/* PWA Prompt Component - Always active on login screen */}
         <InstallPrompt />
@@ -821,6 +900,8 @@ export default function App() {
               placeholder={loginMode === 'client' ? "Seu Nome Completo" : "Nome de Usuário"}
               value={entryName}
               onChange={e => setEntryName(e.target.value)}
+              onBlur={() => handleCheckUser('username', entryName)}
+              maxLength={20}
               disabled={isLoading}
               className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:border-whatsapp-green transition bg-white text-base text-black placeholder-gray-500 font-medium shadow-sm"
             />
@@ -830,7 +911,9 @@ export default function App() {
                 type="tel"
                 placeholder="Seu Telefone (Whatsapp)"
                 value={entryPhone}
-                onChange={e => setEntryPhone(e.target.value)}
+                onChange={handlePhoneChange}
+                onBlur={() => handleCheckUser('phone', entryPhone)}
+                maxLength={15}
                 disabled={isLoading}
                 className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:border-whatsapp-green transition bg-white text-base text-black placeholder-gray-500 font-medium shadow-sm"
               />
@@ -942,6 +1025,8 @@ export default function App() {
   return (
     <div className="h-[100dvh] w-full flex flex-col overflow-hidden bg-app-bg relative">
       <MarqueeBanner text={bannerText} />
+      {/* AdMob Banner */}
+      <AdBanner />
 
       <div className="flex-1 flex overflow-hidden relative">
         <InstallPrompt />
@@ -971,11 +1056,23 @@ export default function App() {
         )}
 
         {/* Sidebar */}
-        <div className={`w-full md:w-[400px] bg-whatsapp-dark border-r border-gray-800 flex flex-col ${showChatOnMobile ? 'hidden md:flex' : 'flex'}`}>
+        <div className={`w-full md:w-[400px] bg-whatsapp-dark border-r border-gray-800 flex flex-col relative ${showChatOnMobile ? 'hidden md:flex' : 'flex'}`}>
           {/* My Profile Header */}
           <div className="h-16 px-4 flex items-center justify-between shrink-0 bg-whatsapp-panel shadow-sm z-10">
             <div className="flex items-center gap-3">
-              <img src={currentUser.avatar_url || 'https://via.placeholder.com/40'} alt="Me" className="w-10 h-10 rounded-full border border-gray-600 object-cover" />
+              <div className="relative group cursor-pointer" onClick={() => profileAvatarRef.current?.click()} title="Alterar foto">
+                <img src={currentUser.avatar_url || 'https://via.placeholder.com/40'} alt="Me" className="w-10 h-10 rounded-full border border-gray-600 object-cover group-hover:opacity-80 transition" />
+                <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 bg-black/30 rounded-full transition">
+                  <span className="material-icons text-white text-xs">edit</span>
+                </div>
+              </div>
+              <input
+                type="file"
+                ref={profileAvatarRef}
+                className="hidden"
+                accept="image/*"
+                onChange={handleUpdateProfileAvatar}
+              />
               <div>
                 <p className="text-gray-200 font-medium truncate max-w-[150px]">{currentUser.username}</p>
                 <span className="text-xs text-gray-400 uppercase font-bold tracking-wider">
@@ -1183,23 +1280,21 @@ export default function App() {
             )}
           </div>
 
-          {/* PiP Footer Button (Driver Only) */}
+          {/* PiP FAB (Driver Only) */}
           {currentUser.role === UserRole.DRIVER && (
-            <div className="p-4 bg-whatsapp-panel border-t border-gray-800 shrink-0">
-              <button
-                onClick={() => {
-                  if (window.Android && window.Android.enterPipMode) {
-                    window.Android.enterPipMode();
-                  } else {
-                    alert("PiP não suportado neste dispositivo.");
-                  }
-                }}
-                className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 px-4 rounded-lg shadow-lg flex items-center justify-center gap-2 transition active:scale-95"
-              >
-                <span className="material-icons">picture_in_picture_alt</span>
-                MODO JANELA FLUTUANTE
-              </button>
-            </div>
+            <button
+              onClick={() => {
+                if (window.Android && window.Android.enterPipMode) {
+                  window.Android.enterPipMode();
+                } else {
+                  alert("PiP não suportado neste dispositivo.");
+                }
+              }}
+              className="absolute bottom-32 right-6 w-14 h-14 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-full shadow-2xl flex items-center justify-center transition active:scale-90 z-50 border-2 border-white/20"
+              title="Modo Janela Flutuante"
+            >
+              <span className="material-icons text-2xl">picture_in_picture_alt</span>
+            </button>
           )}
         </div>
 

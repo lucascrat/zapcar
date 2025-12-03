@@ -193,6 +193,14 @@ class SoundService {
       navigator.vibrate([500, 200, 500]);
     }
   }
+
+  // Som de "Chamando..." (Para quem liga)
+  playRingback() {
+    console.log("Playing Ringback");
+    this.callAudio.currentTime = 0;
+    this.callAudio.loop = true;
+    this.callAudio.play().catch(e => console.log("Ringback blocked:", e));
+  }
 }
 
 export const soundService = new SoundService();

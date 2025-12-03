@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { AppSettings, UserProfile } from '../types';
 import { fetchAppSettings } from '../services/supabaseClient';
+import { AdBanner } from './AdBanner';
 
 interface RideCalculatorProps {
     currentUser: UserProfile;
@@ -215,6 +216,8 @@ export const RideCalculator: React.FC<RideCalculatorProps> = ({ currentUser, onC
     return (
         <div className="fixed inset-0 z-[100] bg-black/95 flex flex-col items-center justify-center p-4 animate-fade-in">
             <div className="w-full max-w-md bg-white rounded-2xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
+                {/* AdMob Banner */}
+                <AdBanner />
 
                 {/* Header */}
                 <div className="bg-whatsapp-green p-4 flex justify-between items-center text-white shrink-0">
