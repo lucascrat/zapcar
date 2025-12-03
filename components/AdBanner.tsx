@@ -5,13 +5,23 @@ interface AdBannerProps {
     className?: string;
 }
 
+import { Capacitor } from '@capacitor/core';
+
 export const AdBanner: React.FC<AdBannerProps> = ({ className = '' }) => {
     useEffect(() => {
-        AdMobService.showBanner();
+        if (Capacitor.isNativePlatform()) {
+            AdMobService.showBanner();
+        }
         return () => {
-            AdMobService.removeBanner();
+            if (Capacitor.isNativePlatform()) {
+                AdMobService.removeBanner();
+            }
         };
     }, []);
+
+    if (!Capacitor.isNativePlatform()) {
+        return null;
+    }
 
     return (
         <div
