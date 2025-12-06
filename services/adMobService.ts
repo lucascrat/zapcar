@@ -1,10 +1,10 @@
-import { AdMob, AdOptions, AdLoadInfo, InterstitialAdPluginEvents } from '@capacitor-community/admob';
+import { AdMob, AdOptions, AdLoadInfo, InterstitialAdPluginEvents, BannerAdPosition } from '@capacitor-community/admob';
 
 export const AdMobService = {
     initialize: async () => {
         try {
             await AdMob.initialize({
-                requestTrackingAuthorization: true,
+
                 // Modo de produção - anúncios reais ativados
                 initializeForTesting: false,
             });
@@ -30,8 +30,8 @@ export const AdMobService = {
     showBanner: async () => {
         try {
             const options: any = {
-                adId: 'ca-app-pub-6105194579101073/7718818279',
-                position: 'top',
+                adId: 'ca-app-pub-6105194579101073/1959488464',
+                position: BannerAdPosition.TOP_CENTER,
                 margin: 0,
             };
             await AdMob.showBanner(options);

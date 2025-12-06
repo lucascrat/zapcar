@@ -76,8 +76,9 @@ export const fetchOnlineDrivers = async (): Promise<UserProfile[]> => {
     .select('*')
     .eq('role', UserRole.DRIVER)
     .eq('is_approved', true) // Only approved drivers
-    .neq('status', DriverStatus.OFFLINE)
-    .order('status', { ascending: true }); // Disponíveis primeiro
+    .eq('status', DriverStatus.AVAILABLE)
+    .eq('is_pip_active', true) // APENAS MOTORISTAS EM PIP
+    .order('created_at', { ascending: false }); // Mais recentes primeiro
 
   if (error) {
     handleDbError(error, "fetchOnlineDrivers");
@@ -147,6 +148,20 @@ export const updateDriverStatus = async (driverId: string, status: DriverStatus)
 
   if (error) {
     handleDbError(error, "updateDriverStatus");
+    return false;
+  }
+  return true;
+};
+
+export const updateDriverPipStatus = async (driverId: string, isPip: boolean): Promise<boolean> => {
+  const { error } = await supabase
+    .from('profiles')
+    .update({ is_pip_active: isPip })
+    .eq('id', driverId);
+
+  if (error) {
+    // Silent fail is okay for this status
+    console.warn("Failed to update PiP status", error);
     return false;
   }
   return true;
@@ -643,19 +658,34 @@ export const subscribeToMessages = (
     .channel('public:messages')
     .on(
       'postgres_changes',
-      { event: 'INSERT', schema: 'public', table: 'messages', filter: `receiver_id=eq.${userId}` },
+      { event: '*', schema: 'public', table: 'messages', filter: `receiver_id=eq.${userId}` },
       (payload) => {
         onMessage(payload.new as Message);
       }
     )
     .on(
       'postgres_changes',
-      { event: 'INSERT', schema: 'public', table: 'messages', filter: `sender_id=eq.${userId}` },
+      { event: '*', schema: 'public', table: 'messages', filter: `sender_id=eq.${userId}` },
       (payload) => {
         onMessage(payload.new as Message);
       }
     )
     .subscribe();
+};
+
+export const markMessagesAsRead = async (userId: string, senderId: string): Promise<boolean> => {
+  const { error } = await supabase
+    .from('messages')
+    .update({ is_read: true })
+    .eq('receiver_id', userId)
+    .eq('sender_id', senderId)
+    .eq('is_read', false);
+
+  if (error) {
+    handleDbError(error, "markMessagesAsRead");
+    return false;
+  }
+  return true;
 };
 
 export const subscribeToProfiles = (
@@ -665,7 +695,7 @@ export const subscribeToProfiles = (
     .channel('public:profiles')
     .on(
       'postgres_changes',
-      { event: 'INSERT', schema: 'public', table: 'profiles' }, // Apenas novos registros
+      { event: '*', schema: 'public', table: 'profiles' }, // Qualquer alteração (Novo, Update, Delete)
       () => {
         onUpdate();
       }

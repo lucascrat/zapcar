@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Message, UserProfile, UserRole } from '../types';
 import { AudioRecorder } from './AudioRecorder';
 import { AudioMessage } from './AudioMessage';
-import { sendMessage, generateUUID, uploadFile, supabase, updateUserLocation } from '../services/supabaseClient';
+import { sendMessage, generateUUID, uploadFile, supabase, updateUserLocation, markMessagesAsRead } from '../services/supabaseClient';
 import { generateSmartReply, analyzeImage } from '../services/geminiService';
 import { soundService } from '../services/soundService';
 import { AdBanner } from './AdBanner';
@@ -48,7 +48,15 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ currentUser, chatPartner
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages]);
+
+    // Mark messages as read if they are from the partner and unread
+    if (chatPartner && messages.length > 0) {
+      const hasUnread = messages.some(m => m.sender_id === chatPartner.id && !m.is_read);
+      if (hasUnread) {
+        markMessagesAsRead(currentUser.id, chatPartner.id);
+      }
+    }
+  }, [messages, chatPartner, currentUser.id]);
 
 
 
@@ -520,7 +528,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ currentUser, chatPartner
   return (
     <div className="flex-1 flex flex-col h-full bg-[#0b141a] relative">
       {/* AdMob Banner */}
-      <AdBanner />
+
       {/* Hidden Audio Element for WebRTC */}
       <audio ref={remoteAudioRef} autoPlay playsInline />
 
@@ -747,7 +755,11 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ currentUser, chatPartner
                     <span className="text-[10px] text-gray-400/80">
                       {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </span>
-                    {isMe && <span className="material-icons text-[14px] text-[#53bdeb]">done_all</span>}
+                    {isMe && (
+                      <span className={`material-icons text-[14px] ${msg.is_read ? 'text-[#53bdeb]' : 'text-gray-400'}`}>
+                        done_all
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>
@@ -758,10 +770,11 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ currentUser, chatPartner
       </div>
 
       {/* Input Area */}
+      {/* Input Area */}
       <div className="bg-whatsapp-panel px-2 py-2 flex items-end gap-2 z-10 pb-safe md:pb-2 relative">
         {/* Attachment Drawer */}
         {showAttachments && (
-          <div className="absolute bottom-16 left-2 bg-[#2a3942] rounded-2xl shadow-2xl p-3 flex flex-col gap-2 animate-fade-in z-20">
+          <div className="absolute bottom-20 right-12 bg-[#2a3942] rounded-2xl shadow-2xl p-3 flex flex-col gap-2 animate-fade-in z-20 origin-bottom-right">
             <button
               onClick={() => {
                 fileInputRef.current?.click();
@@ -785,19 +798,47 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ currentUser, chatPartner
           </div>
         )}
 
-        <div className="flex items-center pb-1.5 gap-1">
-          <button className="p-2 text-gray-400 hover:bg-gray-700 rounded-full transition hidden md:block">
+        <div className="flex-1 bg-[#2a3942] rounded-3xl flex items-center min-h-[48px] mb-1 relative transition-all duration-200 border border-transparent focus-within:border-whatsapp-green/30">
+
+          {/* Emoji Button (Hidden on mobile to save space, or keep if desired) */}
+          <button className="p-2 ml-1 text-gray-400 hover:text-gray-300 transition hidden md:block rounded-full active:bg-gray-700/50">
             <span className="material-icons">sentiment_satisfied</span>
           </button>
 
-          <button
-            onClick={() => setShowAttachments(!showAttachments)}
-            className="p-2 text-gray-400 hover:bg-gray-700 rounded-full transition active:scale-90"
-            disabled={isUploading}
-            title="Anexos"
-          >
-            <span className="material-icons transform rotate-45">attach_file</span>
-          </button>
+          <input
+            type="text"
+            value={inputText}
+            onChange={(e) => setInputText(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleSendText()}
+            placeholder={isUploading ? "Enviando..." : isGettingLocation ? "Localizando..." : "Mensagem"}
+            disabled={isUploading || isGettingLocation}
+            className="flex-1 bg-transparent border-none outline-none text-white placeholder-gray-400 text-[16px] md:text-sm px-3 py-3 max-h-24 overflow-y-auto disabled:opacity-50"
+          />
+
+          {/* Right Side Icons Container */}
+          <div className="flex items-center pr-2 gap-1">
+            <button
+              onClick={() => setShowAttachments(!showAttachments)}
+              className={`p-2 text-gray-400 hover:text-gray-300 rounded-full transition active:scale-90 ${showAttachments ? 'bg-gray-700/50 text-whatsapp-green' : ''}`}
+              disabled={isUploading}
+              title="Anexos"
+            >
+              <span className="material-icons transform -rotate-45 text-[22px]">attach_file</span>
+            </button>
+
+            {/* AI Suggestion for Drivers */}
+            {currentUser.role === UserRole.DRIVER && (
+              <button
+                onClick={triggerSmartReply}
+                disabled={isProcessingAI}
+                className={`p-2 rounded-full transition active:scale-90 shrink-0 ${isProcessingAI ? 'text-yellow-500 animate-spin' : 'text-emerald-400 hover:bg-emerald-900/20'}`}
+                title="Sugestão IA"
+              >
+                <span className="material-icons text-[22px]">auto_awesome</span>
+              </button>
+            )}
+          </div>
+
           <input
             type="file"
             ref={fileInputRef}
@@ -807,42 +848,19 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ currentUser, chatPartner
           />
         </div>
 
-        {/* AI Suggestion for Drivers */}
-        {currentUser.role === UserRole.DRIVER && (
-          <button
-            onClick={triggerSmartReply}
-            disabled={isProcessingAI}
-            className={`p-2 mb-1.5 rounded-full transition active:scale-90 shrink-0 ${isProcessingAI ? 'text-yellow-500 animate-spin' : 'text-emerald-400 bg-emerald-900/20 hover:bg-emerald-900/40'}`}
-            title="Sugestão IA"
-          >
-            <span className="material-icons">auto_awesome</span>
-          </button>
-        )}
-
-        <div className="flex-1 bg-[#2a3942] rounded-2xl flex items-center px-4 py-2 mx-1 min-h-[44px] mb-1">
-          <input
-            type="text"
-            value={inputText}
-            onChange={(e) => setInputText(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleSendText()}
-            placeholder={isUploading ? "Enviando arquivo..." : isGettingLocation ? "Obtendo GPS..." : "Mensagem"}
-            disabled={isUploading || isGettingLocation}
-            className="flex-1 bg-transparent border-none outline-none text-white placeholder-gray-400 text-[16px] md:text-sm max-h-20 overflow-y-auto disabled:opacity-50"
-          />
-        </div>
-
-        <div className="pb-1">
+        {/* Send / Mic Button */}
+        <div className="pb-1.5">
           {inputText.trim() ? (
             <button
               onClick={() => handleSendText()}
-              className="p-3 text-white bg-whatsapp-green rounded-full hover:bg-emerald-600 active:scale-90 transition shadow-md flex items-center justify-center"
+              className="w-12 h-12 text-white bg-whatsapp-green rounded-full hover:bg-emerald-600 active:scale-90 transition shadow-lg flex items-center justify-center"
             >
-              <span className="material-icons text-lg">send</span>
+              <span className="material-icons text-xl ml-0.5">send</span>
             </button>
           ) : (
-            <AudioRecorder
-              onAudioReady={handleAudioReady}
-            />
+            <div className="w-12 h-12 flex items-center justify-center">
+              <AudioRecorder onAudioReady={handleAudioReady} />
+            </div>
           )}
         </div>
       </div>

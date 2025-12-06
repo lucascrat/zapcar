@@ -40,6 +40,7 @@ ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS password TEXT;
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS is_approved BOOLEAN DEFAULT TRUE;
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS vehicle_type TEXT CHECK (vehicle_type IN ('car', 'motorcycle'));
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS unread_count INTEGER DEFAULT 0;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS is_pip_active BOOLEAN DEFAULT FALSE;
 
 -- Criar Admin Padrão se não existir (Evita duplicidade)
 INSERT INTO public.profiles (username, password, role, is_approved, avatar_url, status)

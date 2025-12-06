@@ -29,16 +29,21 @@ public class MainActivity extends BridgeActivity {
         @JavascriptInterface
         public void enterPipMode() {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                try {
-                    // Define a proporção da janela PiP (Vertical 3:4)
-                    Rational aspectRatio = new Rational(3, 4);
-                    PictureInPictureParams params = new PictureInPictureParams.Builder()
-                            .setAspectRatio(aspectRatio)
-                            .build();
-                    mActivity.enterPictureInPictureMode(params);
-                } catch (Exception e) {
-                    e.printStackTrace();
-                }
+                mActivity.runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        try {
+                            // Define a proporção da janela PiP (Vertical 3:4)
+                            Rational aspectRatio = new Rational(3, 4);
+                            PictureInPictureParams params = new PictureInPictureParams.Builder()
+                                    .setAspectRatio(aspectRatio)
+                                    .build();
+                            mActivity.enterPictureInPictureMode(params);
+                        } catch (Exception e) {
+                            e.printStackTrace();
+                        }
+                    }
+                });
             }
         }
 
@@ -88,9 +93,13 @@ public class MainActivity extends BridgeActivity {
 
         if (!isInPictureInPictureMode) {
             // Voltou para tela cheia (saiu do PiP)
-            // Executa JS para disparar evento
             if (this.bridge != null && this.bridge.getWebView() != null) {
                 this.bridge.getWebView().evaluateJavascript("window.dispatchEvent(new CustomEvent('pipExit'))", null);
+            }
+        } else {
+            // Entrou no PiP
+            if (this.bridge != null && this.bridge.getWebView() != null) {
+                this.bridge.getWebView().evaluateJavascript("window.dispatchEvent(new CustomEvent('pipEnter'))", null);
             }
         }
     }

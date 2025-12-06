@@ -8,6 +8,8 @@ import { ChatWindow } from './ChatWindow'; // Importar ChatWindow
 import { PlansManager } from './PlansManager'; // Importar PlansManager
 import { RideCalculator } from './RideCalculator'; // Importar RideCalculator
 import { AdBanner } from './AdBanner'; // Importar Banner AdMob
+import { WhatsappBot } from '../services/whatsappBot'; // Importar Bot WhatsApp
+import { WahaService } from '../services/wahaService'; // Importar WahaService
 
 interface AdminDashboardProps {
     currentUser: UserProfile;
@@ -52,6 +54,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onL
     const [bingoSettings, setBingoSettings] = useState<BingoSettings | null>(null);
     const [bingoRanking, setBingoRanking] = useState<BingoRankingUser[]>([]);
     const [bingoLoading, setBingoLoading] = useState(false);
+
+    // Bot State
+    const [botRunning, setBotRunning] = useState(WhatsappBot.isRunning());
+    const [wahaApiKey, setWahaApiKey] = useState(WahaService.getApiKey());
+    const [geminiApiKey, setGeminiApiKey] = useState(localStorage.getItem('GEMINI_API_KEY') || '');
+    const [wahaSession, setWahaSession] = useState('default');
+    const [isTestingConnection, setIsTestingConnection] = useState(false);
+    const [newSessionName, setNewSessionName] = useState('');
+    const [qrCodeUrl, setQrCodeUrl] = useState<string | null>(null);
+    const [isCreatingSession, setIsCreatingSession] = useState(false);
 
     // Audio Simulation State
     const [isPlayingAudio, setIsPlayingAudio] = useState(false);
@@ -625,6 +637,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onL
                             >
                                 <span className="material-icons text-sm">campaign</span> Enviar Notificações
                             </button>
+                            <button
+                                onClick={() => { setActiveTab('bot'); setSelectedDriver(null); setShowDetailMobile(true); }}
+                                className="col-span-2 py-3 bg-teal-50 hover:bg-teal-100 rounded-lg text-xs font-bold text-teal-700 flex items-center justify-center gap-2 border border-teal-200"
+                            >
+                                <span className="material-icons text-sm">smart_toy</span> Bot WhatsApp
+                            </button>
                         </div>
                     </div>
 
@@ -819,6 +837,199 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onL
                                             {!isSendingBroadcast && <span className="material-icons">send</span>}
                                         </button>
                                     </div>
+                                </div>
+                            </div>
+                        </div>
+                    ) : activeTab === 'bot' && !selectedDriver ? (
+                        <div className="max-w-4xl mx-auto p-4 md:p-8">
+                            {/* Mobile Back Button */}
+                            <div className="md:hidden bg-white p-2 border-b flex items-center shadow-sm mb-4 sticky top-0 z-10">
+                                <button onClick={handleBackToList} className="p-2 mr-2 rounded-full hover:bg-gray-100 flex items-center gap-2">
+                                    <span className="material-icons text-gray-600">arrow_back</span>
+                                    <span className="font-bold text-gray-700">Voltar</span>
+                                </button>
+                            </div>
+                            <h2 className="text-2xl font-bold text-gray-800 mb-6 flex items-center gap-2">
+                                <span className="material-icons text-teal-600">smart_toy</span> Bot WhatsApp (IA)
+                            </h2>
+
+                            <div className="bg-white p-8 rounded-xl shadow-sm border border-gray-200 text-center">
+                                <div className={`w-24 h-24 mx-auto rounded-full flex items-center justify-center mb-6 ${botRunning ? 'bg-green-100 animate-pulse' : 'bg-gray-100'}`}>
+                                    <span className={`material-icons text-5xl ${botRunning ? 'text-green-600' : 'text-gray-400'}`}>
+                                        {botRunning ? 'settings_input_antenna' : 'power_off'}
+                                    </span>
+                                </div>
+
+                                <h3 className="text-xl font-bold text-gray-800 mb-2">
+                                    {botRunning ? 'O Bot está Ativo' : 'O Bot está Parado'}
+                                </h3>
+                                <p className="text-gray-500 mb-8 max-w-md mx-auto">
+                                    {botRunning
+                                        ? 'O sistema está monitorando mensagens do WhatsApp, interpretando pedidos com IA e despachando corridas para motoristas online.'
+                                        : 'Inicie o bot para automatizar o atendimento via WhatsApp usando a IA do Gemini.'}
+                                </p>
+
+                                <button
+                                    onClick={() => {
+                                        if (botRunning) {
+                                            WhatsappBot.stop();
+                                            setBotRunning(false);
+                                        } else {
+                                            WhatsappBot.start();
+                                            setBotRunning(true);
+                                        }
+                                    }}
+                                    className={`px-8 py-4 rounded-xl font-bold text-lg shadow-lg transition transform active:scale-95 flex items-center justify-center gap-3 mx-auto ${botRunning
+                                        ? 'bg-red-500 hover:bg-red-600 text-white'
+                                        : 'bg-green-600 hover:bg-green-700 text-white'
+                                        }`}
+                                >
+                                    <span className="material-icons">{botRunning ? 'stop' : 'play_arrow'}</span>
+                                    {botRunning ? 'Parar Bot' : 'Iniciar Bot'}
+                                </button>
+
+                                <div className="mt-8 p-4 bg-gray-50 rounded text-left text-xs text-gray-500">
+                                    <div className="mb-4">
+                                        <label className="block text-gray-700 font-bold mb-1">WAHA API Key (Opcional)</label>
+                                        <div className="flex gap-2">
+                                            <input
+                                                type="password"
+                                                value={wahaApiKey}
+                                                onChange={(e) => {
+                                                    setWahaApiKey(e.target.value);
+                                                    WahaService.setApiKey(e.target.value);
+                                                }}
+                                                placeholder="Insira a chave da API se necessário"
+                                                className="flex-1 p-2 border rounded text-gray-900"
+                                            />
+                                        </div>
+                                        <p className="text-[10px] text-gray-400 mt-1">Se o servidor retornar 401 Unauthorized, insira a chave aqui.</p>
+                                    </div>
+
+                                    <div className="mb-4">
+                                        <label className="block text-gray-700 font-bold mb-1">Gemini API Key (Obrigatório)</label>
+                                        <div className="flex gap-2">
+                                            <input
+                                                type="password"
+                                                value={geminiApiKey}
+                                                onChange={(e) => {
+                                                    setGeminiApiKey(e.target.value);
+                                                    localStorage.setItem('GEMINI_API_KEY', e.target.value);
+                                                }}
+                                                placeholder="Sua chave do Google AI Studio"
+                                                className="flex-1 p-2 border rounded text-gray-900"
+                                            />
+                                        </div>
+                                        <p className="text-[10px] text-gray-400 mt-1">Obtenha em: <a href="https://aistudio.google.com/app/apikey" target="_blank" className="text-blue-500 underline">Google AI Studio</a></p>
+                                    </div>
+
+                                    <div className="mb-4">
+                                        <label className="block text-gray-700 font-bold mb-1">Nome da Sessão</label>
+                                        <div className="flex gap-2">
+                                            <input
+                                                type="text"
+                                                value={wahaSession}
+                                                onChange={(e) => {
+                                                    setWahaSession(e.target.value);
+                                                    WahaService.setSessionName(e.target.value);
+                                                }}
+                                                className="flex-1 p-2 border rounded text-gray-900"
+                                            />
+                                            <button
+                                                onClick={async () => {
+                                                    try {
+                                                        const sessions = await WahaService.getSessions();
+                                                        alert(`Sessões encontradas: ${JSON.stringify(sessions, null, 2)}`);
+                                                    } catch (e) {
+                                                        alert('Erro ao listar sessões. Verifique a API Key.');
+                                                    }
+                                                }}
+                                                className="bg-gray-200 hover:bg-gray-300 text-gray-700 px-3 py-2 rounded font-bold text-xs"
+                                            >
+                                                Listar Sessões
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <button
+                                        onClick={async () => {
+                                            setIsTestingConnection(true);
+                                            try {
+                                                const res = await WahaService.checkSession();
+                                                alert(`Status da Conexão: ${JSON.stringify(res)}`);
+                                            } catch (e) {
+                                                alert(`Erro ao conectar: ${e}`);
+                                            }
+                                            setIsTestingConnection(false);
+                                        }}
+                                        disabled={isTestingConnection}
+                                        className="mb-4 w-full bg-blue-100 text-blue-700 py-2 rounded font-bold hover:bg-blue-200"
+                                    >
+                                        {isTestingConnection ? 'Testando...' : 'Testar Conexão'}
+                                    </button>
+
+                                    <div className="border-t pt-4 mt-4">
+                                        <h4 className="font-bold text-gray-700 mb-2">Criar Nova Sessão</h4>
+                                        <div className="flex gap-2 mb-2">
+                                            <input
+                                                type="text"
+                                                value={newSessionName}
+                                                onChange={(e) => setNewSessionName(e.target.value)}
+                                                placeholder="Nome da nova sessão (ex: chegoja)"
+                                                className="flex-1 p-2 border rounded text-gray-900"
+                                            />
+                                            <button
+                                                onClick={async () => {
+                                                    if (!newSessionName) return alert('Digite um nome para a sessão');
+                                                    setIsCreatingSession(true);
+                                                    try {
+                                                        const res = await WahaService.startSession(newSessionName);
+                                                        if (res && res.name) {
+                                                            alert(`Sessão '${res.name}' criada! Aguarde o QR Code...`);
+                                                            setWahaSession(res.name);
+                                                            WahaService.setSessionName(res.name);
+
+                                                            // Wait a bit for session to start then get QR
+                                                            setTimeout(async () => {
+                                                                const blob = await WahaService.getSessionScreen(res.name);
+                                                                if (blob) {
+                                                                    const url = URL.createObjectURL(blob);
+                                                                    setQrCodeUrl(url);
+                                                                } else {
+                                                                    alert('Não foi possível obter o QR Code. Tente novamente.');
+                                                                }
+                                                            }, 2000);
+                                                        } else {
+                                                            alert('Erro ao criar sessão. Verifique se o nome já existe.');
+                                                        }
+                                                    } catch (e) {
+                                                        alert(`Erro: ${e}`);
+                                                    }
+                                                    setIsCreatingSession(false);
+                                                }}
+                                                disabled={isCreatingSession}
+                                                className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded font-bold"
+                                            >
+                                                {isCreatingSession ? 'Criando...' : 'Criar'}
+                                            </button>
+                                        </div>
+                                        {qrCodeUrl && (
+                                            <div className="mt-4 text-center">
+                                                <p className="mb-2 font-bold text-gray-700">Escaneie o QR Code no WhatsApp:</p>
+                                                <img src={qrCodeUrl} alt="QR Code" className="mx-auto border rounded shadow-lg max-w-[250px]" />
+                                                <button
+                                                    onClick={() => setQrCodeUrl(null)}
+                                                    className="mt-2 text-sm text-red-500 underline"
+                                                >
+                                                    Fechar QR Code
+                                                </button>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    <p className="mt-4"><strong>Status:</strong> {botRunning ? 'Conectado ao WAHA API' : 'Desconectado'}</p>
+                                    <p><strong>API:</strong> https://waha-waha.mxntxp.easypanel.host</p>
+                                    <p><strong>IA:</strong> Gemini 2.5 Flash</p>
                                 </div>
                             </div>
                         </div>

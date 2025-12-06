@@ -24,7 +24,8 @@ import {
   fetchAppSettings, // Import fetchAppSettings
   updateUserLocation, // Import updateUserLocation
   checkUserExists, // Import checkUserExists
-  updateUserAvatar // Import updateUserAvatar
+  updateUserAvatar, // Import updateUserAvatar
+  updateDriverPipStatus // Import updateDriverPipStatus
 } from './services/supabaseClient';
 import { activatePlan, checkSubscriptionStatus } from './services/paymentService';
 import { UserProfile, UserRole, DriverStatus, Message, BroadcastMessage } from './types';
@@ -33,7 +34,7 @@ import { soundService } from './services/soundService';
 import { OneSignalInit } from './services/oneSignalService';
 import { AdMobService } from './services/adMobService';
 
-const APP_VERSION = "3.9 (Nav Fluid)";
+const APP_VERSION = "4.1 (Stable)";
 
 interface MarqueeProps {
   text: string;
@@ -119,15 +120,21 @@ export default function App() {
     ? checkSubscriptionStatus(currentUser.subscription_expires_at)
     : { isValid: true, daysLeft: 0 };
 
+  const [isAdMobReady, setIsAdMobReady] = useState(false);
+
   // --- Lifecycle ---
 
   // 0. LOAD APP SETTINGS (Marquee Text)
   useEffect(() => {
     // Initialize OneSignal
     OneSignalInit();
+
     // Initialize AdMob
-    AdMobService.initialize();
-    AdMobService.showBanner();
+    const initAdMob = async () => {
+      await AdMobService.initialize();
+      setIsAdMobReady(true);
+    };
+    initAdMob();
 
     const loadSettings = async () => {
       const settings = await fetchAppSettings();
@@ -228,19 +235,36 @@ export default function App() {
     }
   }, [currentUser]);
 
-  // 3.5 PiP Exit Listener (Native)
+  // 3.5 PiP Listeners (Native)
   useEffect(() => {
     const handlePipExit = () => {
-      console.log("Saiu do PiP - Tocando alerta");
+      console.log("Saiu do PiP");
       window.focus();
+
+      if (currentUser?.role === UserRole.DRIVER) {
+        updateDriverPipStatus(currentUser.id, false);
+      }
+
       setTimeout(() => {
         soundService.playPipExitSound();
       }, 500);
     };
 
+    const handlePipEnter = () => {
+      console.log("Entrou no PiP");
+      if (currentUser?.role === UserRole.DRIVER) {
+        updateDriverPipStatus(currentUser.id, true);
+      }
+    };
+
     window.addEventListener('pipExit', handlePipExit);
-    return () => window.removeEventListener('pipExit', handlePipExit);
-  }, []);
+    window.addEventListener('pipEnter', handlePipEnter);
+
+    return () => {
+      window.removeEventListener('pipExit', handlePipExit);
+      window.removeEventListener('pipEnter', handlePipEnter);
+    };
+  }, [currentUser]);
 
   // 4. Load Contacts
   useEffect(() => {
@@ -378,7 +402,13 @@ export default function App() {
 
       if ((activeContact && (newMsg.sender_id === activeContact.id || newMsg.receiver_id === activeContact.id)) || (newMsg.sender_id === activeContact?.id)) {
         setMessages(prev => {
-          if (prev.some(m => m.id === newMsg.id)) return prev;
+          const index = prev.findIndex(m => m.id === newMsg.id);
+          if (index !== -1) {
+            // Update existing message (e.g. is_read changed)
+            const updated = [...prev];
+            updated[index] = newMsg;
+            return updated;
+          }
           return [...prev, newMsg];
         });
       }
@@ -1024,9 +1054,9 @@ export default function App() {
   // --- Render: Main App (Client/Driver Chat) ---
   return (
     <div className="h-[100dvh] w-full flex flex-col overflow-hidden bg-app-bg relative">
-      <MarqueeBanner text={bannerText} />
       {/* AdMob Banner */}
-      <AdBanner />
+      {isAdMobReady && <AdBanner />}
+      <MarqueeBanner text={bannerText} />
 
       <div className="flex-1 flex overflow-hidden relative">
         <InstallPrompt />

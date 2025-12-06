@@ -35,6 +35,7 @@ export interface UserProfile {
   lat?: number;
   lng?: number;
   unread_count?: number; // Contador de mensagens não lidas (Frontend Only)
+  is_pip_active?: boolean; // Indica se o app nativo está em modo PiP
 }
 
 export interface Message {
