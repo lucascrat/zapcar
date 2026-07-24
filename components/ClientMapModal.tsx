@@ -81,8 +81,8 @@ export const ClientMapModal: React.FC<ClientMapModalProps> = ({ driver, onClose 
             .channel(`driver-location-${driver.id}`)
             .on('postgres_changes', {
                 event: 'UPDATE',
-                schema: 'public',
-                table: 'users',
+                schema: 'chegoja',
+                table: 'profiles',
                 filter: `id=eq.${driver.id}`
             }, (payload: any) => {
                 const newData = payload.new;

@@ -3,7 +3,9 @@ import { createClient } from '@supabase/supabase-js';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from '../constants';
 import { Message, UserProfile, UserRole, DriverStatus, AppSettings, BingoSettings, BingoCard, BingoRankingUser, BroadcastMessage, DriverPlan } from '../types';
 
-export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  db: { schema: 'chegoja' },
+});
 
 // Helper for UUID compatibility (used for Optimistic UI in ChatWindow)
 export const generateUUID = () => {
@@ -580,8 +582,8 @@ export const fetchBingoRanking = async (): Promise<BingoRankingUser[]> => {
 export const subscribeToBingo = (onUpdate: () => void) => {
   return supabase
     .channel('public:bingo')
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'bingo_settings' }, onUpdate)
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'bingo_cards' }, onUpdate)
+    .on('postgres_changes', { event: '*', schema: 'chegoja', table: 'bingo_settings' }, onUpdate)
+    .on('postgres_changes', { event: '*', schema: 'chegoja', table: 'bingo_cards' }, onUpdate)
     .subscribe();
 };
 
@@ -643,14 +645,14 @@ export const subscribeToMessages = (
     .channel('public:messages')
     .on(
       'postgres_changes',
-      { event: 'INSERT', schema: 'public', table: 'messages', filter: `receiver_id=eq.${userId}` },
+      { event: 'INSERT', schema: 'chegoja', table: 'messages', filter: `receiver_id=eq.${userId}` },
       (payload) => {
         onMessage(payload.new as Message);
       }
     )
     .on(
       'postgres_changes',
-      { event: 'INSERT', schema: 'public', table: 'messages', filter: `sender_id=eq.${userId}` },
+      { event: 'INSERT', schema: 'chegoja', table: 'messages', filter: `sender_id=eq.${userId}` },
       (payload) => {
         onMessage(payload.new as Message);
       }
@@ -665,7 +667,7 @@ export const subscribeToProfiles = (
     .channel('public:profiles')
     .on(
       'postgres_changes',
-      { event: 'INSERT', schema: 'public', table: 'profiles' }, // Apenas novos registros
+      { event: 'INSERT', schema: 'chegoja', table: 'profiles' }, // Apenas novos registros
       () => {
         onUpdate();
       }
@@ -691,7 +693,7 @@ export const subscribeToBroadcasts = (
 ) => {
   return supabase
     .channel('public:broadcasts')
-    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'broadcasts' }, (payload) => {
+    .on('postgres_changes', { event: 'INSERT', schema: 'chegoja', table: 'broadcasts' }, (payload) => {
       onBroadcast(payload.new as BroadcastMessage);
     })
     .subscribe();
