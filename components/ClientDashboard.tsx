@@ -100,6 +100,8 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
     const [destination, setDestination] = useState<{ lat: number, lng: number, address: string } | null>(null);
     const [recentAddresses, setRecentAddresses] = useState<any[]>([]); // Histórico de endereços
     const isManualOrigin = useRef(false);
+    const activeRideRef = useRef(activeRide);
+    activeRideRef.current = activeRide;
     const [estimates, setEstimates] = useState<{ car: number, motorcycle: number, distance: number, time: number } | null>(null);
 
     const [paymentMethod, setPaymentMethod] = useState<'cash' | 'pix' | 'card' | 'coins'>('cash');
@@ -252,11 +254,13 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
         }
         const profileSub = subscribeToProfiles(() => fetchOnlineDrivers().then(setDrivers));
         const rideSub = subscribeToRides(currentUser.id, 'client', async (updatedRide) => {
-            // Se foi cancelada, limpar estado e avisar
+            // Se foi cancelada, limpar estado e avisar (só se ainda não foi tratada por outro caminho, ex: falha ao notificar motorista)
             if (updatedRide.status === 'cancelled') {
                 console.log('[Dashboard] Corrida cancelada detectada via Realtime.');
-                notify("Motorista ocupado ou corrida cancelada.");
-                setActiveRide(null);
+                if (activeRideRef.current && activeRideRef.current.id === updatedRide.id) {
+                    notify("Motorista ocupado ou corrida cancelada.");
+                    setActiveRide(null);
+                }
                 return;
             }
 

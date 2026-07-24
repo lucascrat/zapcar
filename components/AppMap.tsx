@@ -233,8 +233,17 @@ export const AppMap: React.FC<AppMapProps> = ({
 
         const removeHeatmap = () => {
             if (!map) return;
-            if (map.getLayer(HEATMAP_LAYER_ID)) map.removeLayer(HEATMAP_LAYER_ID);
-            if (map.getSource(HEATMAP_SOURCE_ID)) map.removeSource(HEATMAP_SOURCE_ID);
+            try {
+                // map.getStyle()/getLayer()/getSource() lançam exceção (em vez de retornar
+                // falsy) se o mapa foi destruído ou o estilo ainda está carregando, por isso
+                // tudo fica dentro do try.
+                if (!map.isStyleLoaded()) return;
+                if (map.getLayer(HEATMAP_LAYER_ID)) map.removeLayer(HEATMAP_LAYER_ID);
+                if (map.getSource(HEATMAP_SOURCE_ID)) map.removeSource(HEATMAP_SOURCE_ID);
+            } catch (e) {
+                // Mapa pode já ter sido destruído (.remove()) durante o desmonte do componente
+                console.warn('removeHeatmap: mapa indisponível', e);
+            }
         };
 
         if (!showHeatmap || !map) {
@@ -256,29 +265,39 @@ export const AppMap: React.FC<AppMapProps> = ({
             };
 
             const apply = () => {
-                if (map.getSource(HEATMAP_SOURCE_ID)) {
-                    (map.getSource(HEATMAP_SOURCE_ID) as mapboxgl.GeoJSONSource).setData(geojson);
-                } else {
-                    map.addSource(HEATMAP_SOURCE_ID, { type: 'geojson', data: geojson });
-                    map.addLayer({
-                        id: HEATMAP_LAYER_ID,
-                        type: 'heatmap',
-                        source: HEATMAP_SOURCE_ID,
-                        paint: {
-                            'heatmap-radius': navigationMode ? 30 : 25,
-                            'heatmap-opacity': navigationMode ? 0.7 : 0.45,
-                            'heatmap-color': [
-                                'interpolate', ['linear'], ['heatmap-density'],
-                                0, 'rgba(0,255,255,0)',
-                                0.5, 'rgba(255,255,0,1)',
-                                1, 'rgba(255,0,0,1)',
-                            ],
-                        },
-                    });
+                try {
+                    // Mapa pode ter sido destruído enquanto aguardávamos os dados
+                    if (!map.isStyleLoaded()) return;
+                    if (map.getSource(HEATMAP_SOURCE_ID)) {
+                        (map.getSource(HEATMAP_SOURCE_ID) as mapboxgl.GeoJSONSource).setData(geojson);
+                    } else {
+                        map.addSource(HEATMAP_SOURCE_ID, { type: 'geojson', data: geojson });
+                        map.addLayer({
+                            id: HEATMAP_LAYER_ID,
+                            type: 'heatmap',
+                            source: HEATMAP_SOURCE_ID,
+                            paint: {
+                                'heatmap-radius': navigationMode ? 30 : 25,
+                                'heatmap-opacity': navigationMode ? 0.7 : 0.45,
+                                'heatmap-color': [
+                                    'interpolate', ['linear'], ['heatmap-density'],
+                                    0, 'rgba(0,255,255,0)',
+                                    0.5, 'rgba(255,255,0,1)',
+                                    1, 'rgba(255,0,0,1)',
+                                ],
+                            },
+                        });
+                    }
+                } catch (e) {
+                    console.warn('loadHeatmap: mapa indisponível', e);
                 }
             };
 
-            if (map.isStyleLoaded()) apply(); else map.once('load', apply);
+            try {
+                if (map.isStyleLoaded()) apply(); else map.once('load', apply);
+            } catch (e) {
+                console.warn('loadHeatmap: mapa indisponível', e);
+            }
         };
 
         loadHeatmap();
