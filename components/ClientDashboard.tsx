@@ -78,7 +78,10 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
                         if (address) setCurrentAddress(address);
                     });
                 }
-            });
+            }, (err) => {
+                console.warn('Erro ao obter localização:', err);
+                setCurrentAddress(prev => prev === 'Obtendo localização...' ? 'Toque para digitar seu local de partida' : prev);
+            }, { enableHighAccuracy: true, timeout: 10000 });
         }
     };
 
@@ -242,7 +245,10 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
                         if (address) setCurrentAddress(address);
                     });
                 }
-            });
+            }, (err) => {
+                console.warn('Erro ao obter localização:', err);
+                setCurrentAddress(prev => prev === 'Obtendo localização...' ? 'Toque para digitar seu local de partida' : prev);
+            }, { enableHighAccuracy: true, timeout: 10000 });
         }
         const profileSub = subscribeToProfiles(() => fetchOnlineDrivers().then(setDrivers));
         const rideSub = subscribeToRides(currentUser.id, 'client', async (updatedRide) => {
@@ -785,7 +791,10 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
                                                                         }
                                                                     });
                                                                 }
-                                                            });
+                                                            }, (err) => {
+                                                                console.warn('Erro ao atualizar localização:', err);
+                                                                setCurrentAddress('Toque para digitar seu local de partida');
+                                                            }, { enableHighAccuracy: true, timeout: 10000 });
                                                         }
                                                     }}
                                                     className="w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center hover:bg-blue-200 transition shrink-0"
