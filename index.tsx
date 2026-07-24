@@ -2,6 +2,11 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
+import mapboxgl from 'mapbox-gl';
+import 'mapbox-gl/dist/mapbox-gl.css';
+import { MAPBOX_TOKEN } from './services/mapboxService';
+
+mapboxgl.accessToken = MAPBOX_TOKEN;
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {

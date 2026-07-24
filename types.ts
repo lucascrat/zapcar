@@ -140,7 +140,7 @@ export interface PixPaymentResponse {
 // Tipo para as abas do Painel Admin
 export type AdminTab = 'details' | 'map' | 'history' | 'settings' | 'chat' | 'bingo' | 'approvals' | 'notifications' | 'plans';
 
-// Interface global para comunicação com Android Nativo e Google Maps
+// Interface global para comunicação com Android Nativo
 declare global {
   interface Window {
     Android?: {
@@ -152,7 +152,6 @@ declare global {
       enterPipMode: () => void; // Novo método PiP
     };
     pushalert?: any;
-    google?: any; // Google Maps API
   }
 }
 

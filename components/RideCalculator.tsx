@@ -1,16 +1,25 @@
 import React, { useState, useEffect, useRef } from 'react';
+import mapboxgl from 'mapbox-gl';
 import { AppSettings, UserProfile } from '../types';
 import { fetchAppSettings } from '../services/supabaseClient';
 import { AdBanner } from './AdBanner';
+import { AddressAutocompleteInput } from './AddressAutocompleteInput';
+import { geocodeForward, geocodeReverse, getDirections, GeocodeResult } from '../services/mapboxService';
 
 interface RideCalculatorProps {
     currentUser: UserProfile;
     onClose: () => void;
 }
 
+const ROUTE_SOURCE_ID = 'ride-calc-route';
+const ROUTE_LAYER_ID = 'ride-calc-route-line';
+
 export const RideCalculator: React.FC<RideCalculatorProps> = ({ currentUser, onClose }) => {
     const [origin, setOrigin] = useState('');
     const [destination, setDestination] = useState('');
+    const [originCoords, setOriginCoords] = useState<{ lat: number; lng: number } | null>(null);
+    const [destCoords, setDestCoords] = useState<{ lat: number; lng: number } | null>(null);
+    const [proximity, setProximity] = useState<[number, number] | undefined>(undefined);
     const [vehicleType, setVehicleType] = useState<'car' | 'motorcycle'>('car');
     const [settings, setSettings] = useState<AppSettings | null>(null);
 
@@ -22,14 +31,8 @@ export const RideCalculator: React.FC<RideCalculatorProps> = ({ currentUser, onC
 
     const [loading, setLoading] = useState(false);
 
-    // Refs for Autocomplete
-    const originInputRef = useRef<HTMLInputElement>(null);
-    const destInputRef = useRef<HTMLInputElement>(null);
     const mapRef = useRef<HTMLDivElement>(null);
-
-    // Google Maps Objects
-    const mapInstance = useRef<any>(null);
-    const directionsRenderer = useRef<any>(null);
+    const mapInstance = useRef<mapboxgl.Map | null>(null);
 
     // Load Settings
     useEffect(() => {
@@ -39,95 +42,55 @@ export const RideCalculator: React.FC<RideCalculatorProps> = ({ currentUser, onC
         }
     }, [currentUser]);
 
-    // Initialize Autocomplete & Map
+    // Initialize Map
     useEffect(() => {
-        if (!window.google || !window.google.maps) return;
+        if (!mapRef.current || mapInstance.current) return;
 
-        // Init Map if not already
-        if (mapRef.current && !mapInstance.current) {
-            mapInstance.current = new window.google.maps.Map(mapRef.current, {
-                center: { lat: -3.8014, lng: -38.5323 }, // Default center (Fortaleza/CE approx)
-                zoom: 12,
-                disableDefaultUI: true,
-                zoomControl: true,
-            });
-            directionsRenderer.current = new window.google.maps.DirectionsRenderer();
-            directionsRenderer.current.setMap(mapInstance.current);
-        }
+        mapInstance.current = new mapboxgl.Map({
+            container: mapRef.current,
+            style: 'mapbox://styles/mapbox/streets-v12',
+            center: [-38.5323, -3.8014], // Default center (Fortaleza/CE approx)
+            zoom: 12,
+        });
+        mapInstance.current.addControl(new mapboxgl.NavigationControl(), 'top-right');
 
-        // Init Autocomplete for Origin
-        if (originInputRef.current) {
-            const originAutocomplete = new window.google.maps.places.Autocomplete(originInputRef.current, {
-                fields: ["formatted_address", "geometry", "name"],
-                strictBounds: false,
-            });
-            originAutocomplete.addListener("place_changed", () => {
-                const place = originAutocomplete.getPlace();
-                if (place.formatted_address) {
-                    setOrigin(place.formatted_address);
-                } else if (place.name) {
-                    setOrigin(place.name);
-                }
-            });
-        }
-
-        // Init Autocomplete for Destination
-        if (destInputRef.current) {
-            const destAutocomplete = new window.google.maps.places.Autocomplete(destInputRef.current, {
-                fields: ["formatted_address", "geometry", "name"],
-                strictBounds: false,
-            });
-            destAutocomplete.addListener("place_changed", () => {
-                const place = destAutocomplete.getPlace();
-                if (place.formatted_address) {
-                    setDestination(place.formatted_address);
-                } else if (place.name) {
-                    setDestination(place.name);
-                }
-            });
-        }
-
+        return () => {
+            mapInstance.current?.remove();
+            mapInstance.current = null;
+        };
     }, []);
 
     // Auto-fill Origin with Current Location
     useEffect(() => {
         if (navigator.geolocation) {
-            navigator.geolocation.getCurrentPosition((position) => {
+            navigator.geolocation.getCurrentPosition(async (position) => {
                 const { latitude, longitude } = position.coords;
+                setProximity([longitude, latitude]);
+                setOriginCoords({ lat: latitude, lng: longitude });
 
-                const runGeocode = () => {
-                    if (window.google && window.google.maps) {
-                        const geocoder = new window.google.maps.Geocoder();
-                        geocoder.geocode({ location: { lat: latitude, lng: longitude } }, (results: any, status: any) => {
-                            if (status === 'OK' && results && results[0]) {
-                                setOrigin(results[0].formatted_address);
-                                // Also center map
-                                if (mapInstance.current) {
-                                    mapInstance.current.setCenter({ lat: latitude, lng: longitude });
-                                    mapInstance.current.setZoom(15);
+                const address = await geocodeReverse(longitude, latitude);
+                if (address) {
+                    setOrigin(address);
+                }
 
-                                    // Add a marker for current location
-                                    new window.google.maps.Marker({
-                                        position: { lat: latitude, lng: longitude },
-                                        map: mapInstance.current,
-                                        title: "Sua Localização",
-                                        icon: {
-                                            path: window.google.maps.SymbolPath.CIRCLE,
-                                            scale: 7,
-                                            fillColor: "#4285F4",
-                                            fillOpacity: 1,
-                                            strokeWeight: 2,
-                                            strokeColor: "white",
-                                        }
-                                    });
-                                }
-                            }
-                        });
-                    } else {
-                        setTimeout(runGeocode, 500);
-                    }
-                };
-                runGeocode();
+                const map = mapInstance.current;
+                if (map) {
+                    map.setCenter([longitude, latitude]);
+                    map.setZoom(15);
+
+                    const el = document.createElement('div');
+                    el.style.width = '18px';
+                    el.style.height = '18px';
+                    el.style.borderRadius = '50%';
+                    el.style.background = '#4285F4';
+                    el.style.border = '3px solid white';
+                    el.style.boxShadow = '0 0 4px rgba(0,0,0,0.4)';
+
+                    new mapboxgl.Marker({ element: el })
+                        .setLngLat([longitude, latitude])
+                        .setPopup(new mapboxgl.Popup({ offset: 12 }).setText('Sua Localização'))
+                        .addTo(map);
+                }
             }, (err) => {
                 console.warn("Error getting location for calculator:", err);
             });
@@ -141,69 +104,102 @@ export const RideCalculator: React.FC<RideCalculatorProps> = ({ currentUser, onC
         setResult(null);
 
         try {
-            if (!window.google || !window.google.maps) {
-                alert("Google Maps ainda não foi carregado. Tente novamente em instantes.");
+            // Resolve coordinates if the user typed freely without picking a suggestion
+            let originPoint = originCoords;
+            if (!originPoint) {
+                const matches = await geocodeForward(origin, proximity);
+                if (matches[0]) originPoint = { lat: matches[0].lat, lng: matches[0].lng };
+            }
+
+            let destPoint = destCoords;
+            if (!destPoint) {
+                const matches = await geocodeForward(destination, proximity);
+                if (matches[0]) destPoint = { lat: matches[0].lat, lng: matches[0].lng };
+            }
+
+            if (!originPoint || !destPoint) {
+                alert("Não foi possível localizar os endereços. Verifique e tente novamente.");
                 setLoading(false);
                 return;
             }
 
-            const directionsService = new window.google.maps.DirectionsService();
-
-            directionsService.route(
-                {
-                    origin: origin,
-                    destination: destination,
-                    travelMode: window.google.maps.TravelMode.DRIVING,
-                    unitSystem: window.google.maps.UnitSystem.METRIC
-                },
-                (result: any, status: any) => {
-                    if (status === window.google.maps.DirectionsStatus.OK && result) {
-                        // Render Route on Map
-                        if (directionsRenderer.current) {
-                            directionsRenderer.current.setDirections(result);
-                        }
-
-                        const leg = result.routes[0].legs[0];
-                        const distanceMeters = leg.distance.value;
-                        const durationSeconds = leg.duration.value;
-
-                        const distanceKm = distanceMeters / 1000;
-                        const durationMin = durationSeconds / 60;
-
-                        // Calculate Price
-                        let base = settings.car_base_price;
-                        let perKm = settings.car_price_km;
-                        let perMin = settings.car_price_min;
-                        let startDistLimit = settings.car_start_distance_limit || 0;
-
-                        if (vehicleType === 'motorcycle') {
-                            base = settings.moto_base_price;
-                            perKm = settings.moto_price_km;
-                            perMin = settings.moto_price_min;
-                            startDistLimit = settings.moto_start_distance_limit || 0;
-                        }
-
-                        const chargeableDistance = Math.max(0, distanceKm - startDistLimit);
-                        const total = base + (chargeableDistance * perKm) + (durationMin * perMin);
-                        const finalPrice = Math.max(base, total);
-
-                        setResult({
-                            distanceKm,
-                            durationMin,
-                            price: finalPrice
-                        });
-
-                    } else {
-                        console.error("Directions request failed due to " + status);
-                        alert("Não foi possível traçar a rota. Verifique os endereços.");
-                    }
-                    setLoading(false);
-                }
+            const route = await getDirections(
+                [originPoint.lng, originPoint.lat],
+                [destPoint.lng, destPoint.lat]
             );
+
+            if (!route) {
+                alert("Não foi possível traçar a rota. Verifique os endereços.");
+                setLoading(false);
+                return;
+            }
+
+            // Render Route on Map
+            const map = mapInstance.current;
+            if (map) {
+                const applyRoute = () => {
+                    if (map.getSource(ROUTE_SOURCE_ID)) {
+                        (map.getSource(ROUTE_SOURCE_ID) as mapboxgl.GeoJSONSource).setData({
+                            type: 'Feature',
+                            properties: {},
+                            geometry: route.geometry,
+                        });
+                    } else {
+                        map.addSource(ROUTE_SOURCE_ID, {
+                            type: 'geojson',
+                            data: { type: 'Feature', properties: {}, geometry: route.geometry },
+                        });
+                        map.addLayer({
+                            id: ROUTE_LAYER_ID,
+                            type: 'line',
+                            source: ROUTE_SOURCE_ID,
+                            layout: { 'line-join': 'round', 'line-cap': 'round' },
+                            paint: { 'line-color': '#00a884', 'line-width': 5 },
+                        });
+                    }
+
+                    const coords = route.geometry.coordinates as [number, number][];
+                    const bounds = coords.reduce(
+                        (b, c) => b.extend(c),
+                        new mapboxgl.LngLatBounds(coords[0], coords[0])
+                    );
+                    map.fitBounds(bounds, { padding: 40 });
+                };
+
+                if (map.isStyleLoaded()) applyRoute();
+                else map.once('load', applyRoute);
+            }
+
+            const distanceKm = route.distanceMeters / 1000;
+            const durationMin = route.durationSeconds / 60;
+
+            // Calculate Price
+            let base = settings.car_base_price;
+            let perKm = settings.car_price_km;
+            let perMin = settings.car_price_min;
+            let startDistLimit = settings.car_start_distance_limit || 0;
+
+            if (vehicleType === 'motorcycle') {
+                base = settings.moto_base_price;
+                perKm = settings.moto_price_km;
+                perMin = settings.moto_price_min;
+                startDistLimit = settings.moto_start_distance_limit || 0;
+            }
+
+            const chargeableDistance = Math.max(0, distanceKm - startDistLimit);
+            const total = base + (chargeableDistance * perKm) + (durationMin * perMin);
+            const finalPrice = Math.max(base, total);
+
+            setResult({
+                distanceKm,
+                durationMin,
+                price: finalPrice
+            });
 
         } catch (error) {
             console.error("Erro ao calcular:", error);
             alert("Erro inesperado ao calcular rota.");
+        } finally {
             setLoading(false);
         }
     };
@@ -252,26 +248,28 @@ export const RideCalculator: React.FC<RideCalculatorProps> = ({ currentUser, onC
                     {/* Inputs */}
                     <div className="space-y-3 mb-4 shrink-0">
                         <div className="relative">
-                            <span className="material-icons absolute left-3 top-3 text-green-600">my_location</span>
-                            <input
-                                ref={originInputRef}
-                                type="text"
-                                placeholder="Ponto de Partida (Ex: Centro)"
+                            <span className="material-icons absolute left-3 top-3 text-green-600 z-10">my_location</span>
+                            <AddressAutocompleteInput
                                 value={origin}
-                                onChange={e => setOrigin(e.target.value)}
-                                className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:border-whatsapp-green focus:ring-1 focus:ring-whatsapp-green transition"
+                                onChangeText={(text) => { setOrigin(text); setOriginCoords(null); }}
+                                onSelectPlace={(place: GeocodeResult) => { setOrigin(place.address); setOriginCoords({ lat: place.lat, lng: place.lng }); }}
+                                placeholder="Ponto de Partida (Ex: Centro)"
+                                proximity={proximity}
+                                variant="light"
+                                inputClassName="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:border-whatsapp-green focus:ring-1 focus:ring-whatsapp-green transition"
                             />
                         </div>
 
                         <div className="relative">
-                            <span className="material-icons absolute left-3 top-3 text-red-500">location_on</span>
-                            <input
-                                ref={destInputRef}
-                                type="text"
-                                placeholder="Destino (Ex: Shopping)"
+                            <span className="material-icons absolute left-3 top-3 text-red-500 z-10">location_on</span>
+                            <AddressAutocompleteInput
                                 value={destination}
-                                onChange={e => setDestination(e.target.value)}
-                                className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:border-whatsapp-green focus:ring-1 focus:ring-whatsapp-green transition"
+                                onChangeText={(text) => { setDestination(text); setDestCoords(null); }}
+                                onSelectPlace={(place: GeocodeResult) => { setDestination(place.address); setDestCoords({ lat: place.lat, lng: place.lng }); }}
+                                placeholder="Destino (Ex: Shopping)"
+                                proximity={proximity}
+                                variant="light"
+                                inputClassName="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:border-whatsapp-green focus:ring-1 focus:ring-whatsapp-green transition"
                             />
                         </div>
                     </div>

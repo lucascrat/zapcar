@@ -1,4 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
+import mapboxgl from 'mapbox-gl';
+import { getDirections } from '../services/mapboxService';
 
 interface DriverMapModalProps {
     clientLocation: { lat: number; lng: number };
@@ -6,86 +8,98 @@ interface DriverMapModalProps {
     onClose: () => void;
 }
 
+const ROUTE_SOURCE_ID = 'driver-route';
+const ROUTE_LAYER_ID = 'driver-route-line';
+
 export const DriverMapModal: React.FC<DriverMapModalProps> = ({ clientLocation, driverLocation, onClose }) => {
     const mapRef = useRef<HTMLDivElement>(null);
+    const mapInstanceRef = useRef<mapboxgl.Map | null>(null);
     const [distance, setDistance] = useState<string>('');
     const [duration, setDuration] = useState<string>('');
     const [error, setError] = useState<string>('');
 
     useEffect(() => {
-        const initializeMap = () => {
-            if (!mapRef.current || !window.google) return;
+        if (!mapRef.current) return;
 
+        const map = new mapboxgl.Map({
+            container: mapRef.current,
+            style: 'mapbox://styles/mapbox/dark-v11',
+            center: [driverLocation.lng, driverLocation.lat],
+            zoom: 13,
+        });
+        map.addControl(new mapboxgl.NavigationControl(), 'top-right');
+        mapInstanceRef.current = map;
+
+        new mapboxgl.Marker({ color: '#00a884' })
+            .setLngLat([driverLocation.lng, driverLocation.lat])
+            .addTo(map);
+        new mapboxgl.Marker({ color: '#ef4444' })
+            .setLngLat([clientLocation.lng, clientLocation.lat])
+            .addTo(map);
+
+        const drawRoute = async () => {
             try {
-                const map = new window.google.maps.Map(mapRef.current, {
-                    zoom: 13,
-                    center: driverLocation,
-                    disableDefaultUI: false,
-                    styles: [
-                        { "elementType": "geometry", "stylers": [{ "color": "#242f3e" }] },
-                        { "elementType": "labels.text.stroke", "stylers": [{ "color": "#242f3e" }] },
-                        { "elementType": "labels.text.fill", "stylers": [{ "color": "#746855" }] },
-                        { "featureType": "administrative.locality", "elementType": "labels.text.fill", "stylers": [{ "color": "#d59563" }] },
-                        { "featureType": "poi", "elementType": "labels.text.fill", "stylers": [{ "color": "#d59563" }] },
-                        { "featureType": "poi.park", "elementType": "geometry", "stylers": [{ "color": "#263c3f" }] },
-                        { "featureType": "poi.park", "elementType": "labels.text.fill", "stylers": [{ "color": "#6b9a76" }] },
-                        { "featureType": "road", "elementType": "geometry", "stylers": [{ "color": "#38414e" }] },
-                        { "featureType": "road", "elementType": "geometry.stroke", "stylers": [{ "color": "#212a37" }] },
-                        { "featureType": "road", "elementType": "labels.text.fill", "stylers": [{ "color": "#9ca5b3" }] },
-                        { "featureType": "road.highway", "elementType": "geometry", "stylers": [{ "color": "#746855" }] },
-                        { "featureType": "road.highway", "elementType": "geometry.stroke", "stylers": [{ "color": "#1f2835" }] },
-                        { "featureType": "road.highway", "elementType": "labels.text.fill", "stylers": [{ "color": "#f3d19c" }] },
-                        { "featureType": "transit", "elementType": "geometry", "stylers": [{ "color": "#2f3948" }] },
-                        { "featureType": "transit.station", "elementType": "labels.text.fill", "stylers": [{ "color": "#d59563" }] },
-                        { "featureType": "water", "elementType": "geometry", "stylers": [{ "color": "#17263c" }] },
-                        { "featureType": "water", "elementType": "labels.text.fill", "stylers": [{ "color": "#515c6d" }] },
-                        { "featureType": "water", "elementType": "labels.text.stroke", "stylers": [{ "color": "#17263c" }] }
-                    ]
-                });
+                const route = await getDirections(
+                    [driverLocation.lng, driverLocation.lat],
+                    [clientLocation.lng, clientLocation.lat]
+                );
 
-                const directionsService = new window.google.maps.DirectionsService();
-                const directionsRenderer = new window.google.maps.DirectionsRenderer({
-                    map: map,
-                    suppressMarkers: false,
-                    polylineOptions: {
-                        strokeColor: "#00a884",
-                        strokeWeight: 6
+                if (!route) {
+                    setError('Erro ao traçar rota.');
+                    return;
+                }
+
+                const distanceKm = route.distanceMeters / 1000;
+                const durationMin = Math.round(route.durationSeconds / 60);
+                setDistance(`${distanceKm.toFixed(1)} km`);
+                setDuration(`${durationMin} min`);
+
+                const applyRoute = () => {
+                    if (map.getSource(ROUTE_SOURCE_ID)) {
+                        (map.getSource(ROUTE_SOURCE_ID) as mapboxgl.GeoJSONSource).setData({
+                            type: 'Feature',
+                            properties: {},
+                            geometry: route.geometry,
+                        });
+                    } else {
+                        map.addSource(ROUTE_SOURCE_ID, {
+                            type: 'geojson',
+                            data: { type: 'Feature', properties: {}, geometry: route.geometry },
+                        });
+                        map.addLayer({
+                            id: ROUTE_LAYER_ID,
+                            type: 'line',
+                            source: ROUTE_SOURCE_ID,
+                            layout: { 'line-join': 'round', 'line-cap': 'round' },
+                            paint: { 'line-color': '#00a884', 'line-width': 6 },
+                        });
                     }
-                });
 
-                const request = {
-                    origin: driverLocation,
-                    destination: clientLocation,
-                    travelMode: window.google.maps.TravelMode.DRIVING
+                    const coords = route.geometry.coordinates as [number, number][];
+                    const bounds = coords.reduce(
+                        (b, c) => b.extend(c),
+                        new mapboxgl.LngLatBounds(coords[0], coords[0])
+                    );
+                    map.fitBounds(bounds, { padding: 60 });
                 };
 
-                directionsService.route(request, (result: any, status: any) => {
-                    if (status === window.google.maps.DirectionsStatus.OK) {
-                        directionsRenderer.setDirections(result);
-                        const leg = result.routes[0].legs[0];
-                        setDistance(leg.distance.text);
-                        setDuration(leg.duration.text);
-                    } else {
-                        console.error("Directions request failed due to " + status);
-                        setError(`Erro ao traçar rota: ${status}`);
-                    }
-                });
+                if (map.isStyleLoaded()) {
+                    applyRoute();
+                } else {
+                    map.once('load', applyRoute);
+                }
             } catch (e) {
-                console.error("Map initialization error", e);
-                setError("Erro ao inicializar o mapa.");
+                console.error("Directions request failed", e);
+                setError('Erro ao traçar rota.');
             }
         };
 
-        if (window.google && window.google.maps) {
-            initializeMap();
-        } else {
-            const handleMapsLoaded = () => {
-                initializeMap();
-            };
-            window.addEventListener('google-maps-loaded', handleMapsLoaded);
-            return () => window.removeEventListener('google-maps-loaded', handleMapsLoaded);
-        }
+        drawRoute();
 
+        return () => {
+            map.remove();
+            mapInstanceRef.current = null;
+        };
     }, [clientLocation, driverLocation]);
 
     return (

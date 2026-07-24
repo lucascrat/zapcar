@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import mapboxgl from 'mapbox-gl';
 import { UserProfile } from '../types';
 import { supabase } from '../services/supabaseClient';
 
@@ -7,9 +8,26 @@ interface ClientMapModalProps {
     onClose: () => void;
 }
 
+const buildMarkerElement = (vehicleType?: string) => {
+    const el = document.createElement('div');
+    const inner = document.createElement('div');
+    inner.style.transition = 'transform 0.2s ease-out';
+    inner.innerHTML = `
+        <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24">
+            <circle cx="12" cy="12" r="11" fill="#00a884" stroke="#fff" stroke-width="2"/>
+            <text x="12" y="17" font-size="16" text-anchor="middle" fill="#fff">${vehicleType === 'motorcycle' ? '🏍️' : '🚗'}</text>
+        </svg>
+    `;
+    el.appendChild(inner);
+    el.style.cursor = 'pointer';
+    return { el, inner };
+};
+
 export const ClientMapModal: React.FC<ClientMapModalProps> = ({ driver, onClose }) => {
     const mapRef = useRef<HTMLDivElement>(null);
-    const markerRef = useRef<google.maps.Marker | null>(null);
+    const mapInstanceRef = useRef<mapboxgl.Map | null>(null);
+    const markerRef = useRef<mapboxgl.Marker | null>(null);
+    const markerInnerRef = useRef<HTMLDivElement | null>(null);
     const [driverLocation, setDriverLocation] = useState<{ lat: number; lng: number } | null>(
         driver.lat && driver.lng ? { lat: driver.lat, lng: driver.lng } : null
     );
@@ -17,83 +35,44 @@ export const ClientMapModal: React.FC<ClientMapModalProps> = ({ driver, onClose 
     const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
 
     useEffect(() => {
-        const initializeMap = () => {
-            if (!mapRef.current || !window.google || !driverLocation) return;
+        if (!mapRef.current || !driverLocation || mapInstanceRef.current) return;
 
-            try {
-                const map = new window.google.maps.Map(mapRef.current, {
-                    zoom: 15,
-                    center: driverLocation,
-                    disableDefaultUI: false,
-                    styles: [
-                        { "elementType": "geometry", "stylers": [{ "color": "#242f3e" }] },
-                        { "elementType": "labels.text.stroke", "stylers": [{ "color": "#242f3e" }] },
-                        { "elementType": "labels.text.fill", "stylers": [{ "color": "#746855" }] },
-                        { "featureType": "road", "elementType": "geometry", "stylers": [{ "color": "#38414e" }] },
-                        { "featureType": "road", "elementType": "geometry.stroke", "stylers": [{ "color": "#212a37" }] },
-                        { "featureType": "water", "elementType": "geometry", "stylers": [{ "color": "#17263c" }] }
-                    ]
-                });
+        try {
+            const map = new mapboxgl.Map({
+                container: mapRef.current,
+                style: 'mapbox://styles/mapbox/dark-v11',
+                center: [driverLocation.lng, driverLocation.lat],
+                zoom: 15,
+            });
+            map.addControl(new mapboxgl.NavigationControl(), 'top-right');
+            mapInstanceRef.current = map;
 
-                // Create custom icon based on vehicle type
-                const iconUrl = driver.vehicle_type === 'motorcycle'
-                    ? 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(`
-                        <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24">
-                            <circle cx="12" cy="12" r="11" fill="#00a884" stroke="#fff" stroke-width="2"/>
-                            <text x="12" y="17" font-size="16" text-anchor="middle" fill="#fff">🏍️</text>
-                        </svg>
-                    `)
-                    : 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(`
-                        <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24">
-                            <circle cx="12" cy="12" r="11" fill="#00a884" stroke="#fff" stroke-width="2"/>
-                            <text x="12" y="17" font-size="16" text-anchor="middle" fill="#fff">🚗</text>
-                        </svg>
-                    `);
+            const { el, inner } = buildMarkerElement(driver.vehicle_type);
+            markerInnerRef.current = inner;
 
-                const marker = new window.google.maps.Marker({
-                    position: driverLocation,
-                    map: map,
-                    icon: {
-                        url: iconUrl,
-                        scaledSize: new window.google.maps.Size(48, 48),
-                        anchor: new window.google.maps.Point(24, 24)
-                    },
-                    title: driver.username,
-                    animation: window.google.maps.Animation.DROP
-                });
+            const popup = new mapboxgl.Popup({ offset: 25 }).setHTML(`
+                <div style="color: #000; padding: 4px;">
+                    <strong>${driver.username}</strong><br/>
+                    <span style="color: #666;">${driver.vehicle_type === 'motorcycle' ? 'Moto' : 'Carro'}</span>
+                </div>
+            `);
 
-                markerRef.current = marker;
+            const marker = new mapboxgl.Marker({ element: el })
+                .setLngLat([driverLocation.lng, driverLocation.lat])
+                .setPopup(popup)
+                .addTo(map);
 
-                // Info window
-                const infoWindow = new window.google.maps.InfoWindow({
-                    content: `
-                        <div style="color: #000; padding: 8px;">
-                            <strong>${driver.username}</strong><br/>
-                            <span style="color: #666;">${driver.vehicle_type === 'motorcycle' ? 'Moto' : 'Carro'}</span>
-                        </div>
-                    `
-                });
-
-                marker.addListener('click', () => {
-                    infoWindow.open(map, marker);
-                });
-
-            } catch (e) {
-                console.error("Map initialization error", e);
-                setError("Erro ao inicializar o mapa.");
-            }
-        };
-
-        if (window.google && window.google.maps) {
-            initializeMap();
-        } else {
-            const handleMapsLoaded = () => {
-                initializeMap();
-            };
-            window.addEventListener('google-maps-loaded', handleMapsLoaded);
-            return () => window.removeEventListener('google-maps-loaded', handleMapsLoaded);
+            markerRef.current = marker;
+        } catch (e) {
+            console.error("Map initialization error", e);
+            setError("Erro ao inicializar o mapa.");
         }
 
+        return () => {
+            mapInstanceRef.current?.remove();
+            mapInstanceRef.current = null;
+            markerRef.current = null;
+        };
     }, [driverLocation, driver]);
 
     // Real-time location updates
@@ -112,13 +91,14 @@ export const ClientMapModal: React.FC<ClientMapModalProps> = ({ driver, onClose 
                     setDriverLocation(newLocation);
                     setLastUpdate(new Date());
 
-                    // Update marker position with animation
+                    // Update marker position with a bounce animation
                     if (markerRef.current) {
-                        markerRef.current.setPosition(newLocation);
-                        markerRef.current.setAnimation(window.google.maps.Animation.BOUNCE);
-                        setTimeout(() => {
-                            markerRef.current?.setAnimation(null);
-                        }, 1000);
+                        markerRef.current.setLngLat([newLocation.lng, newLocation.lat]);
+                        const inner = markerInnerRef.current;
+                        if (inner) {
+                            inner.classList.add('animate-bounce');
+                            setTimeout(() => inner.classList.remove('animate-bounce'), 1000);
+                        }
                     }
                 }
             })

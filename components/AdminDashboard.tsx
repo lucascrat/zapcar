@@ -1,5 +1,6 @@
 
 import React, { useEffect, useState, useRef } from 'react';
+import mapboxgl from 'mapbox-gl';
 import { fetchAllDriversForAdmin, deleteDriver, updateDriverStatus, updateDriverVehicle, updateDriverPassword, fetchAppSettings, updateAppSettings, approveDriver, fetchMessages, subscribeToMessages, subscribeToProfiles, fetchBingoSettings, updateBingoSettings, drawBingoNumber, drawSpecificBingoNumber, resetBingo, fetchBingoRanking, subscribeToBingo, sendBroadcast, addSubscriptionDays } from '../services/supabaseClient';
 import { UserProfile, DriverStatus, CallRecord, AppSettings, Message, BingoSettings, BingoRankingUser, AdminTab } from '../types';
 import { soundService } from '../services/soundService';
@@ -61,10 +62,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onL
     const [callDuration, setCallDuration] = useState(0);
     const [callHistory, setCallHistory] = useState<CallRecord[]>([]);
 
-    // Google Map Refs
+    // Mapbox Map Refs
     const mapContainerRef = useRef<HTMLDivElement>(null);
-    const mapInstanceRef = useRef<any>(null); // Google Map Instance
-    const markerRef = useRef<any>(null); // Google Marker Instance
+    const mapInstanceRef = useRef<mapboxgl.Map | null>(null);
+    const markerRef = useRef<mapboxgl.Marker | null>(null);
     const [driverLocation, setDriverLocation] = useState<{ lat: number; lng: number } | null>(null);
 
     useEffect(() => {
@@ -224,46 +225,42 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onL
         return () => clearInterval(interval);
     }, [isCalling]);
 
-    // Google Map Initialization & Update logic
+    // Mapbox Map Initialization & Update logic
     useEffect(() => {
-        // Only init if tab is map and we have a container and the script is loaded
-        if (activeTab === 'map' && mapContainerRef.current && driverLocation && window.google) {
+        // Only init if tab is map and we have a container
+        if (activeTab === 'map' && mapContainerRef.current && driverLocation) {
             if (!mapInstanceRef.current) {
-                // Init Google Map
-                mapInstanceRef.current = new window.google.maps.Map(mapContainerRef.current, {
-                    center: { lat: driverLocation.lat, lng: driverLocation.lng },
+                // Init Mapbox Map
+                const map = new mapboxgl.Map({
+                    container: mapContainerRef.current,
+                    style: 'mapbox://styles/mapbox/streets-v12',
+                    center: [driverLocation.lng, driverLocation.lat],
                     zoom: 15,
-                    mapTypeControl: false,
-                    streetViewControl: false,
-                    fullscreenControl: false
                 });
+                mapInstanceRef.current = map;
 
                 // Add Marker
                 const iconUrl = selectedDriver?.vehicle_type === 'motorcycle'
                     ? 'https://cdn-icons-png.flaticon.com/512/3097/3097136.png' // Moto
                     : 'https://cdn-icons-png.flaticon.com/512/3097/3097180.png'; // Car
 
-                markerRef.current = new window.google.maps.Marker({
-                    position: { lat: driverLocation.lat, lng: driverLocation.lng },
-                    map: mapInstanceRef.current,
-                    title: selectedDriver?.username,
-                    icon: {
-                        url: iconUrl,
-                        scaledSize: new window.google.maps.Size(40, 40)
-                    },
-                    animation: window.google.maps.Animation.DROP
-                });
+                const el = document.createElement('img');
+                el.src = iconUrl;
+                el.style.width = '40px';
+                el.style.height = '40px';
 
                 // Info Window
-                const infoWindow = new window.google.maps.InfoWindow({
-                    content: `<div style="color:black"><b>${selectedDriver?.username}</b><br>Status: ${selectedDriver?.status}</div>`
-                });
+                const popup = new mapboxgl.Popup({ offset: 25 }).setHTML(
+                    `<div style="color:black"><b>${selectedDriver?.username}</b><br>Status: ${selectedDriver?.status}</div>`
+                );
 
-                markerRef.current.addListener('click', () => {
-                    infoWindow.open(mapInstanceRef.current, markerRef.current);
-                });
+                const marker = new mapboxgl.Marker({ element: el })
+                    .setLngLat([driverLocation.lng, driverLocation.lat])
+                    .setPopup(popup)
+                    .addTo(map);
 
-                infoWindow.open(mapInstanceRef.current, markerRef.current);
+                markerRef.current = marker;
+                marker.togglePopup();
             }
         }
 
@@ -275,7 +272,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onL
 
     // Real-time location update (From DB)
     useEffect(() => {
-        if (activeTab === 'map' && selectedDriver && window.google && drivers.length > 0) {
+        if (activeTab === 'map' && selectedDriver && drivers.length > 0) {
             const updatedDriver = drivers.find(d => d.id === selectedDriver.id);
 
             if (updatedDriver && updatedDriver.lat && updatedDriver.lng) {
@@ -284,12 +281,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onL
 
                 setDriverLocation({ lat: newLat, lng: newLng });
 
-                // Update Google Marker Position
+                // Update Mapbox Marker Position
                 if (markerRef.current) {
-                    const newPos = new window.google.maps.LatLng(newLat, newLng);
-                    markerRef.current.setPosition(newPos);
+                    markerRef.current.setLngLat([newLng, newLat]);
                     if (mapInstanceRef.current) {
-                        mapInstanceRef.current.panTo(newPos);
+                        mapInstanceRef.current.panTo([newLng, newLat]);
                     }
                 }
             }

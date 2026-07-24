@@ -11,7 +11,8 @@
     ],
     "skipLibCheck": true,
     "types": [
-      "node"
+      "node",
+      "geojson"
     ],
     "moduleResolution": "bundler",
     "isolatedModules": true,

@@ -1,4 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
+import mapboxgl from 'mapbox-gl';
+import { AddressAutocompleteInput } from './AddressAutocompleteInput';
+import { geocodeReverse, GeocodeResult } from '../services/mapboxService';
 
 interface LocationPickerModalProps {
     onLocationSelect: (location: { lat: number; lng: number; address?: string }) => void;
@@ -7,109 +10,72 @@ interface LocationPickerModalProps {
 
 export const LocationPickerModal: React.FC<LocationPickerModalProps> = ({ onLocationSelect, onClose }) => {
     const mapRef = useRef<HTMLDivElement>(null);
-    const inputRef = useRef<HTMLInputElement>(null);
-    const [map, setMap] = useState<google.maps.Map | null>(null);
+    const mapInstanceRef = useRef<mapboxgl.Map | null>(null);
+    const markerRef = useRef<mapboxgl.Marker | null>(null);
+    const [searchText, setSearchText] = useState('');
+    const [proximity, setProximity] = useState<[number, number] | undefined>(undefined);
     const [selectedLocation, setSelectedLocation] = useState<{ lat: number; lng: number; address?: string } | null>(null);
-    const markerRef = useRef<google.maps.Marker | null>(null);
     const [error, setError] = useState<string>('');
 
-    useEffect(() => {
-        const initializeMap = () => {
-            if (!mapRef.current || !window.google) return;
-
-            try {
-                // Initialize Map
-                const initialPos = { lat: -3.875, lng: -38.625 }; // Default to Fortaleza/CE or generic
-                const mapInstance = new window.google.maps.Map(mapRef.current, {
-                    center: initialPos,
-                    zoom: 13,
-                    disableDefaultUI: false,
-                    styles: [
-                        { "elementType": "geometry", "stylers": [{ "color": "#242f3e" }] },
-                        { "elementType": "labels.text.stroke", "stylers": [{ "color": "#242f3e" }] },
-                        { "elementType": "labels.text.fill", "stylers": [{ "color": "#746855" }] },
-                        { "featureType": "road", "elementType": "geometry", "stylers": [{ "color": "#38414e" }] },
-                        { "featureType": "road", "elementType": "geometry.stroke", "stylers": [{ "color": "#212a37" }] },
-                        { "featureType": "water", "elementType": "geometry", "stylers": [{ "color": "#17263c" }] }
-                    ]
-                });
-
-                setMap(mapInstance);
-
-                // Try to get current location
-                if (navigator.geolocation) {
-                    navigator.geolocation.getCurrentPosition((position) => {
-                        const pos = {
-                            lat: position.coords.latitude,
-                            lng: position.coords.longitude,
-                        };
-                        mapInstance.setCenter(pos);
-                        mapInstance.setZoom(15);
-                        updateMarker(pos, mapInstance);
-                    }, (err) => {
-                        console.warn("Geolocation failed", err);
-                    });
-                }
-
-                // Initialize Places Autocomplete
-                if (inputRef.current) {
-                    const autocomplete = new window.google.maps.places.Autocomplete(inputRef.current);
-                    autocomplete.bindTo('bounds', mapInstance);
-
-                    autocomplete.addListener('place_changed', () => {
-                        const place = autocomplete.getPlace();
-                        if (!place.geometry || !place.geometry.location) {
-                            return;
-                        }
-
-                        if (place.geometry.viewport) {
-                            mapInstance.fitBounds(place.geometry.viewport);
-                        } else {
-                            mapInstance.setCenter(place.geometry.location);
-                            mapInstance.setZoom(17);
-                        }
-
-                        updateMarker(place.geometry.location.toJSON(), mapInstance, place.formatted_address);
-                    });
-                }
-
-                // Map Click Listener
-                mapInstance.addListener('click', (e: google.maps.MapMouseEvent) => {
-                    if (e.latLng) {
-                        updateMarker(e.latLng.toJSON(), mapInstance);
-                    }
-                });
-
-            } catch (e) {
-                console.error("Map initialization error", e);
-                setError("Erro ao carregar o mapa. Verifique sua conexão.");
-            }
-        };
-
-        if (window.google && window.google.maps) {
-            initializeMap();
-        } else {
-            const handleMapsLoaded = () => {
-                initializeMap();
-            };
-            window.addEventListener('google-maps-loaded', handleMapsLoaded);
-            return () => window.removeEventListener('google-maps-loaded', handleMapsLoaded);
+    const updateMarker = (location: { lat: number; lng: number }, map: mapboxgl.Map, address?: string) => {
+        if (markerRef.current) {
+            markerRef.current.remove();
         }
+        markerRef.current = new mapboxgl.Marker({ color: '#00a884' })
+            .setLngLat([location.lng, location.lat])
+            .addTo(map);
+        setSelectedLocation({ ...location, address });
+    };
+
+    useEffect(() => {
+        if (!mapRef.current || mapInstanceRef.current) return;
+
+        try {
+            const initialPos: [number, number] = [-38.625, -3.875]; // Fortaleza/CE ou genérico
+            const map = new mapboxgl.Map({
+                container: mapRef.current,
+                style: 'mapbox://styles/mapbox/dark-v11',
+                center: initialPos,
+                zoom: 13,
+            });
+            map.addControl(new mapboxgl.NavigationControl(), 'top-right');
+            mapInstanceRef.current = map;
+
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition((position) => {
+                    const pos: [number, number] = [position.coords.longitude, position.coords.latitude];
+                    setProximity(pos);
+                    map.setCenter(pos);
+                    map.setZoom(15);
+                }, (err) => {
+                    console.warn("Geolocation failed", err);
+                });
+            }
+
+            map.on('click', async (e: mapboxgl.MapMouseEvent) => {
+                const { lng, lat } = e.lngLat;
+                updateMarker({ lat, lng }, map);
+                const address = await geocodeReverse(lng, lat);
+                setSelectedLocation({ lat, lng, address: address || undefined });
+            });
+        } catch (e) {
+            console.error("Map initialization error", e);
+            setError("Erro ao carregar o mapa. Verifique sua conexão.");
+        }
+
+        return () => {
+            mapInstanceRef.current?.remove();
+            mapInstanceRef.current = null;
+        };
     }, []);
 
-    const updateMarker = (location: { lat: number; lng: number }, mapInstance: google.maps.Map, address?: string) => {
-        if (markerRef.current) {
-            markerRef.current.setMap(null);
-        }
-
-        const newMarker = new window.google.maps.Marker({
-            position: location,
-            map: mapInstance,
-            animation: window.google.maps.Animation.DROP
-        });
-
-        markerRef.current = newMarker;
-        setSelectedLocation({ ...location, address });
+    const handleSelectPlace = (place: GeocodeResult) => {
+        setSearchText(place.address);
+        const map = mapInstanceRef.current;
+        if (!map) return;
+        map.setCenter([place.lng, place.lat]);
+        map.setZoom(17);
+        updateMarker({ lat: place.lat, lng: place.lng }, map, place.address);
     };
 
     return (
@@ -120,11 +86,13 @@ export const LocationPickerModal: React.FC<LocationPickerModalProps> = ({ onLoca
                 </button>
                 <div className="flex-1 bg-[#2a3942] rounded-lg flex items-center px-4 py-2">
                     <span className="material-icons text-gray-400 mr-2">search</span>
-                    <input
-                        ref={inputRef}
-                        type="text"
+                    <AddressAutocompleteInput
+                        value={searchText}
+                        onChangeText={setSearchText}
+                        onSelectPlace={handleSelectPlace}
                         placeholder="Buscar local..."
-                        className="bg-transparent border-none outline-none text-white w-full placeholder-gray-400"
+                        proximity={proximity}
+                        inputClassName="bg-transparent border-none outline-none text-white w-full placeholder-gray-400"
                     />
                 </div>
             </div>
