@@ -57,7 +57,7 @@ Quando um CLIENTE clicar no botão de localização no header:
 4. Pode abrir no Google Maps para navegação
 
 ## Observações
-- ✅ API do Google Maps já configurada (`AIzaSyC1kXpI7SFLq21pWSi6jRwTZ43EsWRJBzA`)
+- ✅ API do Google Maps já configurada (documento obsoleto — app migrado para Mapbox, chave removida)
 - ✅ Componente já criado e pronto para uso
 - ✅ Suporte a Realtime já implementado
 - ⚠️ Certifique-se de que motoristas tenham `lat` e `lng` no perfil

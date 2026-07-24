@@ -24,6 +24,13 @@ dist-ssr
 *.sw?
 .vercel
 *.jks
+*.p12
+*.pem
 keystore.properties
 *.apk
 *.aab
+android_old/
+/git/
+.env
+.env.local
+.env.*.local
