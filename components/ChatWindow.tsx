@@ -8,6 +8,7 @@ import { generateSmartReply, analyzeImage } from '../services/geminiService';
 import { soundService } from '../services/soundService';
 import { AdBanner } from './AdBanner';
 import { Taximeter } from './Taximeter';
+import { MAPBOX_TOKEN } from '../services/mapboxService';
 
 interface ChatWindowProps {
   currentUser: UserProfile;
@@ -499,20 +500,20 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ currentUser, chatPartner
     setIsProcessingAI(false);
   };
 
-  // Helper to extract Lat/Lng from Google Maps Link for Static Preview
+  // Helper to extract Lat/Lng from Google Maps Link for Static Preview (Mapbox Static Images API)
   const getStaticMapUrl = (url: string) => {
     try {
       // Extracts lat,lng from "query=lat,lng"
       const urlObj = new URL(url);
       const query = urlObj.searchParams.get('query');
       if (query) {
-        const apiKey = "AIzaSyBKv8TAp-RpKMYfWrKyeXhnL6pq-pL8DBg";
-        return `https://maps.googleapis.com/maps/api/staticmap?center=${query}&zoom=15&size=400x200&maptype=roadmap&markers=color:red%7C${query}&key=${apiKey}`;
+        const [lat, lng] = query.split(',');
+        return `https://api.mapbox.com/styles/v1/mapbox/streets-v12/static/pin-s+ef4444(${lng},${lat})/${lng},${lat},14,0/400x200@2x?access_token=${MAPBOX_TOKEN}`;
       }
     } catch (e) {
       console.warn("Could not parse location URL for preview", e);
     }
-    return 'https://maps.googleapis.com/maps/api/staticmap?center=0,0&zoom=1&size=200x150&sensor=false&key=AIzaSyBKv8TAp-RpKMYfWrKyeXhnL6pq-pL8DBg';
+    return `https://api.mapbox.com/styles/v1/mapbox/streets-v12/static/0,0,0/200x150@2x?access_token=${MAPBOX_TOKEN}`;
   };
 
   if (!chatPartner) return null;
