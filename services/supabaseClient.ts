@@ -1,11 +1,17 @@
-
 import { createClient } from '@supabase/supabase-js';
-import { SUPABASE_URL, SUPABASE_ANON_KEY } from '../constants';
-import { Message, UserProfile, UserRole, DriverStatus, AppSettings, BingoSettings, BingoCard, BingoRankingUser, BroadcastMessage, DriverPlan } from '../types';
+import { SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SCHEMA } from '../constants';
+import { Message, UserProfile, UserRole, DriverStatus, AppSettings, BingoSettings, BingoCard, BingoRankingUser, BroadcastMessage, DriverPlan, Ride, Banner, Coupon, StoreProduct, WalletTransaction, StoreOrder, AppPaymentRequest } from '../types';
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-  db: { schema: 'chegoja' },
+  db: {
+    schema: SUPABASE_SCHEMA
+  }
 });
+
+// Log seguro - sem expor nome do schema em produção
+if ((import.meta as any).env?.DEV) {
+  console.log('[Supabase] Inicializado com schema configurado');
+}
 
 // Helper for UUID compatibility (used for Optimistic UI in ChatWindow)
 export const generateUUID = () => {
@@ -20,15 +26,23 @@ export const generateUUID = () => {
 };
 
 // Centralized error handling helper
-const handleDbError = (error: any, context: string): string => {
+export const handleDbError = (error: any, context: string): string => {
   // Log the full object for debugging
-  console.error(`Detailed Error in ${context}:`, error);
+  console.error(`Detailed Error in ${context}: `, error);
 
   let msg = 'Erro desconhecido';
 
   if (error) {
+    if (error.message === '' || error.message === undefined) {
+      const status = (error as any)?.status;
+      if (status === 406) {
+        msg = `Schema '${SUPABASE_SCHEMA}' não está exposto na API do Supabase (HTTP 406). Ajuste no Supabase: Exposed schemas / PGRST_DB_SCHEMAS para incluir '${SUPABASE_SCHEMA}'.`;
+      } else {
+        msg = `Erro sem mensagem retornado pelo Supabase. Verifique se o schema '${SUPABASE_SCHEMA}' está exposto na API.`;
+      }
+    }
     // Erro específico de Tabela não encontrada (Postgres 42P01)
-    if (error.code === '42P01') {
+    else if (error.code === '42P01') {
       msg = "Tabela não encontrada no banco de dados. Por favor, execute o script SQL atualizado (supa.ts) no Supabase.";
     }
     else if (typeof error === 'string') {
@@ -53,7 +67,7 @@ const handleDbError = (error: any, context: string): string => {
     }
   }
 
-  console.warn(`Database Error (${context}): ${msg}`);
+  console.warn(`Database Error(${context}): ${msg}`);
   return msg;
 };
 
@@ -78,8 +92,8 @@ export const fetchOnlineDrivers = async (): Promise<UserProfile[]> => {
     .select('*')
     .eq('role', UserRole.DRIVER)
     .eq('is_approved', true) // Only approved drivers
-    .neq('status', DriverStatus.OFFLINE)
-    .order('status', { ascending: true }); // Disponíveis primeiro
+    .eq('status', DriverStatus.AVAILABLE)
+    .order('created_at', { ascending: false }); // Mais recentes primeiro
 
   if (error) {
     handleDbError(error, "fetchOnlineDrivers");
@@ -88,15 +102,67 @@ export const fetchOnlineDrivers = async (): Promise<UserProfile[]> => {
   return data as UserProfile[];
 };
 
+export const fetchOnlineDriversWithinRadius = async (lat: number, lng: number, radiusKm: number = 15): Promise<UserProfile[]> => {
+  // First attempt to use the PostGIS / Math RPC
+  try {
+    const { data, error } = await supabase.rpc('get_drivers_within_radius', {
+      origin_lat: lat,
+      origin_lng: lng,
+      radius_km: radiusKm
+    });
+
+    if (!error && data && data.length > 0) {
+      return data as UserProfile[];
+    }
+  } catch (err) {
+    console.warn("RPC get_drivers_within_radius failed, falling back to client-side filtering", err);
+  }
+
+  // Fallback to client-side filtering if RPC fails or doesn't exist yet
+  const drivers = await fetchOnlineDrivers();
+  return drivers.filter(d => {
+    if (!d.lat || !d.lng) return false;
+    const R = 6371; // Earth radius in km
+    const dLat = (d.lat - lat) * (Math.PI / 180);
+    const dLng = (d.lng - lng) * (Math.PI / 180);
+    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(lat * (Math.PI / 180)) * Math.cos(d.lat * (Math.PI / 180)) *
+      Math.sin(dLng / 2) * Math.sin(dLng / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return (R * c) <= radiusKm;
+  });
+};
+
 export const fetchAllDriversForAdmin = async (): Promise<UserProfile[]> => {
+  try {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('role', 'driver')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('[fetchAllDriversForAdmin] Supabase error:', error);
+      handleDbError(error, "fetchAllDriversForAdmin");
+      return [];
+    }
+
+    console.log('[fetchAllDriversForAdmin] Successfully fetched', data?.length || 0, 'drivers');
+    return data as UserProfile[];
+  } catch (err) {
+    console.error('[fetchAllDriversForAdmin] Exception:', err);
+    return [];
+  }
+};
+
+export const fetchAllProfilesForAdmin = async (): Promise<UserProfile[]> => {
   const { data, error } = await supabase
     .from('profiles')
     .select('*')
-    .eq('role', UserRole.DRIVER)
     .order('created_at', { ascending: false });
 
   if (error) {
-    handleDbError(error, "fetchAllDriversForAdmin");
+    handleDbError(error, "fetchAllProfilesForAdmin");
     return [];
   }
   return data as UserProfile[];
@@ -117,9 +183,7 @@ export const fetchAdminContact = async (): Promise<UserProfile | null> => {
 
 export const deleteDriver = async (driverId: string): Promise<boolean> => {
   const { error } = await supabase
-    .from('profiles')
-    .delete()
-    .eq('id', driverId);
+    .rpc('admin_delete_user', { user_id_param: driverId });
 
   if (error) {
     handleDbError(error, "deleteDriver");
@@ -154,6 +218,20 @@ export const updateDriverStatus = async (driverId: string, status: DriverStatus)
   return true;
 };
 
+export const updateDriverPipStatus = async (driverId: string, isPip: boolean): Promise<boolean> => {
+  const { error } = await supabase
+    .from('profiles')
+    .update({ is_pip_active: isPip })
+    .eq('id', driverId);
+
+  if (error) {
+    // Silent fail is okay for this status
+    console.warn("Failed to update PiP status", error);
+    return false;
+  }
+  return true;
+};
+
 export const updateUserLocation = async (userId: string, lat: number, lng: number): Promise<boolean> => {
   const { error } = await supabase
     .from('profiles')
@@ -170,12 +248,7 @@ export const updateUserLocation = async (userId: string, lat: number, lng: numbe
 
 export const updateDriverVehicle = async (
   driverId: string,
-  vehicleData: {
-    vehicle_model?: string,
-    vehicle_plate?: string,
-    vehicle_color?: string,
-    vehicle_type?: 'car' | 'motorcycle'
-  }
+  vehicleData: Partial<UserProfile>
 ): Promise<boolean> => {
   const { error } = await supabase
     .from('profiles')
@@ -184,6 +257,27 @@ export const updateDriverVehicle = async (
 
   if (error) {
     handleDbError(error, "updateDriverVehicle");
+    return false;
+  }
+  return true;
+};
+
+/**
+ * Atualiza o perfil do usuário com qualquer campo fornecido.
+ * @param userId ID do usuário no banco
+ * @param profileData Objeto contendo os campos a serem atualizados (ex: cpf, whatsapp, address_street, etc)
+ */
+export const updateUserProfile = async (
+  userId: string,
+  profileData: Partial<UserProfile>
+): Promise<boolean> => {
+  const { error } = await supabase
+    .from('profiles')
+    .update(profileData)
+    .eq('id', userId);
+
+  if (error) {
+    handleDbError(error, "updateUserProfile");
     return false;
   }
   return true;
@@ -263,7 +357,7 @@ export const fetchMyClients = async (driverId: string): Promise<UserProfile[]> =
     const { data, error } = await supabase
       .from('messages')
       .select('sender_id, receiver_id')
-      .or(`receiver_id.eq.${driverId},sender_id.eq.${driverId}`)
+      .or(`receiver_id.eq.${driverId}, sender_id.eq.${driverId}`)
       .order('created_at', { ascending: false })
       .limit(50);
 
@@ -303,16 +397,18 @@ export const fetchMyClients = async (driverId: string): Promise<UserProfile[]> =
 
 export const fetchMessages = async (user1: string, user2: string): Promise<Message[]> => {
   try {
+    console.log(`[DB] Buscando mensagens entre ${user1} e ${user2}`);
     const { data, error } = await supabase
       .from('messages')
       .select('*')
-      .or(`and(sender_id.eq.${user1},receiver_id.eq.${user2}),and(sender_id.eq.${user2},receiver_id.eq.${user1})`)
+      .or(`and(sender_id.eq.${user1}, receiver_id.eq.${user2}), and(sender_id.eq.${user2}, receiver_id.eq.${user1})`)
       .order('created_at', { ascending: true });
 
     if (error) {
       handleDbError(error, "fetchMessages");
       return [];
     }
+    console.log(`[DB] ${data?.length || 0} mensagens encontradas.`);
     return data as Message[];
   } catch (e) {
     handleDbError(e, "fetchMessages_EXCEPTION");
@@ -336,6 +432,23 @@ export const sendMessage = async (message: Partial<Message>) => {
   return data as Message;
 };
 
+export const deleteMessageForEveryone = async (messageId: string): Promise<boolean> => {
+  const { error } = await supabase
+    .from('messages')
+    .update({
+      content: '🚫 Esta mensagem foi apagada',
+      media_url: null,
+      media_type: 'text'
+    })
+    .eq('id', messageId);
+
+  if (error) {
+    handleDbError(error, "deleteMessageForEveryone");
+    return false;
+  }
+  return true;
+};
+
 // --- Settings Functions (Taximeter & App) ---
 
 export const fetchAppSettings = async (): Promise<AppSettings> => {
@@ -354,49 +467,70 @@ export const fetchAppSettings = async (): Promise<AppSettings> => {
     moto_price_km: 1.8,
     moto_price_min: 0.3,
     moto_start_distance_limit: 0,
-    marquee_text: 'ENTRE E CONCORRA A PRÊMIOS TODA SEMANA! - PRÊMIOS CHEGOJÁ'
+    night_car_base_price: 7.0,
+    night_car_price_km: 3.5,
+    night_car_price_min: 0.7,
+    dawn_car_base_price: 10.0,
+    dawn_car_price_km: 4.5,
+    dawn_car_price_min: 1.0,
+    night_moto_base_price: 5.0,
+    night_moto_price_km: 2.5,
+    night_moto_price_min: 0.5,
+    dawn_moto_base_price: 7.5,
+    dawn_moto_price_km: 3.5,
+    dawn_moto_price_min: 0.8,
+    night_start_time: '19:00',
+    night_end_time: '23:59',
+    dawn_start_time: '00:00',
+    dawn_end_time: '05:00',
+    marquee_text: 'ENTRE E CONCORRA A PRÊMIOS TODA SEMANA! - PRÊMIOS CHEGOJÁ',
+    coin_value_brl: 1.0
   };
 
   if (error || !data) {
     return defaultSettings;
   }
 
-  // Ensure new fields exist even if DB record is old
   return {
     ...defaultSettings,
-    ...data,
-    // Priority to DB data, but fallback for undefined new fields
-    marquee_text: data.marquee_text || defaultSettings.marquee_text
+    ...data
   } as AppSettings;
 };
 
-export const updateAppSettings = async (settings: AppSettings): Promise<boolean> => {
+export const updateAppSettings = async (settings: AppSettings): Promise<string | null> => {
   // Extract ID to prevent updating it manually
   const { id, ...updates } = settings;
 
-  // Check if exists row, if not insert, else update
-  const { data: existing } = await supabase.from('app_settings').select('id').limit(1);
+  // 1. Check if exists row, if not insert, else update
+  const { data: existing, error: fetchError } = await supabase.from('app_settings').select('id').limit(1);
 
-  let error;
+  if (fetchError) {
+    console.error("[updateAppSettings] Fetch Error:", fetchError);
+    return handleDbError(fetchError, "updateAppSettings Fetch");
+  }
+
+  let dbError;
 
   if (existing && existing.length > 0) {
     const { error: upError } = await supabase
       .from('app_settings')
       .update(updates)
       .eq('id', existing[0].id);
-    error = upError;
+    dbError = upError;
   } else {
+    // If no record exists, insert a new one
     const { error: inError } = await supabase
       .from('app_settings')
       .insert([updates]);
-    error = inError;
+    dbError = inError;
   }
 
-  if (error) {
-    handleDbError(error, "updateAppSettings");
-    return false;
+  if (dbError) {
+    console.error("[updateAppSettings] Save Error:", dbError);
+    return handleDbError(dbError, "updateAppSettings Save");
   }
-  return true;
+
+  return null;
 };
 
 // --- Driver Plans Functions ---
@@ -430,6 +564,94 @@ export const updateDriverPlan = async (plan: DriverPlan): Promise<boolean> => {
     return false;
   }
   return true;
+};
+
+// --- BANNER FUNCTIONS ---
+export const fetchBanners = async (): Promise<Banner[]> => {
+  console.log('[fetchBanners] Buscando banners do banco...');
+  const { data, error } = await supabase
+    .from('banners')
+    .select('*')
+    .order('order', { ascending: true });
+
+  if (error) {
+    console.error('[fetchBanners] Erro:', error);
+    handleDbError(error, "fetchBanners");
+    return [];
+  }
+  console.log('[fetchBanners] Dados recebidos:', data);
+  return data as Banner[];
+};
+
+export const addBanner = async (imageUrl: string, linkUrl?: string, order: number = 0): Promise<boolean> => {
+  const { error } = await supabase
+    .from('banners')
+    .insert([{ image_url: imageUrl, link_url: linkUrl, order, active: true }]);
+
+  if (error) {
+    handleDbError(error, "addBanner");
+    return false;
+  }
+  return true;
+};
+
+export const deleteBanner = async (bannerId: string): Promise<boolean> => {
+  const { error } = await supabase
+    .from('banners')
+    .delete()
+    .eq('id', bannerId);
+
+  if (error) {
+    handleDbError(error, "deleteBanner");
+    return false;
+  }
+  return true;
+};
+
+export const updateBannerOrder = async (bannerId: string, order: number): Promise<boolean> => {
+  const { error } = await supabase
+    .from('banners')
+    .update({ order })
+    .eq('id', bannerId);
+
+  if (error) {
+    handleDbError(error, "updateBannerOrder");
+    return false;
+  }
+  return true;
+};
+
+// Upload Banner Image to Supabase Storage
+export const uploadBannerImage = async (file: File): Promise<string | null> => {
+  try {
+    // Generate unique filename
+    const fileExt = file.name.split('.').pop()?.toLowerCase() || 'jpg';
+    const fileName = `banners/${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
+
+    // Upload to Supabase Storage
+    const { data, error } = await supabase.storage
+      .from('chat-media')
+      .upload(fileName, file, {
+        cacheControl: '3600',
+        upsert: false,
+        contentType: file.type
+      });
+
+    if (error) {
+      handleDbError(error, "uploadBannerImage");
+      return null;
+    }
+
+    // Get Public URL
+    const { data: { publicUrl } } = supabase.storage
+      .from('chat-media')
+      .getPublicUrl(fileName);
+
+    return publicUrl;
+  } catch (e) {
+    handleDbError(e, "uploadBannerImage_EXCEPTION");
+    return null;
+  }
 };
 
 // --- BINGO FUNCTIONS ---
@@ -514,16 +736,24 @@ export const resetBingo = async (): Promise<boolean> => {
 };
 
 export const getOrCreateBingoCard = async (userId: string): Promise<BingoCard | null> => {
+  console.log('[getOrCreateBingoCard] Iniciando para userId:', userId);
+
   // 1. Check exists
   const { data, error } = await supabase.from('bingo_cards').select('*').eq('user_id', userId).maybeSingle();
 
   if (error) {
+    console.error('[getOrCreateBingoCard] Erro ao buscar cartela:', error.message, error.code, error.details);
     handleDbError(error, "getBingoCard_check");
     // Se a tabela não existir, o erro já foi logado. Retornamos null para evitar crash.
     return null;
   }
 
-  if (data) return data as BingoCard;
+  if (data) {
+    console.log('[getOrCreateBingoCard] Cartela já existe:', data.id);
+    return data as BingoCard;
+  }
+
+  console.log('[getOrCreateBingoCard] Cartela não existe, criando nova...');
 
   // 2. Create new card
   // Gera 25 números aleatórios únicos entre 1 e 75 para preencher o grid 5x5
@@ -533,6 +763,8 @@ export const getOrCreateBingoCard = async (userId: string): Promise<BingoCard | 
   }
   const numbersArray = Array.from(numbers).sort((a, b) => a - b);
 
+  console.log('[getOrCreateBingoCard] Números gerados:', numbersArray.length);
+
   const { data: newCard, error: createError } = await supabase
     .from('bingo_cards')
     .insert([{ user_id: userId, numbers: numbersArray }])
@@ -540,9 +772,31 @@ export const getOrCreateBingoCard = async (userId: string): Promise<BingoCard | 
     .single();
 
   if (createError) {
-    handleDbError(createError, "createBingoCard");
-    return null;
+    console.error('[getOrCreateBingoCard] Erro ao criar cartela via INSERT:', createError.message);
+
+    // Fallback: Tentativa via RPC (Security Definer no banco)
+    try {
+      console.log('[getOrCreateBingoCard] Tentando fallback via RPC...');
+      const { data: rpcCard, error: rpcError } = await supabase.rpc('ensure_bingo_card', {
+        target_user_id: userId
+      });
+
+      if (rpcError) {
+        console.error('[getOrCreateBingoCard] RPC falhou:', rpcError);
+        handleDbError(createError, "createBingoCard");
+        return null;
+      }
+
+      console.log('[getOrCreateBingoCard] Cartela obtida via RPC com sucesso.');
+      return rpcCard as BingoCard;
+    } catch (rpcEx) {
+      console.error('[getOrCreateBingoCard] Erro inesperado no RPC:', rpcEx);
+      handleDbError(createError, "createBingoCard");
+      return null;
+    }
   }
+
+  console.log('[getOrCreateBingoCard] Cartela criada com sucesso:', newCard?.id);
   return newCard as BingoCard;
 };
 
@@ -581,15 +835,15 @@ export const fetchBingoRanking = async (): Promise<BingoRankingUser[]> => {
 
 export const subscribeToBingo = (onUpdate: () => void) => {
   return supabase
-    .channel('public:bingo')
-    .on('postgres_changes', { event: '*', schema: 'chegoja', table: 'bingo_settings' }, onUpdate)
-    .on('postgres_changes', { event: '*', schema: 'chegoja', table: 'bingo_cards' }, onUpdate)
+    .channel(`${SUPABASE_SCHEMA}:bingo`)
+    .on('postgres_changes', { event: '*', schema: SUPABASE_SCHEMA, table: 'bingo_settings' }, onUpdate)
+    .on('postgres_changes', { event: '*', schema: SUPABASE_SCHEMA, table: 'bingo_cards' }, onUpdate)
     .subscribe();
 };
 
 // --- Storage Functions ---
 
-export const uploadFile = async (file: Blob, folder: 'audio' | 'images', extension?: string): Promise<string | null> => {
+export const uploadFile = async (file: Blob, folder: 'audio' | 'images' | 'attachments', extension?: string): Promise<string | null> => {
   try {
     let fileExt = extension;
 
@@ -602,7 +856,7 @@ export const uploadFile = async (file: Blob, folder: 'audio' | 'images', extensi
     }
 
     // Sanitize extension (remove leading dot if exists)
-    fileExt = fileExt.replace(/^\./, '');
+    fileExt = fileExt?.replace(/^\./, '');
 
     const fileName = `${folder}/${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
 
@@ -612,7 +866,7 @@ export const uploadFile = async (file: Blob, folder: 'audio' | 'images', extensi
       upsert: false
     };
 
-    if (file.type) {
+    if (file instanceof File) {
       options.contentType = file.type;
     }
 
@@ -641,102 +895,72 @@ export const subscribeToMessages = (
   userId: string,
   onMessage: (msg: Message) => void
 ) => {
+  // Usamos um canal único por usuário para evitar conflitos de broadcast
   return supabase
-    .channel('public:messages')
+    .channel(`chat_updates:${userId}`)
     .on(
       'postgres_changes',
-      { event: 'INSERT', schema: 'chegoja', table: 'messages', filter: `receiver_id=eq.${userId}` },
+      {
+        event: '*',
+        schema: SUPABASE_SCHEMA,
+        table: 'messages'
+      },
       (payload) => {
-        onMessage(payload.new as Message);
+        const msg = (payload.new || payload.old) as Message;
+        if (!msg) return;
+
+        // Filtro manual no cliente: Garante que a mensagem pertence a este usuário
+        // Isso é mais robusto que o filtro do Postgres em alguns ambientes.
+        if (msg.sender_id === userId || msg.receiver_id === userId) {
+          onMessage(msg);
+        }
       }
     )
-    .on(
-      'postgres_changes',
-      { event: 'INSERT', schema: 'chegoja', table: 'messages', filter: `sender_id=eq.${userId}` },
-      (payload) => {
-        onMessage(payload.new as Message);
-      }
-    )
-    .subscribe();
+    .subscribe((status) => {
+      console.log(`[ChatSub:${userId}] Status:`, status);
+    });
 };
 
-export const subscribeToProfiles = (
-  onUpdate: () => void
-) => {
-  return supabase
-    .channel('public:profiles')
-    .on(
-      'postgres_changes',
-      { event: 'INSERT', schema: 'chegoja', table: 'profiles' }, // Apenas novos registros
-      () => {
-        onUpdate();
-      }
-    )
-    .subscribe();
-}
-
-// --- BROADCAST FUNCTIONS (NOVO) ---
-export const sendBroadcast = async (title: string, message: string, target_role: 'client' | 'driver' | 'all'): Promise<boolean> => {
+export const markMessagesAsRead = async (userId: string, senderId: string): Promise<boolean> => {
   const { error } = await supabase
-    .from('broadcasts')
-    .insert([{ title, message, target_role }]);
+    .from('messages')
+    .update({ is_read: true })
+    .eq('receiver_id', userId)
+    .eq('sender_id', senderId)
+    .eq('is_read', false);
 
   if (error) {
-    handleDbError(error, "sendBroadcast");
+    handleDbError(error, "markMessagesAsRead");
     return false;
   }
   return true;
 };
 
-export const subscribeToBroadcasts = (
-  onBroadcast: (broadcast: BroadcastMessage) => void
-) => {
-  return supabase
-    .channel('public:broadcasts')
-    .on('postgres_changes', { event: 'INSERT', schema: 'chegoja', table: 'broadcasts' }, (payload) => {
-      onBroadcast(payload.new as BroadcastMessage);
-    })
-    .subscribe();
-};
+// --- AUTH FUNCTIONS ---
 
-// Updated Client Registration/Login
 export const registerClientWithPhoto = async (username: string, phone: string, avatarFile?: File): Promise<UserProfile | null> => {
   try {
-    // 1. Tentar encontrar usuário pelo telefone
-    const { data: existing, error: findError } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('phone', phone)
-      .eq('role', UserRole.CLIENT)
-      .maybeSingle();
+    let finalUrl = null;
+    if (avatarFile) {
+      finalUrl = await uploadFile(avatarFile, 'images');
+    }
 
+    // Check if exists
+    const { data: existing } = await supabase.from('profiles').select('*').eq('phone', phone).maybeSingle();
     if (existing) {
+      // Auto login
       return existing as UserProfile;
     }
 
-    // 2. Se não existe, fazer upload da foto (se houver)
-    let avatar_url = `https://ui-avatars.com/api/?name=${encodeURIComponent(username)}&background=25D366&color=fff`;
-
-    if (avatarFile) {
-      // Detectar extensão simples
-      const ext = avatarFile.name.split('.').pop() || 'jpg';
-      const url = await uploadFile(avatarFile, 'images', ext);
-      if (url) avatar_url = url;
-    }
-
-    // 3. Criar perfil
-    const profileInsert = {
-      username,
-      phone,
-      role: UserRole.CLIENT,
-      status: DriverStatus.AVAILABLE,
-      is_approved: true, // CLIENTES JÁ NASCEM APROVADOS
-      avatar_url
-    };
-
     const { data, error } = await supabase
       .from('profiles')
-      .insert([profileInsert])
+      .insert([{
+        username,
+        phone,
+        role: UserRole.CLIENT,
+        status: DriverStatus.AVAILABLE,
+        avatar_url: finalUrl || `https://ui-avatars.com/api/?name=${username}`
+      }])
       .select()
       .single();
 
@@ -744,111 +968,111 @@ export const registerClientWithPhoto = async (username: string, phone: string, a
       handleDbError(error, "registerClientWithPhoto");
       return null;
     }
-
     return data as UserProfile;
-  } catch (err: any) {
-    console.error("Exceção no cadastro cliente:", err);
-    alert(`Erro ao processar: ${err?.message || 'Erro desconhecido'}`);
+  } catch (e) {
+    handleDbError(e, "registerClientWithPhoto_EXCEPTION");
     return null;
   }
-};
-
-// Mantido para compatibilidade, mas redireciona para o novo
-export const registerTempClient = async (username: string): Promise<UserProfile | null> => {
-  return registerClientWithPhoto(username, "00000000");
 };
 
 export const registerDriver = async (
   username: string,
-  password: string,
-  vehicleType: 'car' | 'motorcycle',
+  password?: string,
+  vehicleType?: 'car' | 'motorcycle',
   vehicleModel?: string,
   vehiclePlate?: string,
   vehicleColor?: string,
-  avatarFile?: File
+  avatarFile?: File,
+  phone?: string
 ): Promise<UserProfile | null> => {
   try {
-    // 1. Check if username exists
-    const { data: existing, error: checkError } = await supabase
-      .from('profiles')
-      .select('id')
-      .eq('username', username)
-      .maybeSingle();
-
-    if (checkError) {
-      const msg = handleDbError(checkError, "registerDriver_checkUser");
-      alert(`Erro ao verificar usuário: ${msg}`);
-      return null;
+    const cleanPhone = phone ? phone.replace(/\D/g, '') : undefined;
+    const finalUsername = username.trim();
+    if (!finalUsername) {
+      throw new Error("Nome inválido.");
     }
-
-    if (existing) {
-      alert("Nome de usuário já existe. Tente outro ou faça login.");
-      return null;
+    if (!password || password.trim().length < 4) {
+      throw new Error("Senha muito curta.");
     }
+    const { data: rpcData, error: rpcError } = await supabase
+      .rpc('register_driver', {
+        p_username: finalUsername,
+        p_password: password,
+        p_vehicle_type: vehicleType,
+        p_vehicle_model: vehicleModel,
+        p_vehicle_plate: vehiclePlate,
+        p_vehicle_color: vehicleColor,
+        p_phone: cleanPhone
+      });
+    if (rpcData && !rpcError) {
+      return rpcData as unknown as UserProfile;
+    }
+    // Check if phone already exists
+    if (cleanPhone) {
+      const { data: existing } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('phone', cleanPhone)
+        .maybeSingle();
 
-    // 2. Upload Avatar if provided
-    let avatar_url = `https://ui-avatars.com/api/?name=${encodeURIComponent(username)}&background=00a884&color=fff`;
-    if (avatarFile) {
-      try {
-        const ext = avatarFile.name.split('.').pop() || 'jpg';
-        const url = await uploadFile(avatarFile, 'images', ext);
-        if (url) avatar_url = url;
-      } catch (e) {
-        console.warn("Falha no upload do avatar, usando padrão.", e);
+      if (existing) {
+        // If it's a driver and we are trying to register, it should probably be a login instead
+        // but we return the existing user as requested: "se tiver usuario e telefone entrara com ele"
+        return existing as UserProfile;
       }
     }
 
-    // 3. Prepare Insert Data
-    // Ensure string fields are never null/undefined if possible
-    const profileInsert = {
-      username: username.trim(),
-      password: password, // Save password
-      role: UserRole.DRIVER,
-      status: DriverStatus.OFFLINE, // MOTORISTAS COMEÇAM OFFLINE
-      is_approved: false, // MOTORISTA PRECISA DE APROVAÇÃO
-      vehicle_type: vehicleType,
-      vehicle_model: vehicleModel || '',
-      vehicle_plate: (vehiclePlate || '').toUpperCase(),
-      vehicle_color: vehicleColor || '',
-      avatar_url
-    };
-
-    console.log("Tentando registrar motorista:", profileInsert);
+    let avatar_url = null;
+    if (avatarFile) {
+      avatar_url = await uploadFile(avatarFile, 'images');
+    }
 
     const { data, error } = await supabase
       .from('profiles')
-      .insert([profileInsert])
+      .insert([{
+        username: finalUsername,
+        password,
+        phone: cleanPhone,
+        role: UserRole.DRIVER,
+        status: DriverStatus.OFFLINE,
+        is_approved: false, // Default pending
+        vehicle_type: vehicleType,
+        vehicle_model: vehicleModel,
+        vehicle_plate: vehiclePlate,
+        vehicle_color: vehicleColor,
+        avatar_url: avatar_url || `https://ui-avatars.com/api/?name=${username}`
+      }])
       .select()
       .single();
 
     if (error) {
-      const msg = handleDbError(error, "registerDriver");
-
-      // Mensagens amigáveis para erros comuns
-      if (msg.includes('duplicate key') || msg.includes('unique constraint')) {
-        alert("Erro: Este nome de usuário ou placa já está cadastrado.");
-      } else if (msg.includes('column') && msg.includes('does not exist')) {
-        alert("Erro de Sistema: O banco de dados está desatualizado. Por favor, contate o suporte para rodar o script de atualização (password/is_approved).");
-      } else {
-        alert(`Erro ao salvar motorista: ${msg}`);
-      }
+      handleDbError(error, "registerDriver");
       return null;
     }
     return data as UserProfile;
-  } catch (err: any) {
-    console.error("Exceção no cadastro motorista:", err);
-    alert(`Erro inesperado ao cadastrar: ${err?.message || JSON.stringify(err)}`);
+  } catch (e) {
+    handleDbError(e, "registerDriver_EXCEPTION");
     return null;
   }
 };
 
-export const loginDriver = async (username: string, password?: string): Promise<UserProfile | null> => {
+export const loginUser = async (identifier: string, password?: string, role?: UserRole): Promise<UserProfile | null> => {
   try {
-    let query = supabase
-      .from('profiles')
-      .select('*')
-      .eq('username', username)
-      .eq('role', UserRole.DRIVER);
+    // Tenta buscar por username ou phone
+    let query = supabase.from('profiles').select('*');
+
+    // Se o identificador parece um número de telefone (tem apenas números ou +), buscamos por phone OU username
+    // Nota: Como o Supabase não tem "OR" simples combinado com ANDs complexos facilmente via query builder encadeado para este caso específico sem usar .or() na raiz,
+    // faremos a lógica de filtro com .or()
+
+    // Construção da query: (username = identifier OR phone = identifier) AND role = role AND password = password
+    // Sintaxe do .or(): "username.eq.Valor,phone.eq.Valor"
+
+    query = query.or(`username.eq.${identifier},phone.eq.${identifier}`);
+
+    if (role) {
+      query = query.eq('role', role);
+    }
 
     if (password) {
       query = query.eq('password', password);
@@ -857,27 +1081,38 @@ export const loginDriver = async (username: string, password?: string): Promise<
     const { data, error } = await query.maybeSingle();
 
     if (error) {
-      handleDbError(error, "loginDriver");
+      // Se houver erro de permissão (RLS) ou outro
+      console.error("[Login] Erro ao buscar usuário:", error);
+      handleDbError(error, "loginUser");
       return null;
     }
 
-    if (data) {
-      // If logging in, ensure they are set to available IF approved
-      if (data.is_approved) {
-        updateDriverStatus(data.id, DriverStatus.AVAILABLE).catch(e =>
-          console.warn("Non-critical: Failed to update status on login", e)
-        );
-        return { ...data, status: DriverStatus.AVAILABLE } as UserProfile;
-      }
-
-      return data as UserProfile;
+    if (!data) {
+      console.warn(`[Login] Usuário não encontrado para: ${identifier} (Role: ${role})`);
     }
 
-    return null;
+    return data as UserProfile;
   } catch (e) {
-    handleDbError(e, "loginDriver_EXCEPTION");
+    handleDbError(e, "loginUser_EXCEPTION");
     return null;
   }
+};
+
+export const loginDriver = async (username: string, password?: string): Promise<UserProfile | null> => {
+  const data = await loginUser(username, password, UserRole.DRIVER);
+
+  if (data) {
+    // If logging in, ensure they are set to available IF approved
+    if (data.is_approved) {
+      updateDriverStatus(data.id, DriverStatus.AVAILABLE).catch(e =>
+        console.warn("Non-critical: Failed to update status on login", e)
+      );
+      return { ...data, status: DriverStatus.AVAILABLE } as UserProfile;
+    }
+    return data;
+  }
+
+  return null;
 };
 
 export const checkUserExists = async (field: 'username' | 'phone', value: string): Promise<boolean> => {
@@ -893,6 +1128,83 @@ export const checkUserExists = async (field: 'username' | 'phone', value: string
   }
 
   return !!data;
+};
+
+/**
+ * Busca usuários duplicados pelo campo 'phone'.
+ * Agrupa por telefone e retorna aqueles que aparecem mais de uma vez.
+ */
+export const fetchDuplicateUsers = async (): Promise<{ phone: string, count: number, ids: string[] }[]> => {
+  try {
+    // Como o Supabase JS não tem um GROUP BY direto que retorne os IDs,
+    // buscamos todos os perfis com telefone e processamos localmente.
+    // Para uma base muito grande, o ideal seria uma RPC no Postgres.
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('id, phone, username, created_at')
+      .not('phone', 'is', null);
+
+    if (error) throw error;
+
+    const phoneMap: Record<string, { count: number, profiles: any[] }> = {};
+
+    data.forEach(p => {
+      if (!p.phone) return;
+      if (!phoneMap[p.phone]) {
+        phoneMap[p.phone] = { count: 0, profiles: [] };
+      }
+      phoneMap[p.phone].count++;
+      phoneMap[p.phone].profiles.push(p);
+    });
+
+    const duplicates = Object.entries(phoneMap)
+      .filter(([_, val]) => val.count > 1)
+      .map(([phone, val]) => ({
+        phone,
+        count: val.count,
+        // Ordenamos por data de criação para manter o mais antigo (ou mais novo dependendo da regra)
+        // Aqui vamos retornar todos os IDs para o admin escolher ou para limpeza automática
+        ids: val.profiles.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()).map(p => p.id)
+      }));
+
+    return duplicates;
+  } catch (e) {
+    handleDbError(e, "fetchDuplicateUsers");
+    return [];
+  }
+};
+
+/**
+ * Remove usuários duplicados mantendo apenas o registro mais antigo.
+ */
+export const cleanupDuplicateUsers = async (): Promise<{ success: boolean, removedCount: number }> => {
+  try {
+    const duplicates = await fetchDuplicateUsers();
+    let removedTotal = 0;
+
+    for (const group of duplicates) {
+      // O primeiro ID é o mais antigo (devido ao sort no fetchDuplicateUsers)
+      const idsToRemove = group.ids.slice(1);
+
+      if (idsToRemove.length > 0) {
+        const { error } = await supabase
+          .from('profiles')
+          .delete()
+          .in('id', idsToRemove);
+
+        if (!error) {
+          removedTotal += idsToRemove.length;
+        } else {
+          console.error(`Erro ao remover duplicatas para ${group.phone}:`, error);
+        }
+      }
+    }
+
+    return { success: true, removedCount: removedTotal };
+  } catch (e) {
+    handleDbError(e, "cleanupDuplicateUsers");
+    return { success: false, removedCount: 0 };
+  }
 };
 
 export const updateUserAvatar = async (userId: string, avatarFile: File): Promise<string | null> => {
@@ -919,5 +1231,1296 @@ export const updateUserAvatar = async (userId: string, avatarFile: File): Promis
   } catch (e) {
     handleDbError(e, "updateUserAvatar_EXCEPTION");
     return null;
+  }
+};
+
+/**
+ * CUPONS DE DESCONTO
+ */
+
+export const fetchAvailableCoupons = async (): Promise<Coupon[]> => {
+  const { data, error } = await supabase
+    .from('coupons')
+    .select('*')
+    .eq('is_active', true)
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    handleDbError(error, "fetchAvailableCoupons");
+    return [];
+  }
+
+  // Filtrar apenas cupons que ainda têm estoque (para garantir)
+  return (data as Coupon[]).filter(c => c.used_quantity < c.total_quantity);
+};
+
+export const fetchAllCoupons = async (): Promise<Coupon[]> => {
+  const { data, error } = await supabase
+    .from('coupons')
+    .select('*')
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    handleDbError(error, "fetchAllCoupons");
+    return [];
+  }
+
+  return data as Coupon[];
+};
+
+export const createCoupon = async (coupon: Partial<Coupon>, imageFile?: File): Promise<Coupon | null> => {
+  try {
+    let finalUrl = coupon.image_url;
+
+    if (imageFile) {
+      finalUrl = await uploadFile(imageFile, 'images');
+    }
+
+    const { data, error } = await supabase
+      .from('coupons')
+      .insert({
+        ...coupon,
+        image_url: finalUrl,
+        used_quantity: 0,
+        is_active: true
+      })
+      .select()
+      .single();
+
+    if (error) {
+      handleDbError(error, "createCoupon");
+      return null;
+    }
+
+    return data as Coupon;
+  } catch (e) {
+    handleDbError(e, "createCoupon_EXCEPTION");
+    return null;
+  }
+};
+
+export const deleteCoupon = async (id: string): Promise<boolean> => {
+  const { error } = await supabase
+    .from('coupons')
+    .delete()
+    .eq('id', id);
+
+  if (error) {
+    handleDbError(error, "deleteCoupon");
+    return false;
+  }
+
+  return true;
+};
+
+export const useCoupon = async (id: string): Promise<boolean> => {
+  // RPC ou Incremento direto? RPC é melhor para atomicidade
+  const { error } = await supabase.rpc('increment_coupon_usage', { coupon_id: id });
+
+  if (error) {
+    // Se a função RPC não existir, tentamos via update direto (menos seguro contra race conditions mas funciona para MVP)
+    const { data: coupon } = await supabase.from('coupons').select('used_quantity, total_quantity').eq('id', id).single();
+    if (coupon && coupon.used_quantity < coupon.total_quantity) {
+      const { error: updateError } = await supabase
+        .from('coupons')
+        .update({ used_quantity: coupon.used_quantity + 1 })
+        .eq('id', id);
+      return !updateError;
+    }
+    return false;
+  }
+
+  return true;
+};
+
+
+
+
+// --- RIDES FUNCTIONS ---
+
+export const createRideRequest = async (rideData: Partial<Ride>): Promise<{ data: Ride | null, error: string | null }> => {
+  const { data, error } = await supabase
+    .from('rides')
+    .insert([rideData])
+    .select()
+    .single();
+
+  if (error) {
+    const msg = handleDbError(error, "createRideRequest");
+    return { data: null, error: msg };
+  }
+  return { data: data as Ride, error: null };
+};
+
+export const cancelRide = async (rideId: string): Promise<boolean> => {
+  const { error } = await supabase
+    .from('rides')
+    .update({
+      status: 'cancelled',
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', rideId);
+
+  if (error) {
+    handleDbError(error, "cancelRide");
+    return false;
+  }
+  return true;
+};
+
+export const acceptRide = async (rideId: string, driverId: string): Promise<boolean> => {
+  try {
+    // Usar RPC atômica com SELECT FOR UPDATE para evitar race conditions
+    // Isso garante que apenas UM motorista consiga aceitar a corrida
+    const { data, error } = await supabase.rpc('atomic_accept_ride', {
+      p_ride_id: rideId,
+      p_driver_id: driverId
+    });
+
+    if (error) {
+      handleDbError(error, "acceptRide");
+      return false;
+    }
+
+    const result = data as { success: boolean; message: string };
+
+    if (!result?.success) {
+      console.warn(`[acceptRide] Falha atômica: ${result?.message || 'Corrida já aceita por outro motorista'}`);
+      return false;
+    }
+
+    console.log(`[acceptRide] ✅ Corrida ${rideId} aceita atomicamente pelo motorista ${driverId}`);
+    return true;
+  } catch (e) {
+    handleDbError(e, "acceptRide_EXCEPTION");
+    return false;
+  }
+};
+
+export const updateRideStatus = async (rideId: string, status: Ride['status']): Promise<boolean> => {
+  const { error } = await supabase
+    .from('rides')
+    .update({
+      status,
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', rideId);
+
+  if (error) {
+    handleDbError(error, "updateRideStatus");
+    return false;
+  }
+  return true;
+};
+
+export const completeRide = async (
+  rideId: string,
+  finalPrice: number,
+  paymentMethod: 'pix' | 'card' | 'cash' | 'coins'
+): Promise<boolean> => {
+  const { error } = await supabase
+    .from('rides')
+    .update({
+      status: 'finished',
+      final_price: finalPrice,
+      payment_method: paymentMethod,
+      finished_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', rideId);
+
+  if (error) {
+    handleDbError(error, "completeRide");
+    return false;
+  }
+  return true;
+};
+
+export const updateRidePayment = async (rideId: string, paymentData: any): Promise<boolean> => {
+  const { error } = await supabase
+    .from('rides')
+    .update({
+      ...paymentData,
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', rideId);
+
+  if (error) {
+    handleDbError(error, "updateRidePayment");
+    return false;
+  }
+  return true;
+};
+
+export const fetchActiveRide = async (userId: string, role: 'client' | 'driver'): Promise<Ride | null> => {
+  const field = role === 'client' ? 'client_id' : 'driver_id';
+  let query = supabase
+    .from('rides')
+    .select('*, driver:driver_id(*), client:client_id(*)')
+    .eq(field, userId)
+    .not('status', 'in', '("finished","cancelled")')
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  // Correção: Para motoristas, agora incluímos status 'searching' para que ao abrir o app
+  // via notificação, a lógica 'init' detecte a corrida pendente.
+  // A interface (UI) tratará 'searching' como uma chamada recebida.
+  /* if (role === 'driver') {
+    query = query.neq('status', 'searching');
+  } */
+
+  const { data, error } = await query;
+
+  if (error) {
+    handleDbError(error, "fetchActiveRide");
+    return null;
+  }
+  return data as Ride;
+};
+
+export const fetchOpenBroadcastRide = async (vehicleType?: string): Promise<Ride | null> => {
+  let query = supabase
+    .from('rides')
+    .select('*, driver:driver_id(*), client:client_id(*)')
+    .is('driver_id', null)
+    .eq('status', 'searching')
+    .eq('is_broadcast', true);
+
+  if (vehicleType) {
+    console.log(`[fetchOpenBroadcastRide] Filtrando por veículo: ${vehicleType}`);
+    query = query.eq('vehicle_type', vehicleType);
+  } else {
+    console.log(`[fetchOpenBroadcastRide] Sem filtro de veículo aplicado.`);
+  }
+
+  const { data, error } = await query
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  console.log(`[fetchOpenBroadcastRide] Resultado:`, data ? data.id : 'null', error);
+
+  if (error) {
+    handleDbError(error, "fetchOpenBroadcastRide");
+    return null;
+  }
+  return data as Ride;
+};
+
+export const fetchDriverHistory = async (driverId: string, startDate: Date, endDate: Date): Promise<Ride[]> => {
+  const { data, error } = await supabase
+    .from('rides')
+    .select('*')
+    .eq('driver_id', driverId)
+    .gte('created_at', startDate.toISOString())
+    .lte('created_at', endDate.toISOString())
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    handleDbError(error, "fetchDriverHistory");
+    return [];
+  }
+  return data as Ride[];
+};
+
+export const fetchDriverMonthlyStats = async (driverId: string): Promise<number> => {
+  try {
+    const now = new Date();
+    const firstDay = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+
+    const { count, error } = await supabase
+      .from('rides')
+      .select('id', { count: 'exact', head: true })
+      .eq('driver_id', driverId)
+      .eq('status', 'finished')
+      .gte('created_at', firstDay);
+
+    if (error) {
+      console.warn("[fetchDriverMonthlyStats] Error:", error);
+      return 0;
+    }
+    return count || 0;
+  } catch (err) {
+    console.error("[fetchDriverMonthlyStats] Exception:", err);
+    return 0;
+  }
+};
+
+export const fetchAllDriversWithStats = async (): Promise<(UserProfile & { monthly_rides: number })[]> => {
+  const drivers = await fetchAllDriversForAdmin();
+  const driversWithStats = await Promise.all(drivers.map(async (d) => {
+    const stats = await fetchDriverMonthlyStats(d.id).catch(err => {
+      console.warn(`[Stats] Erro ao buscar estatísticas para ${d.username}:`, err);
+      return 0;
+    });
+    return { ...d, monthly_rides: stats };
+  }));
+  return driversWithStats;
+};
+
+export const fetchRevenueStats = async (days: number = 7): Promise<{ date: string, amount: number }[]> => {
+  try {
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - (days - 1));
+    startDate.setHours(0, 0, 0, 0);
+
+    const { data, error } = await supabase
+      .from('rides')
+      .select('created_at, final_price')
+      .eq('status', 'finished')
+      .gte('created_at', startDate.toISOString());
+
+    if (error) throw error;
+
+    const statsMap: Record<string, number> = {};
+
+    // Initialize map with last N days
+    for (let i = 0; i < days; i++) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      const dateStr = d.toISOString().split('T')[0];
+      statsMap[dateStr] = 0;
+    }
+
+    (data || []).forEach((ride: any) => {
+      const dateStr = ride.created_at.split('T')[0];
+      if (statsMap[dateStr] !== undefined) {
+        statsMap[dateStr] += Number(ride.final_price || 0);
+      }
+    });
+
+    return Object.entries(statsMap)
+      .map(([date, amount]) => ({ date, amount }))
+      .sort((a, b) => a.date.localeCompare(b.date));
+  } catch (e) {
+    console.warn("Error fetching revenue stats", e);
+    return [];
+  }
+};
+
+export const fetchDashboardMetrics = async () => {
+  try {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const promises = [
+      supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'driver'),
+      supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'client'),
+      supabase.from('rides').select('*', { count: 'exact', head: true }).gte('created_at', today.toISOString()),
+      supabase.from('rides').select('final_price').eq('status', 'finished').gte('created_at', today.toISOString())
+    ];
+
+    const results = await Promise.allSettled(promises);
+
+    const totalDrivers = results[0].status === 'fulfilled' ? (results[0].value.count || 0) : 0;
+    const totalClients = results[1].status === 'fulfilled' ? (results[1].value.count || 0) : 0;
+    const todayRides = results[2].status === 'fulfilled' ? (results[2].value.count || 0) : 0;
+
+    let todayEarnings = 0;
+    if (results[3].status === 'fulfilled' && results[3].value.data) {
+      todayEarnings = results[3].value.data.reduce((acc: number, ride: any) => acc + Number(ride.final_price || 0), 0);
+    }
+
+    if (results.some(r => r.status === 'rejected')) {
+      console.warn("[Dashboard] Some metrics failed to load:", results.filter(r => r.status === 'rejected'));
+    }
+
+    return {
+      totalDrivers,
+      totalClients,
+      todayRides,
+      todayEarnings
+    };
+  } catch (e) {
+    console.error("Error fetching dashboard metrics (Critical)", e);
+    return {
+      totalDrivers: 0,
+      totalClients: 0,
+      todayRides: 0,
+      todayEarnings: 0
+    };
+  }
+};
+
+export const fetchRideHeatmapData = async (vehicleType?: 'car' | 'motorcycle'): Promise<{ lat: number; lng: number }[]> => {
+  try {
+    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+
+    let query = supabase
+      .from('rides')
+      .select('origin_lat, origin_lng')
+      .gte('created_at', twentyFourHoursAgo);
+
+    if (vehicleType) {
+      query = query.eq('vehicle_type', vehicleType);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      console.warn('Error fetching heatmap data:', error);
+      return [];
+    }
+
+    return (data || [])
+      .filter((r: any) => r.origin_lat && r.origin_lng)
+      .map((r: any) => ({ lat: r.origin_lat, lng: r.origin_lng }));
+  } catch (e) {
+    console.error('Exception fetching heatmap data:', e);
+    return [];
+  }
+};
+
+export const fetchRideById = async (rideId: string): Promise<Ride | null> => {
+  const { data, error } = await supabase
+    .from('rides')
+    .select('*, driver:driver_id(*), client:client_id(*)')
+    .eq('id', rideId)
+    .single();
+
+  if (error) {
+    handleDbError(error, "fetchRideById");
+    return null;
+  }
+  return data as Ride;
+};
+
+export const subscribeToRides = (userId: string, role: 'client' | 'driver', callback: (ride: Ride) => void) => {
+
+  const channel = supabase.channel(`rides_sub:${userId}:${Date.now()}`);
+
+  if (role === 'client') {
+    // Cliente só ouve suas próprias corridas
+    channel.on(
+      'postgres_changes',
+      { event: '*', schema: SUPABASE_SCHEMA, table: 'rides', filter: `client_id=eq.${userId}` },
+      (payload) => {
+        const ride = (payload.new || payload.old) as Ride;
+        if (ride) callback(ride);
+      }
+    );
+  } else {
+    // Motorista: Ouve todas as mudanças na tabela rides e filtra no App.tsx
+    // Isso é mais robusto do que usar filtros no servidor que podem perder transições de status
+    channel.on(
+      'postgres_changes',
+      { event: '*', schema: SUPABASE_SCHEMA, table: 'rides' },
+      (payload) => {
+        const ride = (payload.new || payload.old) as Ride;
+        if (ride) callback(ride);
+      }
+    );
+  }
+
+  return channel.subscribe();
+};
+
+export const subscribeToProfiles = (callback: (payload?: any) => void) => {
+  return supabase
+    .channel('profiles-global')
+    .on('postgres_changes', { event: '*', schema: SUPABASE_SCHEMA, table: 'profiles' }, (payload) => {
+      callback(payload);
+    })
+    .subscribe();
+};
+
+export const subscribeToBroadcasts = (callback: (msg: BroadcastMessage) => void) => {
+  return supabase
+    .channel('broadcasts')
+    .on(
+      'postgres_changes',
+      {
+        event: 'INSERT',
+        schema: SUPABASE_SCHEMA,
+        table: 'broadcasts'
+      },
+      (payload) => {
+        callback(payload.new as BroadcastMessage);
+      }
+    )
+    .subscribe();
+};
+
+export const sendBroadcast = async (title: string, message: string, targetRole: 'client' | 'driver' | 'all'): Promise<boolean> => {
+  const { error } = await supabase
+    .from('broadcasts')
+    .insert([{ title, message, target_role: targetRole }]);
+
+  if (error) {
+    handleDbError(error, "sendBroadcast");
+    return false;
+  }
+  return true;
+};
+
+/**
+ * CARTEIRA E LOJA (WALLETS & STORE)
+ */
+
+export const fetchWalletTransactions = async (userId: string): Promise<WalletTransaction[]> => {
+  const { data, error } = await supabase
+    .from('wallet_transactions')
+    .select('*')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    handleDbError(error, "fetchWalletTransactions");
+    return [];
+  }
+  return (data || []) as WalletTransaction[];
+};
+
+// --- PAGAMENTOS E SAQUES ---
+
+export const createPaymentRequest = async (
+  userId: string,
+  type: 'driver_payout' | 'client_withdrawal',
+  amountMoney: number,
+  amountCoins: number,
+  pixKey: string
+): Promise<{ success: boolean; message: string }> => {
+  try {
+    // 1. Check Balance and Deduct immediately
+    const user = await fetchUserProfile(userId);
+    if (!user) return { success: false, message: "Usuário não encontrado" };
+
+    if (type === 'client_withdrawal') {
+      if ((user.wallet_coins || 0) < amountCoins) {
+        return { success: false, message: "Saldo de moedas insuficiente." };
+      }
+      // Deduct Coins
+      const { error: deductError } = await supabase.rpc('increment_coins', {
+        user_id_param: userId,
+        amount_param: -amountCoins
+      });
+      if (deductError) return { success: false, message: "Erro ao debitar moedas." };
+    } else {
+      // Driver Payout
+      if ((user.financial_balance || 0) < amountMoney) {
+        return { success: false, message: "Saldo financeiro insuficiente." };
+      }
+      // Deduct Money (Assuming we have a way, or just trust the request. Let's update profile)
+      const { error: deductError } = await supabase
+        .from('profiles')
+        .update({ financial_balance: (user.financial_balance || 0) - amountMoney })
+        .eq('id', userId);
+      if (deductError) return { success: false, message: "Erro ao debitar saldo financeiro." };
+    }
+
+    // 2. Create Request
+    const { error } = await supabase.from('payment_requests').insert({
+      user_id: userId,
+      type,
+      amount_money: amountMoney,
+      amount_coins: amountCoins,
+      pix_key: pixKey,
+      status: 'pending'
+    });
+
+    if (error) {
+      // Rollback (Simplistic - ideally use transaction or RPC)
+      // Since supabase-js doesn't simple transactions, we log critical error.
+      // In production, use a single RPC for Check+Deduct+Insert.
+      console.error("CRITICAL: Failed to create request after deduction", error);
+      return { success: false, message: "Erro interno. Contate o suporte." };
+    }
+
+    // 3. Log Transaction
+    await supabase.from('wallet_transactions').insert({
+      user_id: userId,
+      type: 'payout',
+      amount_coins: type === 'client_withdrawal' ? -amountCoins : 0,
+      amount_money: type === 'driver_payout' ? -amountMoney : 0, // Negative for history visualization? Or positive as 'payout' type? Let's use negative to show deduction.
+      description: `Solicitação de Saque (${type === 'driver_payout' ? 'Motorista' : 'Cliente'})`
+    });
+
+    return { success: true, message: "Solicitação enviada com sucesso!" };
+  } catch (e) {
+    console.error("Exception in createPaymentRequest", e);
+    return { success: false, message: "Erro ao processar solicitação." };
+  }
+};
+
+export const fetchPaymentRequests = async (): Promise<AppPaymentRequest[]> => {
+  const { data, error } = await supabase
+    .from('payment_requests')
+    .select('*, user:user_id(*)')
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    handleDbError(error, "fetchPaymentRequests");
+    return [];
+  }
+  return data as AppPaymentRequest[];
+};
+
+export const fetchMyPaymentRequests = async (userId: string): Promise<AppPaymentRequest[]> => {
+  const { data, error } = await supabase
+    .from('payment_requests')
+    .select('*')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    handleDbError(error, "fetchMyPaymentRequests");
+    return [];
+  }
+  return data as AppPaymentRequest[];
+};
+
+export const updatePaymentRequestStatus = async (
+  requestId: string,
+  status: 'paid' | 'rejected',
+  adminNote?: string
+): Promise<boolean> => {
+  try {
+    const { data: request, error: fetchError } = await supabase
+      .from('payment_requests')
+      .select('*')
+      .eq('id', requestId)
+      .single();
+
+    if (fetchError || !request) return false;
+
+    if (status === 'rejected' && request.status === 'pending') {
+      // Refund the user
+      if (request.type === 'client_withdrawal') {
+        await supabase.rpc('increment_coins', {
+          user_id_param: request.user_id,
+          amount_param: request.amount_coins
+        });
+      } else {
+        // Driver refund (Fetch current + add back)
+        const { data: user } = await supabase.from('profiles').select('financial_balance').eq('id', request.user_id).single();
+        if (user) {
+          await supabase.from('profiles').update({
+            financial_balance: (user.financial_balance || 0) + request.amount_money
+          }).eq('id', request.user_id);
+        }
+      }
+
+      // Log Refund
+      await supabase.from('wallet_transactions').insert({
+        user_id: request.user_id,
+        type: 'bonus', // or 'refund'
+        amount_coins: request.type === 'client_withdrawal' ? request.amount_coins : 0,
+        amount_money: request.type === 'driver_payout' ? request.amount_money : 0,
+        description: `Estorno de Saque Rejeitado`
+      });
+    }
+
+    const { error } = await supabase
+      .from('payment_requests')
+      .update({ status, admin_note: adminNote, updated_at: new Date().toISOString() })
+      .eq('id', requestId);
+
+    if (error) {
+      handleDbError(error, "updatePaymentRequestStatus");
+      return false;
+    }
+    return true;
+  } catch (e) {
+    console.error("Exception updatePaymentRequestStatus", e);
+    return false;
+  }
+};
+
+export const updatePaymentRequestPixKey = async (
+  requestId: string,
+  newPixKey: string
+): Promise<boolean> => {
+  const { error } = await supabase
+    .from('payment_requests')
+    .update({ pix_key: newPixKey })
+    .eq('id', requestId);
+
+  if (error) {
+    handleDbError(error, "updatePaymentRequestPixKey");
+    return false;
+  }
+  return true;
+};
+
+
+export const fetchAllWalletTransactions = async (): Promise<WalletTransaction[]> => {
+  const { data, error } = await supabase
+    .from('wallet_transactions')
+    .select('*, user:user_id(username, avatar_url, phone, whatsapp)')
+    .order('created_at', { ascending: false })
+    .limit(200);
+
+  if (error) {
+    handleDbError(error, "fetchAllWalletTransactions");
+    return [];
+  }
+  return data as any[];
+};
+
+export const fetchStoreProducts = async (): Promise<StoreProduct[]> => {
+  const { data, error } = await supabase
+    .from('store_products')
+    .select('*')
+    .eq('active', true)
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    handleDbError(error, "fetchStoreProducts");
+    return [];
+  }
+  return data as StoreProduct[];
+};
+
+export const addCoinsToUser = async (userId: string, coins: number, description: string): Promise<{ success: boolean; message?: string }> => {
+  try {
+    // 1. Increment coins using a secure RPC (Function) to avoid RLS/mapping issues
+    const { data: newBalance, error: rpcError } = await supabase
+      .rpc('increment_coins', {
+        user_id_param: userId,
+        amount_param: coins
+      });
+
+    if (rpcError) {
+      console.error("[addCoins] RPC Error:", rpcError);
+
+      // Fallback: Tentativa direta se a RPC não existir
+      const { data: user, error: fetchError } = await supabase.from('profiles').select('wallet_coins').eq('id', userId).single();
+
+      if (fetchError) {
+        return { success: false, message: `Erro ao buscar saldo (Possível falta da coluna wallet_coins): ${fetchError.message}` };
+      }
+
+      const currentCoins = Number(user?.wallet_coins || 0);
+      const { error: upError } = await supabase.from('profiles').update({ wallet_coins: currentCoins + coins }).eq('id', userId);
+
+      if (upError) {
+        return { success: false, message: `Erro ao atualizar saldo (Fallback): ${upError.message}` };
+      }
+    }
+
+    // 2. Record the transaction (Histórico)
+    const { error: txError } = await supabase.from('wallet_transactions').insert({
+      user_id: userId,
+      type: 'earning',
+      amount_coins: coins,
+      description
+    });
+
+    if (txError) {
+      console.warn("Transação de histórico falhou, mas saldo foi atualizado", txError);
+      // Não retornamos false aqui pois o saldo JÁ foi dado.
+    }
+
+    console.log(`[addCoins] Sucesso para usuário ${userId}`);
+    return { success: true };
+  } catch (e: any) {
+    console.error("[addCoins] Exception:", e);
+    return { success: false, message: `Exceção: ${e.message || String(e)}` };
+  }
+};
+
+export const purchaseStoreProduct = async (userId: string, product: StoreProduct, paymentType: 'coins' | 'pix' | 'card'): Promise<{ success: boolean, message: string }> => {
+  try {
+    // 1. Buscar dados do usuário e do produto atualizados
+    const { data: user } = await supabase.from('profiles').select('wallet_coins').eq('id', userId).single();
+    const { data: currentProduct } = await supabase.from('store_products').select('stock, active').eq('id', product.id).single();
+
+    if (!currentProduct || !currentProduct.active) {
+      return { success: false, message: "Produto não disponível no momento." };
+    }
+
+    if (currentProduct.stock <= 0) {
+      return { success: false, message: "Produto esgotado!" };
+    }
+
+    if (paymentType === 'coins') {
+      if ((user?.wallet_coins || 0) < product.price_coins) {
+        return { success: false, message: "Moedas insuficientes!" };
+      }
+
+      // Decrementar moedas e estoque
+      await supabase.from('profiles').update({ wallet_coins: (user?.wallet_coins || 0) - product.price_coins }).eq('id', userId);
+      await supabase.from('store_products').update({ stock: currentProduct.stock - 1 }).eq('id', product.id);
+
+      await supabase.from('wallet_transactions').insert({
+        user_id: userId,
+        type: 'purchase',
+        amount_coins: -product.price_coins,
+        description: `Compra (Moedas): ${product.name}`
+      });
+
+      // Registrar Pedido
+      await supabase.from('store_orders').insert({
+        user_id: userId,
+        product_id: product.id,
+        status: 'pending',
+        payment_method: 'coins',
+        amount_coins: product.price_coins,
+        amount_money: 0
+      });
+
+      return { success: true, message: "Resgate realizado com sucesso! Verifique seu histórico." };
+    } else {
+      // Para PIX ou CARTÃO, esta função é chamada após a confirmação do pagamento externo
+
+      // Decrementar estoque (Moedas já foram pagas externamente)
+      await supabase.from('store_products').update({ stock: currentProduct.stock - 1 }).eq('id', product.id);
+
+      await supabase.from('wallet_transactions').insert({
+        user_id: userId,
+        type: 'purchase',
+        amount_money: product.price_brl,
+        description: `Compra via ${paymentType.toUpperCase()}: ${product.name}`
+      });
+
+      // Registrar Pedido
+      await supabase.from('store_orders').insert({
+        user_id: userId,
+        product_id: product.id,
+        status: 'pending',
+        payment_method: paymentType,
+        amount_coins: 0,
+        amount_money: product.price_brl
+      });
+
+      return { success: true, message: `Pagamento ${paymentType.toUpperCase()} confirmado! Seu pedido foi registrado.` };
+    }
+  } catch (e) {
+    handleDbError(e, "purchaseStoreProduct");
+    return { success: false, message: "Erro ao processar compra. Tente novamente." };
+  }
+};
+
+export const fetchStoreOrders = async (): Promise<StoreOrder[]> => {
+  const { data, error } = await supabase
+    .from('store_orders')
+    .select('*, product:store_products(*), user:profiles(*)')
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    handleDbError(error, "fetchStoreOrders");
+    return [];
+  }
+  return data as any as StoreOrder[];
+};
+
+export const updateStoreOrderStatus = async (orderId: string, status: 'delivered'): Promise<boolean> => {
+  const { error } = await supabase
+    .from('store_orders')
+    .update({
+      status,
+      delivered_at: status === 'delivered' ? new Date().toISOString() : null
+    })
+    .eq('id', orderId);
+
+  if (error) {
+    handleDbError(error, "updateStoreOrderStatus");
+    return false;
+  }
+  return true;
+};
+
+
+export const payDriverBalance = async (driverId: string, amount: number): Promise<boolean> => {
+  try {
+    const { data: user } = await supabase.from('profiles').select('financial_balance').eq('id', driverId).single();
+    const currentBalance = Number(user?.financial_balance || 0);
+
+    if (currentBalance < amount) return false;
+
+    await supabase.from('profiles').update({ financial_balance: currentBalance - amount }).eq('id', driverId);
+
+    await supabase.from('wallet_transactions').insert({
+      user_id: driverId,
+      type: 'payout',
+      amount_money: -amount,
+      description: 'Resgate de saldo / Pagamento recebido'
+    });
+
+    return true;
+  } catch (e) {
+    return false;
+  }
+};
+
+export const updateDriverBalanceForCoupon = async (driverId: string, amount: number, rideId: string): Promise<boolean> => {
+  try {
+    const { data: user } = await supabase.from('profiles').select('financial_balance').eq('id', driverId).single();
+    const currentBalance = Number(user?.financial_balance || 0);
+
+    await supabase.from('profiles').update({ financial_balance: currentBalance + amount }).eq('id', driverId);
+
+    await supabase.from('wallet_transactions').insert({
+      user_id: driverId,
+      type: 'bonus',
+      amount_money: amount,
+      description: `Bônus Cupom: Corrida #${rideId.slice(0, 6)}`
+    });
+    return true;
+  } catch (e) {
+    console.error('[Wallet] Error updating driver balance:', e);
+    return false;
+  }
+};
+
+// Helper: Send Push Notification via Edge Function
+const sendPushNotification = async (params: {
+  title: string;
+  body: string;
+  targetType: 'user' | 'drivers' | 'all';
+  targetUserId?: string;
+  data?: Record<string, string>;
+  sound?: string;
+}): Promise<boolean> => {
+  try {
+    const { data, error } = await supabase.functions.invoke('send-notification', {
+      body: params
+    });
+
+    if (error) {
+      console.error('[Push] Error sending notification:', error);
+      return false;
+    }
+
+    console.log('[Push] Notification sent successfully:', data);
+    return true;
+  } catch (e) {
+    console.error('[Push] Exception sending notification:', e);
+    return false;
+  }
+};
+
+export const createDispatchRide = async (dispatchData: any): Promise<{ ride: Ride | null, success: boolean, message: string }> => {
+  try {
+    // Se não houver motorista selecionado, é broadcast por padrão
+    const isBroadcast = dispatchData.selectedDriverId ? !!dispatchData.isBroadcast : true;
+
+    // SEMPRE usar 'searching' para que o app do motorista mostre a tela de chamada (incomingRide)
+    // O driver_id preenchido indica que é direcionada (só aquele motorista vê)
+    // Usar 'accepted' fazia o fetchActiveRide carregar como corrida ativa, pulando a tela de chamada
+    const initialStatus = 'searching';
+
+    const { data, error } = await supabase
+      .from('rides')
+      .insert([{
+        client_id: '11111111-1111-1111-1111-111111111111',
+        status: initialStatus,
+        driver_id: dispatchData.selectedDriverId || null,
+        vehicle_type: dispatchData.vehicleType,
+        origin_lat: dispatchData.originLat,
+        origin_lng: dispatchData.originLng,
+        origin_address: dispatchData.originAddress,
+        destination_lat: dispatchData.destinationLat,
+        destination_lng: dispatchData.destinationLng,
+        destination_address: dispatchData.destinationAddress,
+        estimated_price: dispatchData.estimatedPrice,
+        is_broadcast: isBroadcast,
+        is_direct: !!dispatchData.selectedDriverId,
+        last_driver_offered_at: dispatchData.selectedDriverId ? new Date().toISOString() : null,
+        created_at: new Date().toISOString() // Force updated timestamp for ordering
+      }])
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    const createdRide = data as Ride;
+
+    // NOVO: Enviar Push Notification
+    const notificationTitle = dispatchData.selectedDriverId
+      ? '📞 CENTRAL: Nova Corrida Direcionada!'
+      : '🚗 Nova Corrida Disponível!';
+
+    const notificationBody = `De: ${dispatchData.originAddress.substring(0, 40)}...\nPara: ${dispatchData.destinationAddress.substring(0, 40)}...\nValor: R$ ${dispatchData.estimatedPrice.toFixed(2)}`;
+
+    const pushParams = {
+      title: notificationTitle,
+      body: notificationBody,
+      targetType: dispatchData.selectedDriverId ? 'user' as const : 'drivers' as const,
+      targetUserId: dispatchData.selectedDriverId || undefined,
+      location: { lat: dispatchData.originLat, lng: dispatchData.originLng }, // Geographic filtering for max 15km radius
+      data: {
+        type: 'new_ride',
+        ride_id: createdRide.id,
+        is_direct: dispatchData.selectedDriverId ? 'true' : 'false',
+        vehicle_type: dispatchData.vehicleType // Enviar tipo de veículo para ajudar na filtragem cliente-side se necessário
+      },
+      sound: 'ubb' // Som especial para corridas
+    };
+
+    // Enviar notificação (não bloqueante)
+    sendPushNotification(pushParams).catch(err => {
+      console.warn('[Dispatch] Push notification failed (non-critical):', err);
+    });
+
+    let msg = "Procurando motoristas...";
+    if (dispatchData.selectedDriverId) msg = "Chamada enviada ao motorista selecionado. Notificação push disparada!";
+    if (isBroadcast) msg = "Corrida disparada para TODOS os motoristas! Notificações enviadas.";
+
+    return {
+      ride: createdRide,
+      success: true,
+      message: msg
+    };
+  } catch (e: any) {
+    const errorMsg = handleDbError(e, "createDispatchRide");
+    return { ride: null, success: false, message: errorMsg };
+  }
+};
+
+export const fetchAllRides = async (): Promise<Ride[]> => {
+  try {
+    const { data, error } = await supabase
+      .from('rides')
+      .select('*, driver:driver_id(*), client:client_id(*)')
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    return data as Ride[];
+  } catch (e) {
+    handleDbError(e, "fetchAllRides");
+    return [];
+  }
+};
+
+
+/**
+ * ADMIN: GESTÃO DE PRODUTOS (STORE MANAGEMENT)
+ */
+
+export const createStoreProduct = async (product: Partial<StoreProduct>): Promise<string | null> => {
+  const { error } = await supabase
+    .from('store_products')
+    .insert([product]);
+
+  if (error) {
+    return handleDbError(error, "createStoreProduct");
+  }
+  return null;
+};
+
+export const updateStoreProduct = async (productId: string, updates: Partial<StoreProduct>): Promise<string | null> => {
+  const { error } = await supabase
+    .from('store_products')
+    .update(updates)
+    .eq('id', productId);
+
+  if (error) {
+    return handleDbError(error, "updateStoreProduct");
+  }
+  return null;
+};
+
+export const deleteStoreProduct = async (productId: string): Promise<string | null> => {
+  const { error } = await supabase
+    .from('store_products')
+    .delete()
+    .eq('id', productId);
+
+  if (error) {
+    return handleDbError(error, "deleteStoreProduct");
+  }
+  return null;
+};
+
+export const uploadStoreProductImage = async (file: File): Promise<string | null> => {
+  try {
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${Math.random().toString(36).substring(2)}.${fileExt}`;
+    const filePath = `products/${fileName}`;
+
+    // Upload to 'chat-media' bucket (reusing existing public bucket)
+    const { error: uploadError } = await supabase.storage
+      .from('chat-media')
+      .upload(filePath, file);
+
+    if (uploadError) throw uploadError;
+
+    const { data } = supabase.storage
+      .from('chat-media')
+      .getPublicUrl(filePath);
+
+    return data.publicUrl;
+  } catch (error) {
+    console.error('Error uploading product image:', error);
+    return null;
+  }
+};
+
+/**
+ * DINAMIC PRICING UTILITIES
+ */
+
+export const getTariffForTime = (settings: AppSettings, vehicleType: 'car' | 'motorcycle') => {
+  const now = new Date();
+  const hours = now.getHours();
+
+  // Dawn: 00:00 - 05:00
+  if (hours >= 0 && hours < 5) {
+    if (vehicleType === 'car') {
+      return {
+        base: settings.dawn_car_base_price || settings.car_base_price,
+        perKm: settings.dawn_car_price_km || settings.car_price_km,
+        perMin: settings.dawn_car_price_min || settings.car_price_min,
+        label: "Madrugada"
+      };
+    } else {
+      return {
+        base: settings.dawn_moto_base_price || settings.moto_base_price,
+        perKm: settings.dawn_moto_price_km || settings.moto_price_km,
+        perMin: settings.dawn_moto_price_min || settings.moto_price_min,
+        label: "Madrugada"
+      };
+    }
+  }
+
+  // Night: 20:00 - 23:59
+  if (hours >= 20 && hours <= 23) {
+    if (vehicleType === 'car') {
+      return {
+        base: settings.night_car_base_price || settings.car_base_price,
+        perKm: settings.night_car_price_km || settings.car_price_km,
+        perMin: settings.night_car_price_min || settings.car_price_min,
+        label: "Noite"
+      };
+    } else {
+      return {
+        base: settings.night_moto_base_price || settings.moto_base_price,
+        perKm: settings.night_moto_price_km || settings.moto_price_km,
+        perMin: settings.night_moto_price_min || settings.moto_price_min,
+        label: "Noite"
+      };
+    }
+  }
+
+  // Standard
+  if (vehicleType === 'car') {
+    return {
+      base: settings.car_base_price,
+      perKm: settings.car_price_km,
+      perMin: settings.car_price_min,
+      label: "Padrão"
+    };
+  } else {
+    return {
+      base: settings.moto_base_price,
+      perKm: settings.moto_price_km,
+      perMin: settings.moto_price_min,
+      label: "Padrão"
+    };
+  }
+};
+
+/**
+ * ADMIN: ADVANCED DISPATCH
+ */
+
+export const findAndAssignNextDriver = async (rideId: string, currentDriverId: string): Promise<boolean> => {
+  try {
+    // 1. Get current ride to see ignored drivers and if it is DIRECT
+    const { data: ride, error: rideError } = await supabase
+      .from('rides')
+      .select('*')
+      .eq('id', rideId)
+      .single();
+
+    if (rideError || !ride) return false;
+
+    // --- LÓGICA DE CHAMADA DIRETA ---
+    // Se for uma chamada direta e o motorista rejeitou (ou timeout), NÃO passamos para outro.
+    // Encerramos a busca e avisamos que foi cancelada/rejeitada.
+    if (ride.is_direct) {
+      console.log("[FindNext] Chamada direta rejeitada. Cancelando corrida.");
+      await supabase.from('rides').update({
+        status: 'cancelled',
+        driver_id: null // Limpa o driver ID para que não pareça que ele "cancelou" depois de aceitar
+      }).eq('id', rideId);
+      return false;
+    }
+
+
+    // Convert to array of strings (UUIDs)
+    const ignored: string[] = Array.isArray(ride.ignored_drivers) ? ride.ignored_drivers : [];
+    if (currentDriverId && !ignored.includes(currentDriverId)) {
+      ignored.push(currentDriverId);
+    }
+
+    // Helper function to try finding a driver within a radius
+    const attemptFindDriver = async (radiusKm: number): Promise<string | null> => {
+      console.log(`[FindNext] Tentando encontrar motorista num raio de ${radiusKm}km...`);
+      const { data, error } = await supabase.rpc('get_nearest_driver', {
+        p_lat: ride.origin_lat,
+        p_lng: ride.origin_lng,
+        p_radius_km: radiusKm,
+        p_vehicle_type: ride.vehicle_type,
+        p_ignored_ids: ignored
+      });
+
+      if (error) {
+        console.error(`[FindNext] Erro ao buscar motoristas (${radiusKm}km):`, error);
+        return null;
+      }
+
+      if (data && data.length > 0) {
+        return data[0].id; // Retorna ID do motorista encontrado
+      }
+      return null;
+    };
+
+    // TIERED SEARCH: 3km -> 5km -> 10km -> 15km
+    let foundDriverId = await attemptFindDriver(3);
+    if (!foundDriverId) foundDriverId = await attemptFindDriver(5);
+    if (!foundDriverId) foundDriverId = await attemptFindDriver(10);
+    if (!foundDriverId) foundDriverId = await attemptFindDriver(15);
+
+    if (foundDriverId) {
+      // Assign to next - STATUS SEARCHING para o cliente ver "Procurando"
+      await supabase
+        .from('rides')
+        .update({
+          driver_id: foundDriverId,
+          status: 'searching', // <--- Mantém status searching
+          ignored_drivers: ignored,
+          last_driver_offered_at: new Date().toISOString()
+        })
+        .eq('id', rideId);
+
+      console.log(`[FindNext] Motorista encontrado: ${foundDriverId}`);
+      return true;
+    } else {
+      // No more drivers available within 10km
+      // RETRY LOGIC
+      const currentAttempts = (ride as any).search_attempts || 0;
+      const MAX_ATTEMPTS = 5; // Tenta 5 vezes (aprox. 25-30s antes de cancelar)
+
+      if (currentAttempts < MAX_ATTEMPTS) {
+        console.log(`[FindNext] Nenhum motorista encontrado. Tentativa ${currentAttempts + 1}/${MAX_ATTEMPTS}. Retrying next cycle...`);
+        // Atualiza tentativas mas MANTÉM status 'searching' e driver_id nulo
+        await supabase
+          .from('rides')
+          .update({
+            search_attempts: currentAttempts + 1
+          })
+          .eq('id', rideId);
+
+        return false;
+      } else {
+        // Esgotou tentativas - CANCELAR a corrida
+        console.log("[FindNext] Nenhum motorista disponível após várias tentativas. Cancelando corrida.");
+        await supabase
+          .from('rides')
+          .update({
+            driver_id: null,
+            status: 'cancelled',
+            ignored_drivers: ignored
+          })
+          .eq('id', rideId);
+        return false;
+      }
+    }
+  } catch (e) {
+    console.error("Error in findAndAssignNextDriver:", e);
+    return false;
   }
 };

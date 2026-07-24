@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { UserProfile, AppSettings } from '../types';
 import { fetchAppSettings } from '../services/supabaseClient';
-import { AdBanner } from './AdBanner';
+
 
 interface TaximeterProps {
   currentUser: UserProfile;
@@ -78,6 +78,21 @@ export const Taximeter: React.FC<TaximeterProps> = ({ currentUser, onClose }) =>
   useEffect(() => {
     if (!settings) return;
 
+    // Calculate Price based on vehicle type and time
+    const now = new Date();
+    const currentTime = now.getHours() * 60 + now.getMinutes();
+
+    const parseTime = (timeStr?: string) => {
+      if (!timeStr) return 0;
+      const [h, m] = timeStr.split(':').map(Number);
+      return h * 60 + m;
+    };
+
+    const nightStart = parseTime(settings.night_start_time || '19:00');
+    const nightEnd = parseTime(settings.night_end_time || '23:59');
+    const dawnStart = parseTime(settings.dawn_start_time || '00:00');
+    const dawnEnd = parseTime(settings.dawn_end_time || '05:00');
+
     let base = settings.car_base_price;
     let perKm = settings.car_price_km;
     let perMin = settings.car_price_min;
@@ -88,6 +103,37 @@ export const Taximeter: React.FC<TaximeterProps> = ({ currentUser, onClose }) =>
       perKm = settings.moto_price_km;
       perMin = settings.moto_price_min;
       startDistLimit = settings.moto_start_distance_limit || 0;
+    }
+
+    // Apply Dynamic Pricing
+    const isNight = (nightStart < nightEnd)
+      ? (currentTime >= nightStart && currentTime <= nightEnd)
+      : (currentTime >= nightStart || currentTime <= nightEnd);
+
+    const isDawn = (dawnStart < dawnEnd)
+      ? (currentTime >= dawnStart && currentTime <= dawnEnd)
+      : (currentTime >= dawnStart || currentTime <= dawnEnd);
+
+    if (isDawn) {
+      if (currentUser.vehicle_type === 'car' || !currentUser.vehicle_type) {
+        base = settings.dawn_car_base_price ?? base;
+        perKm = settings.dawn_car_price_km ?? perKm;
+        perMin = settings.dawn_car_price_min ?? perMin;
+      } else {
+        base = settings.dawn_moto_base_price ?? base;
+        perKm = settings.dawn_moto_price_km ?? perKm;
+        perMin = settings.dawn_moto_price_min ?? perMin;
+      }
+    } else if (isNight) {
+      if (currentUser.vehicle_type === 'car' || !currentUser.vehicle_type) {
+        base = settings.night_car_base_price ?? base;
+        perKm = settings.night_car_price_km ?? perKm;
+        perMin = settings.night_car_price_min ?? perMin;
+      } else {
+        base = settings.night_moto_base_price ?? base;
+        perKm = settings.night_moto_price_km ?? perKm;
+        perMin = settings.night_moto_price_min ?? perMin;
+      }
     }
 
     // Formula: Base + ((Distance - StartLimit) * Rate) + (Min * Rate)
@@ -134,8 +180,7 @@ export const Taximeter: React.FC<TaximeterProps> = ({ currentUser, onClose }) =>
   return (
     <div className="fixed inset-0 z-[100] bg-black/95 flex flex-col items-center justify-center p-4 text-white">
       <div className="w-full max-w-sm bg-gray-900 rounded-2xl border-4 border-gray-700 overflow-hidden shadow-2xl">
-        {/* AdMob Banner */}
-        <AdBanner />
+        {/* AdMob Banner Removed */}
         {/* Header */}
         <div className="bg-gray-800 p-4 flex justify-between items-center border-b border-gray-700">
           <div className="flex items-center gap-2">

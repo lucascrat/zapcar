@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import mapboxgl from 'mapbox-gl';
 import { UserProfile } from '../types';
 import { supabase } from '../services/supabaseClient';
+import { SUPABASE_SCHEMA } from '../constants';
 
 interface ClientMapModalProps {
     driver: UserProfile;
@@ -27,7 +28,6 @@ export const ClientMapModal: React.FC<ClientMapModalProps> = ({ driver, onClose 
     const mapRef = useRef<HTMLDivElement>(null);
     const mapInstanceRef = useRef<mapboxgl.Map | null>(null);
     const markerRef = useRef<mapboxgl.Marker | null>(null);
-    const markerInnerRef = useRef<HTMLDivElement | null>(null);
     const [driverLocation, setDriverLocation] = useState<{ lat: number; lng: number } | null>(
         driver.lat && driver.lng ? { lat: driver.lat, lng: driver.lng } : null
     );
@@ -47,8 +47,7 @@ export const ClientMapModal: React.FC<ClientMapModalProps> = ({ driver, onClose 
             map.addControl(new mapboxgl.NavigationControl(), 'top-right');
             mapInstanceRef.current = map;
 
-            const { el, inner } = buildMarkerElement(driver.vehicle_type);
-            markerInnerRef.current = inner;
+            const { el } = buildMarkerElement(driver.vehicle_type);
 
             const popup = new mapboxgl.Popup({ offset: 25 }).setHTML(`
                 <div style="color: #000; padding: 4px;">
@@ -71,7 +70,6 @@ export const ClientMapModal: React.FC<ClientMapModalProps> = ({ driver, onClose 
         return () => {
             mapInstanceRef.current?.remove();
             mapInstanceRef.current = null;
-            markerRef.current = null;
         };
     }, [driverLocation, driver]);
 
@@ -81,7 +79,7 @@ export const ClientMapModal: React.FC<ClientMapModalProps> = ({ driver, onClose 
             .channel(`driver-location-${driver.id}`)
             .on('postgres_changes', {
                 event: 'UPDATE',
-                schema: 'chegoja',
+                schema: SUPABASE_SCHEMA,
                 table: 'profiles',
                 filter: `id=eq.${driver.id}`
             }, (payload: any) => {
@@ -91,14 +89,8 @@ export const ClientMapModal: React.FC<ClientMapModalProps> = ({ driver, onClose 
                     setDriverLocation(newLocation);
                     setLastUpdate(new Date());
 
-                    // Update marker position with a bounce animation
                     if (markerRef.current) {
                         markerRef.current.setLngLat([newLocation.lng, newLocation.lat]);
-                        const inner = markerInnerRef.current;
-                        if (inner) {
-                            inner.classList.add('animate-bounce');
-                            setTimeout(() => inner.classList.remove('animate-bounce'), 1000);
-                        }
                     }
                 }
             })

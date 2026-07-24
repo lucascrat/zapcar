@@ -15,6 +15,18 @@ export interface DirectionsResult {
     durationSeconds: number;
 }
 
+export interface DirectionsStep {
+    instruction: string;
+    distanceMeters: number;
+    maneuverType: string;
+    endLocation: { lat: number; lng: number };
+}
+
+export interface DirectionsWithStepsResult extends DirectionsResult {
+    steps: DirectionsStep[];
+    boundsCoordinates: [number, number][];
+}
+
 // Busca de endereços (autocomplete)
 export async function geocodeForward(query: string, proximity?: [number, number]): Promise<GeocodeResult[]> {
     if (!query || query.trim().length < 3) return [];
@@ -80,5 +92,42 @@ export async function getDirections(
         geometry: route.geometry,
         distanceMeters: route.distance,
         durationSeconds: route.duration,
+    };
+}
+
+// Rota com passo-a-passo (turn-by-turn), usada para navegação ativa
+export async function getDirectionsWithSteps(
+    origin: [number, number],
+    destination: [number, number]
+): Promise<DirectionsWithStepsResult | null> {
+    const params = new URLSearchParams({
+        access_token: MAPBOX_TOKEN,
+        geometries: 'geojson',
+        overview: 'full',
+        steps: 'true',
+        language: 'pt',
+    });
+
+    const url = `https://api.mapbox.com/directions/v5/mapbox/driving/${origin[0]},${origin[1]};${destination[0]},${destination[1]}?${params.toString()}`;
+    const response = await fetch(url);
+    if (!response.ok) return null;
+
+    const data = await response.json();
+    const route = data.routes?.[0];
+    if (!route) return null;
+
+    const steps: DirectionsStep[] = (route.legs?.[0]?.steps || []).map((s: any) => ({
+        instruction: s.maneuver?.instruction || '',
+        distanceMeters: s.distance || 0,
+        maneuverType: s.maneuver?.type || '',
+        endLocation: { lat: s.maneuver?.location?.[1], lng: s.maneuver?.location?.[0] },
+    }));
+
+    return {
+        geometry: route.geometry,
+        distanceMeters: route.distance,
+        durationSeconds: route.duration,
+        steps,
+        boundsCoordinates: route.geometry.coordinates,
     };
 }

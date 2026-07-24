@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { UserProfile, BingoSettings, BingoCard } from '../types';
 import { fetchBingoSettings, getOrCreateBingoCard, subscribeToBingo } from '../services/supabaseClient';
 import { AdMobService } from '../services/adMobService';
-import { AdBanner } from './AdBanner';
+
 
 interface BingoUserViewProps {
     currentUser: UserProfile;
@@ -14,26 +14,63 @@ export const BingoUserView: React.FC<BingoUserViewProps> = ({ currentUser, onClo
     const [settings, setSettings] = useState<BingoSettings | null>(null);
     const [card, setCard] = useState<BingoCard | null>(null);
     const [drawnSet, setDrawnSet] = useState<Set<number>>(new Set());
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
-        // Show Interstitial Ad when entering Bingo Screen
-        AdMobService.showInterstitial();
+        if (window.Capacitor?.isNativePlatform()) {
+            AdMobService.showBanner().catch(() => { });
+            AdMobService.showInterstitial().catch(() => { });
+        }
 
         loadData();
 
-        const sub = subscribeToBingo(() => {
+        const sub: any = subscribeToBingo(() => {
             loadData(); // Atualiza se sortearem numero
         });
-        return () => { sub.unsubscribe(); }
+        return () => {
+            sub?.unsubscribe?.();
+            if (window.Capacitor?.isNativePlatform()) {
+                AdMobService.removeBanner().catch(() => { });
+            }
+        }
     }, []);
 
     const loadData = async () => {
-        const s = await fetchBingoSettings();
-        setSettings(s);
-        setDrawnSet(new Set(s.drawn_numbers));
+        try {
+            setLoading(true);
+            setError(null);
 
-        const c = await getOrCreateBingoCard(currentUser.id);
-        setCard(c);
+            console.log('[BingoUserView] Carregando settings...');
+            const s = await fetchBingoSettings();
+            console.log('[BingoUserView] Settings:', s);
+
+            if (!s) {
+                setError('Não foi possível carregar as configurações do Bingo');
+                setLoading(false);
+                return;
+            }
+
+            setSettings(s);
+            setDrawnSet(new Set(s.drawn_numbers || []));
+
+            console.log('[BingoUserView] Carregando cartela para:', currentUser.id);
+            const c = await getOrCreateBingoCard(currentUser.id);
+            console.log('[BingoUserView] Cartela:', c);
+
+            if (!c) {
+                setError('Não foi possível carregar sua cartela');
+                setLoading(false);
+                return;
+            }
+
+            setCard(c);
+            setLoading(false);
+        } catch (err: any) {
+            console.error('[BingoUserView] Erro:', err);
+            setError(err.message || 'Erro ao carregar Bingo');
+            setLoading(false);
+        }
     };
 
     const getYoutubeId = (url: string) => {
@@ -44,16 +81,60 @@ export const BingoUserView: React.FC<BingoUserViewProps> = ({ currentUser, onClo
         return match ? match[1] : null;
     };
 
-    if (!settings || !card) return <div className="text-white p-8">Carregando Bingo...</div>;
+    // Loading state
+    if (loading) {
+        return (
+            <div className="flex-1 flex flex-col items-center justify-center bg-[#111b21] text-white p-8">
+                <div className="animate-spin w-12 h-12 border-4 border-purple-500 border-t-transparent rounded-full mb-4"></div>
+                <p className="text-gray-400">Carregando Bingo...</p>
+            </div>
+        );
+    }
+
+    // Error state
+    if (error) {
+        return (
+            <div className="flex-1 flex flex-col items-center justify-center bg-[#111b21] text-white p-8">
+                <span className="material-icons text-red-500 text-5xl mb-4">error</span>
+                <p className="text-red-400 text-center mb-4">{error}</p>
+                <button
+                    onClick={loadData}
+                    className="bg-purple-600 text-white px-6 py-2 rounded-lg font-bold"
+                >
+                    Tentar Novamente
+                </button>
+                <button
+                    onClick={onClose}
+                    className="mt-4 text-gray-400 underline"
+                >
+                    Voltar
+                </button>
+            </div>
+        );
+    }
+
+    if (!settings || !card) {
+        return (
+            <div className="flex-1 flex flex-col items-center justify-center bg-[#111b21] text-white p-8">
+                <span className="material-icons text-yellow-500 text-5xl mb-4">warning</span>
+                <p className="text-gray-400">Dados não disponíveis</p>
+                <button
+                    onClick={onClose}
+                    className="mt-4 text-gray-400 underline"
+                >
+                    Voltar
+                </button>
+            </div>
+        );
+    }
 
     const hits = card.numbers.filter(n => drawnSet.has(n)).length;
     const isWinner = hits >= card.numbers.length;
     const videoId = getYoutubeId(settings.youtube_link);
 
     return (
-        <div className="flex-1 flex flex-col h-full bg-[#111b21] text-white relative overflow-y-auto custom-scrollbar">
-            {/* AdMob Banner */}
-            <AdBanner />
+        <div className="flex-1 flex flex-col h-full bg-[#111b21] text-white relative overflow-y-auto custom-scrollbar pb-24">
+            {/* AdMob Banner Removed */}
             {/* Header */}
             <div className="bg-purple-900 p-4 flex justify-between items-center shadow-lg shrink-0">
                 <div className="flex items-center gap-2">
@@ -103,26 +184,28 @@ export const BingoUserView: React.FC<BingoUserViewProps> = ({ currentUser, onClo
 
                 {/* Right Column: The Card */}
                 <div className="lg:w-1/2">
-                    <div className="bg-white rounded-xl p-4 shadow-2xl relative">
-                        <div className="absolute -top-3 -right-3 bg-red-600 text-white w-12 h-12 rounded-full flex items-center justify-center font-bold shadow-lg animate-bounce z-10">
+                    <div className="bg-white rounded-xl p-4 shadow-2xl relative overflow-hidden">
+                        {/* Badge de acertos */}
+                        <div className="absolute -top-1 -right-1 bg-red-600 text-white w-12 h-12 rounded-full flex items-center justify-center font-bold text-xs shadow-lg z-10">
                             {hits}/{card.numbers.length}
                         </div>
 
-                        <h3 className="text-center text-gray-800 font-bold text-lg mb-4 uppercase tracking-widest border-b pb-2">Minha Cartela</h3>
+                        <h3 className="text-center text-gray-800 font-bold text-base mb-4 uppercase tracking-wider border-b border-gray-200 pb-2">Minha Cartela</h3>
 
-                        <div className="grid grid-cols-5 gap-2">
+                        {/* Grid 5x5 com tamanhos fixos */}
+                        <div className="flex flex-wrap justify-center gap-1.5">
                             {card.numbers.map((num, idx) => {
                                 const marked = drawnSet.has(num);
                                 return (
                                     <div
                                         key={idx}
                                         className={`
-                                    aspect-square flex items-center justify-center text-lg sm:text-2xl font-bold rounded-full transition-all duration-500 border-2
-                                    ${marked
-                                                ? 'bg-purple-600 text-white border-purple-800 scale-105 shadow-md'
-                                                : 'bg-gray-100 text-gray-800 border-gray-200 hover:bg-gray-200'
+                                            w-11 h-11 flex items-center justify-center text-sm font-bold rounded-full transition-all duration-300 border-2
+                                            ${marked
+                                                ? 'bg-purple-600 text-white border-purple-800 shadow-md'
+                                                : 'bg-gray-100 text-gray-800 border-gray-300'
                                             }
-                                 `}
+                                        `}
                                     >
                                         {num}
                                     </div>
@@ -131,7 +214,7 @@ export const BingoUserView: React.FC<BingoUserViewProps> = ({ currentUser, onClo
                         </div>
 
                         {isWinner && (
-                            <div className="mt-6 bg-green-500 text-white p-4 rounded-lg text-center font-bold text-xl animate-pulse shadow-lg border-4 border-green-600">
+                            <div className="mt-4 bg-green-500 text-white p-3 rounded-lg text-center font-bold text-sm animate-pulse shadow-lg border-2 border-green-600">
                                 🎉 BINGO! VOCÊ GANHOU! 🎉
                             </div>
                         )}

@@ -2,7 +2,7 @@
   "compilerOptions": {
     "target": "ES2022",
     "experimentalDecorators": true,
-    "useDefineForClassFields": false,
+    "useDefineForClassFields": true,
     "module": "ESNext",
     "lib": [
       "ES2022",
@@ -26,5 +26,23 @@
     },
     "allowImportingTsExtensions": true,
     "noEmit": true
-  }
+  },
+  "include": [
+    "src/**/*",
+    "components/**/*",
+    "services/**/*",
+    "utils/**/*",
+    "types.ts",
+    "constants.ts",
+    "App.tsx",
+    "index.tsx"
+  ],
+  "exclude": [
+    "node_modules",
+    "git",
+    "supabase/functions",
+    "dist",
+    "android",
+    "capacitor"
+  ]
 }

@@ -1,36 +1,82 @@
-import React, { useEffect } from 'react';
-import { AdMobService } from '../services/adMobService';
 
-interface AdBannerProps {
-    className?: string;
-}
+import React, { useState, useEffect } from 'react';
+import { supabase } from '../services/supabaseClient';
+import { Banner } from '../types';
 
-import { Capacitor } from '@capacitor/core';
+export const AdBanner: React.FC = () => {
+    const [banners, setBanners] = useState<Banner[]>([]);
+    const [currentIndex, setCurrentIndex] = useState(0);
+    const [isLoading, setIsLoading] = useState(true);
 
-export const AdBanner: React.FC<AdBannerProps> = ({ className = '' }) => {
     useEffect(() => {
-        if (Capacitor.isNativePlatform()) {
-            AdMobService.showBanner();
-        }
-        return () => {
-            if (Capacitor.isNativePlatform()) {
-                AdMobService.removeBanner();
+        const fetchBanners = async () => {
+            setIsLoading(true);
+            const { data, error } = await supabase
+                .from('banners')
+                .select('*')
+                .eq('active', true)
+                .order('order', { ascending: true });
+
+            if (error) {
+                console.error('Erro ao buscar banners:', error);
             }
+
+            if (data) {
+                console.log('Banners carregados:', data);
+                setBanners(data);
+            }
+            setIsLoading(false);
+        };
+
+        fetchBanners();
+
+        const subscription = supabase
+            .channel('banners-changes')
+            .on('postgres_changes', { event: '*', schema: 'chegoja', table: 'banners' }, fetchBanners)
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(subscription);
         };
     }, []);
 
-    if (!Capacitor.isNativePlatform()) {
-        return null;
-    }
+    useEffect(() => {
+        if (banners.length <= 1) return;
+
+        const interval = setInterval(() => {
+            setCurrentIndex((prev) => (prev + 1) % banners.length);
+        }, 5000);
+
+        return () => clearInterval(interval);
+    }, [banners]);
+
+    // Don't render anything if no banners or still loading
+    if (isLoading || banners.length === 0) return null;
+
+    const banner = banners[currentIndex];
 
     return (
-        <div
-            id="admob-banner-container"
-            className={`w-full bg-gray-900 flex items-center justify-center shrink-0 ${className}`}
-            style={{ minHeight: '50px', maxHeight: '90px' }}
-        >
-            {/* O banner do AdMob será injetado aqui pelo serviço nativo */}
-            <div className="text-gray-500 text-xs">Publicidade</div>
+        <div className="w-full h-32 sm:h-40 rounded-xl overflow-hidden shadow-lg mb-4 relative group cursor-pointer"
+            onClick={() => banner.link_url && window.open(banner.link_url, '_blank')}>
+            <img
+                src={banner.image_url}
+                alt="Banner Promocional"
+                className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+                onError={(e) => {
+                    console.error('Erro ao carregar imagem do banner:', banner.image_url);
+                    (e.target as HTMLImageElement).style.display = 'none';
+                }}
+            />
+            {banners.length > 1 && (
+                <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1">
+                    {banners.map((_, idx) => (
+                        <div
+                            key={idx}
+                            className={`w-1.5 h-1.5 rounded-full transition-all ${idx === currentIndex ? 'bg-white w-4' : 'bg-white/50'}`}
+                        />
+                    ))}
+                </div>
+            )}
         </div>
     );
 };

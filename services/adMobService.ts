@@ -1,14 +1,32 @@
-import { AdMob, AdOptions, AdLoadInfo, InterstitialAdPluginEvents } from '@capacitor-community/admob';
+import { Capacitor } from '@capacitor/core';
+import {
+    AdMob,
+    AdOptions,
+    AdLoadInfo,
+    InterstitialAdPluginEvents,
+    BannerAdPosition,
+    RewardAdOptions,
+    AdMobRewardItem,
+} from '@capacitor-community/admob';
+
+const BANNER_ID = (import.meta as any).env?.VITE_ADMOB_BANNER_ID;
+const INTERSTITIAL_ID = (import.meta as any).env?.VITE_ADMOB_INTERSTITIAL_ID;
+const REWARDED_ID = (import.meta as any).env?.VITE_ADMOB_REWARDED_ID;
+const NATIVE_ID = (import.meta as any).env?.VITE_ADMOB_NATIVE_ID;
+
+let bannerVisible = false;
 
 export const AdMobService = {
     initialize: async () => {
+        if (!Capacitor.isNativePlatform()) {
+            console.log('[AdMob] Web Environment - Skipping initialization');
+            return;
+        }
         try {
             await AdMob.initialize({
-                requestTrackingAuthorization: true,
-                // Modo de produção - anúncios reais ativados
                 initializeForTesting: false,
             });
-            console.log('AdMob initialized - Production Mode');
+            console.log('AdMob initialized - PRODUCTION MODE');
         } catch (e) {
             console.error('AdMob initialization failed', e);
         }
@@ -17,7 +35,7 @@ export const AdMobService = {
     showInterstitial: async () => {
         try {
             const options: AdOptions = {
-                adId: 'ca-app-pub-6105194579101073/5910094348',
+                adId: INTERSTITIAL_ID,
             };
 
             await AdMob.prepareInterstitial(options);
@@ -30,11 +48,14 @@ export const AdMobService = {
     showBanner: async () => {
         try {
             const options: any = {
-                adId: 'ca-app-pub-6105194579101073/7718818279',
-                position: 'top',
+                adId: BANNER_ID,
+                position: BannerAdPosition.BOTTOM_CENTER,
                 margin: 0,
             };
+            if (bannerVisible) return;
+            try { await AdMob.removeBanner(); } catch { }
             await AdMob.showBanner(options);
+            bannerVisible = true;
         } catch (e) {
             console.error('Failed to show banner', e);
         }
@@ -42,7 +63,9 @@ export const AdMobService = {
 
     hideBanner: async () => {
         try {
+            if (!bannerVisible) return;
             await AdMob.hideBanner();
+            bannerVisible = false;
         } catch (e) {
             console.error('Failed to hide banner', e);
         }
@@ -59,6 +82,7 @@ export const AdMobService = {
     removeBanner: async () => {
         try {
             await AdMob.removeBanner();
+            bannerVisible = false;
         } catch (e) {
             console.error('Failed to remove banner', e);
         }
@@ -66,33 +90,18 @@ export const AdMobService = {
 
     showNative: async (parentId: string) => {
         try {
-            // Native Ad Options
-            // Note: The plugin might not fully support 'showNative' in the same way as others.
-            // We use a generic approach assuming the plugin supports it or we map it to a supported method.
-            // If 'showNative' is not available in the types, this might error, but we will try.
-            // The user specifically asked for "Native Ads".
-            // If the plugin doesn't support it, we might need a different approach.
-            // However, assuming @capacitor-community/admob has basic support.
-
-            // Checking documentation (simulated): standard way is often not just 'showNative'.
-            // But let's try to add the method.
-
-            // NOTE: As of recent versions, Native Ads might require specific implementation.
-            // For now, we will add the function signature.
-
             const options: any = {
-                adId: 'ca-app-pub-6105194579101073/9815224922',
+                adId: NATIVE_ID,
                 parentId: parentId,
-                adSize: 'MEDIUM_RECTANGLE', // Example size
-                // other options
+                adSize: 'MEDIUM_RECTANGLE',
             };
 
             // @ts-ignore
-            if (AdMob.showNative) {
+            if (AdMob.showNativeAd) {
                 // @ts-ignore
-                await AdMob.showNative(options);
+                await AdMob.showNativeAd(options);
             } else {
-                console.warn("Native Ads not supported by this plugin version directly via JS.");
+                console.warn("Native Ads not supported by this plugin version directly via JS (tried showNativeAd).");
             }
 
         } catch (e) {
@@ -103,12 +112,45 @@ export const AdMobService = {
     hideNative: async (parentId: string) => {
         try {
             // @ts-ignore
-            if (AdMob.hideNative) {
+            if (AdMob.hideNativeAd) {
                 // @ts-ignore
-                await AdMob.hideNative({ parentId });
+                await AdMob.hideNativeAd({ parentId });
             }
         } catch (e) {
             console.error('Failed to hide native ad', e);
+        }
+    },
+
+    showRewardVideo: async (): Promise<boolean> => {
+        try {
+            if (!window.Capacitor?.isNativePlatform()) {
+                return new Promise(resolve => setTimeout(() => resolve(true), 1500));
+            }
+
+            const adId = (import.meta as any).env?.VITE_ADMOB_REWARDED_ID || 'ca-app-pub-3940256099942544/5224354917';
+
+            const options: RewardAdOptions = {
+                adId,
+            };
+
+            try {
+                await AdMob.prepareRewardVideoAd(options);
+            } catch (prepError) {
+                console.error('[AdMob] Erro ao preparar Rewarded:', prepError);
+                return false;
+            }
+
+            try {
+                const rewardItem: AdMobRewardItem | null = await AdMob.showRewardVideoAd();
+                console.log('[AdMob] Reward recebido:', rewardItem);
+                return !!rewardItem;
+            } catch (showError) {
+                console.error('[AdMob] Erro ao exibir Rewarded:', showError);
+                return false;
+            }
+        } catch (e) {
+            console.error('Failed to show reward video', e);
+            return false;
         }
     }
 };

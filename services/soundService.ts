@@ -5,13 +5,13 @@
 const CALL_SOUND_URL = '/ubb.mp3';
 
 // Som de toque específico para o painel de Admin (Telefone Clássico)
-const ADMIN_CALL_URL = 'https://assets.mixkit.co/sfx/preview/mixkit-phone-old-ring-933.mp3';
+const ADMIN_CALL_URL = '/ubb.mp3';
 
 // Notificação recebida (Som de alerta mais alto e claro)
-const RECEIVED_URL = 'https://assets.mixkit.co/sfx/preview/mixkit-alert-quick-chime-766.mp3';
+const RECEIVED_URL = '/ubb.mp3';
 
 // Som de envio (Swoosh)
-const SENT_URL = 'https://assets.mixkit.co/active_storage/sfx/2354/2354-preview.mp3';
+const SENT_URL = '/ubb.mp3';
 
 // The global `pushalert` variable is now declared on the Window interface in `types.ts`
 
@@ -42,9 +42,13 @@ class SoundService {
     this.callAudio.load();
     this.adminCallAudio.load();
 
-    // Verifica permissão nativa no início
-    if ("Notification" in window) {
-      this.hasNotificationPermission = Notification.permission === "granted";
+    // Verifica permissão nativa no início (com verificação segura para Capacitor/Mobile)
+    try {
+      if (typeof window !== 'undefined' && 'Notification' in window && typeof Notification !== 'undefined') {
+        this.hasNotificationPermission = Notification.permission === "granted";
+      }
+    } catch (e) {
+      console.warn("Notification API not available (Capacitor/Mobile environment)");
     }
   }
 
@@ -57,18 +61,26 @@ class SoundService {
       // Assumimos que o usuário vai aceitar. A biblioteca gerencia o estado.
       this.hasNotificationPermission = true;
     }
-    // 2. Fallback para a API nativa do navegador
+    // 2. Fallback para a API nativa do navegador (com verificação segura para Capacitor/Mobile)
     else {
-      console.warn("PushAlert não carregado, usando API de Notificação nativa.");
-      if ("Notification" in window && Notification.permission !== "granted") {
-        try {
-          const permission = await Notification.requestPermission();
-          this.hasNotificationPermission = permission === "granted";
-        } catch (e) {
-          console.error("Erro ao solicitar permissão nativa:", e);
+      console.warn("PushAlert não carregado, tentando API de Notificação nativa.");
+      try {
+        if (typeof window !== 'undefined' && 'Notification' in window && typeof Notification !== 'undefined') {
+          if (Notification.permission !== "granted") {
+            try {
+              const permission = await Notification.requestPermission();
+              this.hasNotificationPermission = permission === "granted";
+            } catch (e) {
+              console.error("Erro ao solicitar permissão nativa:", e);
+            }
+          } else {
+            this.hasNotificationPermission = Notification.permission === "granted";
+          }
+        } else {
+          console.warn("Notification API not available (Capacitor/Mobile environment)");
         }
-      } else {
-        this.hasNotificationPermission = Notification.permission === "granted";
+      } catch (e) {
+        console.warn("Notification API not accessible:", e);
       }
     }
   }
@@ -98,22 +110,24 @@ class SoundService {
         console.error("Falha ao enviar via PushAlert:", e);
       }
     }
-    // 3. FALLBACK: API de Notificação Padrão do Navegador
+    // 3. FALLBACK: API de Notificação Padrão do Navegador (com verificação segura para Capacitor/Mobile)
     else if (this.hasNotificationPermission) {
-      console.warn("Fallback: Enviando notificação via API nativa do navegador.");
       try {
-        const notification = new Notification(title, {
-          body: body,
-          icon: 'https://cdn-icons-png.flaticon.com/512/3097/3097180.png',
-          vibrate: isCall ? [2000, 500, 2000] : [200, 100, 200],
-          tag: isCall ? 'incoming-call' : 'new-message',
-          renotify: true,
-          requireInteraction: isCall
-        } as any);
+        if (typeof window !== 'undefined' && 'Notification' in window && typeof Notification !== 'undefined') {
+          console.warn("Fallback: Enviando notificação via API nativa do navegador.");
+          const notification = new Notification(title, {
+            body: body,
+            icon: 'https://cdn-icons-png.flaticon.com/512/3097/3097180.png',
+            vibrate: isCall ? [2000, 500, 2000] : [200, 100, 200],
+            tag: isCall ? 'incoming-call' : 'new-message',
+            renotify: true,
+            requireInteraction: isCall
+          } as any);
 
-        notification.onclick = () => window.focus();
+          notification.onclick = () => window.focus();
+        }
       } catch (e) {
-        console.error("Falha ao enviar notificação nativa:", e);
+        console.warn("Notification API not available or blocked:", e);
       }
     }
 
@@ -148,18 +162,32 @@ class SoundService {
   }
 
   playRingtone() {
-    if (window.Android && window.Android.triggerNativeAlert) {
-      window.Android.triggerNativeAlert();
-      if (window.Android.bringToFront) {
-        window.Android.bringToFront();
-      }
-      return;
-    }
+    console.log("[SoundService] playRingtone chamado");
 
+    // Sempre tocar o áudio web (backup)
     this.callAudio.currentTime = 0;
     this.callAudio.loop = true;
     this.callAudio.play().catch(e => console.log("Ringtone blocked:", e));
 
+    // Vibração via navegador (funciona em PWA e web)
+    if (navigator.vibrate) {
+      console.log("[SoundService] Vibrando via navigator.vibrate");
+      navigator.vibrate([1000, 300, 1000, 300, 1000, 300, 1000]);
+    }
+
+    // Android nativo: trazer para frente e disparar alerta
+    if (window.Android) {
+      if (window.Android.triggerNativeAlert) {
+        console.log("[SoundService] Chamando triggerNativeAlert");
+        window.Android.triggerNativeAlert();
+      }
+      if (window.Android.bringToFront) {
+        console.log("[SoundService] Chamando bringToFront");
+        window.Android.bringToFront();
+      }
+    }
+
+    // Notificação do sistema
     this.sendNotification("📞 NOVA CORRIDA / CHAMADA", "Toque aqui para ATENDER AGORA!", true);
   }
 

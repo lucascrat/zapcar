@@ -1,18 +1,33 @@
 
-// Leitura das variáveis de ambiente (Vercel/Vite)
-// Se a variável existir (Produção), usa ela. Se não, usa o valor hardcoded (Desenvolvimento/Demo).
+// =============================================================================
+// VARIÁVEIS DE AMBIENTE - Todas as credenciais DEVEM vir do .env
+// Nunca commite valores reais aqui. Use o arquivo .env na raiz do projeto.
+// =============================================================================
 
-export const SUPABASE_URL = (import.meta as any).env?.VITE_SUPABASE_URL || 'https://qyagfghcnzenvbhbtsvd.supabase.co';
+const env = (import.meta as any).env || {};
 
-// Chave pública (ANON). Em produção, defina via VITE_SUPABASE_ANON_KEY (Vercel).
-export const SUPABASE_ANON_KEY = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF5YWdmZ2hjbnplbnZiaGJ0c3ZkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njc3NDU2NjksImV4cCI6MjA4MzMyMTY2OX0.k_cVE7tLn23NIuuMJlCdWw97F_ZkPpz7SS7d-MleJVc';
+export const SUPABASE_URL = env.VITE_SUPABASE_URL || '';
+export const SUPABASE_ANON_KEY = env.VITE_SUPABASE_ANON_KEY || '';
+export const SUPABASE_SCHEMA = env.VITE_SUPABASE_SCHEMA || 'chegoja';
+
+// Validação: Avisar no console se variáveis críticas estão faltando
+if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+  console.error('[Config] ERRO CRÍTICO: VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY devem estar definidas no .env');
+}
 
 // O nome da aplicação usado em toda a interface
 export const APP_NAME = "ChegoJá";
 
-// MERCADO PAGO CONFIG
-export const MP_PUBLIC_KEY = "APP_USR-8c0ec0f9-7ebd-4f40-aa15-af833ba6c60d";
-export const MP_ACCESS_TOKEN = "APP_USR-1939457864483191-010313-c30b9728ff8f0b7d7766bfa707db2149-166153505";
+// EFIBANK CONFIG - Credenciais via .env (NUNCA hardcode!)
+export const EFI_CLIENT_ID = env.VITE_EFI_CLIENT_ID || '';
+export const EFI_CLIENT_SECRET = env.VITE_EFI_CLIENT_SECRET || '';
+export const EFI_ACCOUNT_CODE = env.VITE_EFI_ACCOUNT_CODE || '';
+
+if (!EFI_CLIENT_ID || !EFI_CLIENT_SECRET) {
+  console.warn('[Config] AVISO: Credenciais EFI Bank não configuradas no .env. Pagamentos não funcionarão.');
+}
+
+export const GOOGLE_MAPS_API_KEY = env.VITE_GOOGLE_MAPS_API_KEY || '';
 
 export const DRIVER_PLANS = [
     {

@@ -1,30 +1,40 @@
 {
   "name": "chegoja",
   "private": true,
-  "version": "2.0.0",
+  "version": "6.1.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "update": "powershell -ExecutionPolicy Bypass -File ./update.ps1"
+    "update": "powershell -ExecutionPolicy Bypass -File ./update.ps1",
+    "install-device": "powershell -ExecutionPolicy Bypass -File ./install-device.ps1",
+    "test:wallet": "node tests/run-currency-tests.mjs"
   },
   "dependencies": {
     "@capacitor-community/admob": "^6.2.0",
     "@capacitor/android": "^6.0.0",
+    "@capacitor/browser": "^6.0.6",
     "@capacitor/core": "^6.0.0",
+    "@capacitor/push-notifications": "^6.0.0",
     "@google/genai": "^1.30.0",
     "@supabase/supabase-js": "^2.84.0",
+    "chart.js": "^4.5.1",
     "mapbox-gl": "^3.27.0",
-    "onesignal-cordova-plugin": "^5.2.19",
     "react": "^19.2.0",
+    "react-chartjs-2": "^5.3.1",
     "react-dom": "^19.2.0"
   },
   "devDependencies": {
     "@capacitor/cli": "^6.0.0",
     "@types/mapbox-gl": "^3.4.1",
     "@types/node": "^22.14.0",
+    "@types/react": "^19.2.13",
+    "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.0.0",
+    "autoprefixer": "^10.4.24",
+    "postcss": "^8.5.6",
+    "tailwindcss": "^3.4.17",
     "typescript": "~5.8.2",
     "vite": "^6.2.0"
   }

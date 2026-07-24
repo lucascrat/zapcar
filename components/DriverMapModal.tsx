@@ -11,6 +11,12 @@ interface DriverMapModalProps {
 const ROUTE_SOURCE_ID = 'driver-route';
 const ROUTE_LAYER_ID = 'driver-route-line';
 
+const pinMarker = (color: string) => {
+    const el = document.createElement('div');
+    el.innerHTML = `<svg width="32" height="32" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="20" cy="20" r="16" fill="#111B21" stroke="${color}" stroke-width="4"/><circle cx="20" cy="20" r="5" fill="white"/></svg>`;
+    return el;
+};
+
 export const DriverMapModal: React.FC<DriverMapModalProps> = ({ clientLocation, driverLocation, onClose }) => {
     const mapRef = useRef<HTMLDivElement>(null);
     const mapInstanceRef = useRef<mapboxgl.Map | null>(null);
@@ -30,10 +36,10 @@ export const DriverMapModal: React.FC<DriverMapModalProps> = ({ clientLocation, 
         map.addControl(new mapboxgl.NavigationControl(), 'top-right');
         mapInstanceRef.current = map;
 
-        new mapboxgl.Marker({ color: '#00a884' })
+        new mapboxgl.Marker({ element: pinMarker('#2563EB') })
             .setLngLat([driverLocation.lng, driverLocation.lat])
             .addTo(map);
-        new mapboxgl.Marker({ color: '#ef4444' })
+        new mapboxgl.Marker({ element: pinMarker('#25D366') })
             .setLngLat([clientLocation.lng, clientLocation.lat])
             .addTo(map);
 

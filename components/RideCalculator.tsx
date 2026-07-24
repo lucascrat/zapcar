@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef } from 'react';
 import mapboxgl from 'mapbox-gl';
 import { AppSettings, UserProfile } from '../types';
 import { fetchAppSettings } from '../services/supabaseClient';
-import { AdBanner } from './AdBanner';
 import { AddressAutocompleteInput } from './AddressAutocompleteInput';
 import { geocodeForward, geocodeReverse, getDirections, GeocodeResult } from '../services/mapboxService';
 
@@ -13,6 +12,12 @@ interface RideCalculatorProps {
 
 const ROUTE_SOURCE_ID = 'ride-calc-route';
 const ROUTE_LAYER_ID = 'ride-calc-route-line';
+
+const pinMarker = (svg: string) => {
+    const el = document.createElement('div');
+    el.innerHTML = svg;
+    return el;
+};
 
 export const RideCalculator: React.FC<RideCalculatorProps> = ({ currentUser, onClose }) => {
     const [origin, setOrigin] = useState('');
@@ -33,6 +38,8 @@ export const RideCalculator: React.FC<RideCalculatorProps> = ({ currentUser, onC
 
     const mapRef = useRef<HTMLDivElement>(null);
     const mapInstance = useRef<mapboxgl.Map | null>(null);
+    const startMarker = useRef<mapboxgl.Marker | null>(null);
+    const endMarker = useRef<mapboxgl.Marker | null>(null);
 
     // Load Settings
     useEffect(() => {
@@ -134,9 +141,18 @@ export const RideCalculator: React.FC<RideCalculatorProps> = ({ currentUser, onC
                 return;
             }
 
-            // Render Route on Map
+            // Render Route + start/end markers on Map
             const map = mapInstance.current;
             if (map) {
+                startMarker.current?.remove();
+                endMarker.current?.remove();
+                startMarker.current = new mapboxgl.Marker({
+                    element: pinMarker('<svg width="32" height="32" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="20" cy="20" r="16" fill="#111B21" stroke="#25D366" stroke-width="4"/><circle cx="20" cy="20" r="5" fill="white"/></svg>')
+                }).setLngLat([originPoint.lng, originPoint.lat]).addTo(map);
+                endMarker.current = new mapboxgl.Marker({
+                    element: pinMarker('<svg width="32" height="32" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="4" y="4" width="32" height="32" rx="8" fill="#111B21" stroke="#FF4444" stroke-width="4"/><path d="M14 10V30M14 12C14 12 17 10 20 10C23 10 26 14 29 14V22C29 22 26 18 23 18C20 18 17 22 14 22" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>')
+                }).setLngLat([destPoint.lng, destPoint.lat]).addTo(map);
+
                 const applyRoute = () => {
                     if (map.getSource(ROUTE_SOURCE_ID)) {
                         (map.getSource(ROUTE_SOURCE_ID) as mapboxgl.GeoJSONSource).setData({
@@ -154,7 +170,7 @@ export const RideCalculator: React.FC<RideCalculatorProps> = ({ currentUser, onC
                             type: 'line',
                             source: ROUTE_SOURCE_ID,
                             layout: { 'line-join': 'round', 'line-cap': 'round' },
-                            paint: { 'line-color': '#00a884', 'line-width': 5 },
+                            paint: { 'line-color': '#25D366', 'line-width': 6 },
                         });
                     }
 
@@ -170,25 +186,75 @@ export const RideCalculator: React.FC<RideCalculatorProps> = ({ currentUser, onC
                 else map.once('load', applyRoute);
             }
 
-            const distanceKm = route.distanceMeters / 1000;
-            const durationMin = route.durationSeconds / 60;
+            const distanceMeters = route.distanceMeters;
+            const durationSeconds = route.durationSeconds;
+            const distanceKm = distanceMeters / 1000;
+            const durationMin = durationSeconds / 60;
 
-            // Calculate Price
+            // Calculate Price based on current time
+            const now = new Date();
+            const currentTime = now.getHours() * 60 + now.getMinutes();
+
+            const parseTime = (timeStr?: string) => {
+                if (!timeStr) return 0;
+                const [h, m] = timeStr.split(':').map(Number);
+                return h * 60 + m;
+            };
+
+            const nightStart = parseTime(settings.night_start_time || '19:00');
+            const nightEnd = parseTime(settings.night_end_time || '23:59');
+            const dawnStart = parseTime(settings.dawn_start_time || '00:00');
+            const dawnEnd = parseTime(settings.dawn_end_time || '05:00');
+
             let base = settings.car_base_price;
             let perKm = settings.car_price_km;
-            let perMin = settings.car_price_min;
+            let perMin = settings.car_price_per_minute || 0;
             let startDistLimit = settings.car_start_distance_limit || 0;
+            let minFare = settings.car_price_min || 0; // Use car_price_min as Minimum Fare
 
             if (vehicleType === 'motorcycle') {
                 base = settings.moto_base_price;
                 perKm = settings.moto_price_km;
-                perMin = settings.moto_price_min;
+                perMin = settings.moto_price_per_minute || 0;
                 startDistLimit = settings.moto_start_distance_limit || 0;
+                minFare = settings.moto_price_min || 0;
+            }
+
+            // Apply Dynamic Pricing
+            const isNight = (nightStart < nightEnd)
+                ? (currentTime >= nightStart && currentTime <= nightEnd)
+                : (currentTime >= nightStart || currentTime <= nightEnd); // Handles bridge over midnight
+
+            const isDawn = (dawnStart < dawnEnd)
+                ? (currentTime >= dawnStart && currentTime <= dawnEnd)
+                : (currentTime >= dawnStart || currentTime <= dawnEnd);
+
+            if (isDawn) {
+                if (vehicleType === 'car') {
+                    base = settings.dawn_car_base_price ?? base;
+                    perKm = settings.dawn_car_price_km ?? perKm;
+                    perMin = settings.dawn_car_price_min ?? perMin;
+                } else {
+                    base = settings.dawn_moto_base_price ?? base;
+                    perKm = settings.dawn_moto_price_km ?? perKm;
+                    perMin = settings.dawn_moto_price_min ?? perMin;
+                }
+            } else if (isNight) {
+                if (vehicleType === 'car') {
+                    base = settings.night_car_base_price ?? base;
+                    perKm = settings.night_car_price_km ?? perKm;
+                    perMin = settings.night_car_price_min ?? perMin;
+                } else {
+                    base = settings.night_moto_base_price ?? base;
+                    perKm = settings.night_moto_price_km ?? perKm;
+                    perMin = settings.night_moto_price_min ?? perMin;
+                }
             }
 
             const chargeableDistance = Math.max(0, distanceKm - startDistLimit);
-            const total = base + (chargeableDistance * perKm) + (durationMin * perMin);
-            const finalPrice = Math.max(base, total);
+            // Logic: Base + DistPrice + TimePrice
+            const calculatedPrice = base + (chargeableDistance * perKm) + (durationMin * perMin);
+            const finalPrice = Math.max(calculatedPrice, minFare);
 
             setResult({
                 distanceKm,
@@ -212,9 +278,6 @@ export const RideCalculator: React.FC<RideCalculatorProps> = ({ currentUser, onC
     return (
         <div className="fixed inset-0 z-[100] bg-black/95 flex flex-col items-center justify-center p-4 animate-fade-in">
             <div className="w-full max-w-md bg-white rounded-2xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
-                {/* AdMob Banner */}
-                <AdBanner />
-
                 {/* Header */}
                 <div className="bg-whatsapp-green p-4 flex justify-between items-center text-white shrink-0">
                     <div className="flex items-center gap-2">

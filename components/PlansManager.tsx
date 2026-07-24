@@ -17,7 +17,7 @@ export const PlansManager: React.FC<PlansManagerProps> = ({ onClose }) => {
         // Real-time updates for plans
         const sub = supabase
             .channel('public:driver_plans')
-            .on('postgres_changes', { event: '*', schema: 'chegoja', table: 'driver_plans' }, () => {
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'driver_plans' }, () => {
                 loadPlans();
             })
             .subscribe();

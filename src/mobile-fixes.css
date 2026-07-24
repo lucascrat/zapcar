@@ -1,0 +1,17 @@
+/* ===================================
+   MOBILE FIXES - ESSENTIALS ONLY
+   =================================== */
+
+/* Garante altura total correta em mobile */
+.min-h-safe-screen {
+    min-height: 100vh;
+    min-height: -webkit-fill-available;
+}
+
+/* Remove estilo padrão feio de autofill do navegador */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active {
+    -webkit-box-shadow: 0 0 0 30px white inset !important;
+}
