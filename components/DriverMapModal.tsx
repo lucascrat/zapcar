@@ -1,15 +1,16 @@
 import React, { useEffect, useRef, useState } from 'react';
-import mapboxgl from 'mapbox-gl';
-import { getDirections } from '../services/mapboxService';
+import { getDirections } from '../services/placesService';
+import { getMapProviderPromise } from '../services/googleMapsLoader';
+import {
+    createMap, destroyMap, addNavigationControl, addMarker, drawRoute, fitBounds,
+    MapHandle,
+} from '../services/mapAdapter';
 
 interface DriverMapModalProps {
     clientLocation: { lat: number; lng: number };
     driverLocation: { lat: number; lng: number };
     onClose: () => void;
 }
-
-const ROUTE_SOURCE_ID = 'driver-route';
-const ROUTE_LAYER_ID = 'driver-route-line';
 
 const pinMarker = (color: string) => {
     const el = document.createElement('div');
@@ -19,37 +20,36 @@ const pinMarker = (color: string) => {
 
 export const DriverMapModal: React.FC<DriverMapModalProps> = ({ clientLocation, driverLocation, onClose }) => {
     const mapRef = useRef<HTMLDivElement>(null);
-    const mapInstanceRef = useRef<mapboxgl.Map | null>(null);
+    const mapInstanceRef = useRef<MapHandle | null>(null);
     const [distance, setDistance] = useState<string>('');
     const [duration, setDuration] = useState<string>('');
     const [error, setError] = useState<string>('');
 
     useEffect(() => {
         if (!mapRef.current) return;
+        let cancelled = false;
 
-        const map = new mapboxgl.Map({
-            container: mapRef.current,
-            style: 'mapbox://styles/mapbox/dark-v11',
-            center: [driverLocation.lng, driverLocation.lat],
-            zoom: 13,
-        });
-        map.addControl(new mapboxgl.NavigationControl(), 'top-right');
-        mapInstanceRef.current = map;
+        getMapProviderPromise().then(async (provider) => {
+            if (cancelled || !mapRef.current) return;
 
-        new mapboxgl.Marker({ element: pinMarker('#2563EB') })
-            .setLngLat([driverLocation.lng, driverLocation.lat])
-            .addTo(map);
-        new mapboxgl.Marker({ element: pinMarker('#25D366') })
-            .setLngLat([clientLocation.lng, clientLocation.lat])
-            .addTo(map);
+            const handle = createMap(provider, mapRef.current, {
+                center: driverLocation,
+                zoom: 13,
+                style: 'dark',
+            });
+            addNavigationControl(handle);
+            mapInstanceRef.current = handle;
 
-        const drawRoute = async () => {
+            addMarker(handle, { lat: driverLocation.lat, lng: driverLocation.lng, element: pinMarker('#2563EB') });
+            addMarker(handle, { lat: clientLocation.lat, lng: clientLocation.lng, element: pinMarker('#25D366') });
+
             try {
                 const route = await getDirections(
                     [driverLocation.lng, driverLocation.lat],
                     [clientLocation.lng, clientLocation.lat]
                 );
 
+                if (cancelled) return;
                 if (!route) {
                     setError('Erro ao traçar rota.');
                     return;
@@ -60,51 +60,20 @@ export const DriverMapModal: React.FC<DriverMapModalProps> = ({ clientLocation, 
                 setDistance(`${distanceKm.toFixed(1)} km`);
                 setDuration(`${durationMin} min`);
 
-                const applyRoute = () => {
-                    if (map.getSource(ROUTE_SOURCE_ID)) {
-                        (map.getSource(ROUTE_SOURCE_ID) as mapboxgl.GeoJSONSource).setData({
-                            type: 'Feature',
-                            properties: {},
-                            geometry: route.geometry,
-                        });
-                    } else {
-                        map.addSource(ROUTE_SOURCE_ID, {
-                            type: 'geojson',
-                            data: { type: 'Feature', properties: {}, geometry: route.geometry },
-                        });
-                        map.addLayer({
-                            id: ROUTE_LAYER_ID,
-                            type: 'line',
-                            source: ROUTE_SOURCE_ID,
-                            layout: { 'line-join': 'round', 'line-cap': 'round' },
-                            paint: { 'line-color': '#00a884', 'line-width': 6 },
-                        });
-                    }
-
-                    const coords = route.geometry.coordinates as [number, number][];
-                    const bounds = coords.reduce(
-                        (b, c) => b.extend(c),
-                        new mapboxgl.LngLatBounds(coords[0], coords[0])
-                    );
-                    map.fitBounds(bounds, { padding: 60 });
-                };
-
-                if (map.isStyleLoaded()) {
-                    applyRoute();
-                } else {
-                    map.once('load', applyRoute);
-                }
+                drawRoute(handle, route.geometry.coordinates as [number, number][], { color: '#00a884', width: 6 });
+                fitBounds(handle, route.geometry.coordinates as [number, number][], 60);
             } catch (e) {
                 console.error("Directions request failed", e);
                 setError('Erro ao traçar rota.');
             }
-        };
-
-        drawRoute();
+        });
 
         return () => {
-            map.remove();
-            mapInstanceRef.current = null;
+            cancelled = true;
+            if (mapInstanceRef.current) {
+                destroyMap(mapInstanceRef.current);
+                mapInstanceRef.current = null;
+            }
         };
     }, [clientLocation, driverLocation]);
 

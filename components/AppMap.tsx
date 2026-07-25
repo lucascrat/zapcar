@@ -1,8 +1,14 @@
 
 import React, { useEffect, useRef, useState } from 'react';
-import mapboxgl from 'mapbox-gl';
 import { fetchRideHeatmapData } from '../services/supabaseClient';
-import { getDirectionsWithSteps, DirectionsStep } from '../services/mapboxService';
+import { getDirectionsWithSteps, DirectionsStep } from '../services/placesService';
+import { getMapProviderPromise } from '../services/googleMapsLoader';
+import {
+    createMap, destroyMap, resizeMap, onDragStart,
+    addMarker, updateMarker, getMarkerPosition, getMarkerElement, removeMarker,
+    drawRoute, clearRoute, addHeatmap, removeHeatmap, fitBounds, easeTo,
+    MapHandle, MarkerHandle,
+} from '../services/mapAdapter';
 import { UserProfile, AppSettings, DriverStatus } from '../types';
 
 interface AppMapProps {
@@ -29,11 +35,6 @@ const START_PIN_SVG = '<svg width="32" height="32" viewBox="0 0 40 40" fill="non
 const END_PIN_SVG = '<svg width="32" height="32" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="4" y="4" width="32" height="32" rx="8" fill="#111B21" stroke="#FF4444" stroke-width="4"/><path d="M14 10V30M14 12C14 12 17 10 20 10C23 10 26 14 29 14V22C29 22 26 18 23 18C20 18 17 22 14 22" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 const NEXT_STEP_SVG = '<svg width="34" height="34" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#22C55E"/><stop offset="1" stop-color="#16A34A"/></linearGradient></defs><path d="M24 4c-7 0-12 5.5-12 12 0 9 12 20 12 20s12-11 12-20c0-6.5-5-12-12-12z" fill="url(#g)" stroke="#ffffff" stroke-width="2"/><circle cx="24" cy="16" r="5" fill="#fff"/></svg>';
 
-const ROUTE_SOURCE_ID = 'appmap-route';
-const ROUTE_LAYER_ID = 'appmap-route-line';
-const HEATMAP_SOURCE_ID = 'appmap-heatmap';
-const HEATMAP_LAYER_ID = 'appmap-heatmap-layer';
-
 function svgDataUrl(svg: string) {
     return 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg);
 }
@@ -55,20 +56,25 @@ export const AppMap: React.FC<AppMapProps> = ({
     userVehicleType
 }) => {
     const mapRef = useRef<HTMLDivElement>(null);
-    const mapInstance = useRef<mapboxgl.Map | null>(null);
+    const mapInstance = useRef<MapHandle | null>(null);
     const mapLoaded = useRef(false);
-    const markers = useRef<Map<string, mapboxgl.Marker>>(new Map());
+    const markers = useRef<Map<string, MarkerHandle>>(new Map());
     const driverPositions = useRef<Map<string, { lat: number; lng: number }>>(new Map());
     const driverHeadings = useRef<Map<string, number>>(new Map());
     const animationFrames = useRef<Map<string, number>>(new Map());
     const [heading, setHeading] = useState(0);
+    // Incrementa quando o mapa termina de ser criado (agora assíncrono, já
+    // que pode depender do carregamento do script do Google). Os efeitos de
+    // marcadores/heatmap/rota dependem disso para rodar de novo assim que o
+    // mapa existir, caso já tenham rodado (e desistido) antes disso.
+    const [mapReadyTick, setMapReadyTick] = useState(0);
 
-    const userMarker = useRef<mapboxgl.Marker | null>(null);
+    const userMarker = useRef<MarkerHandle | null>(null);
     const gpsWatchId = useRef<number | null>(null);
     const lastGpsPos = useRef<{ lat: number; lng: number } | null>(null);
-    const startMarker = useRef<mapboxgl.Marker | null>(null);
-    const endMarker = useRef<mapboxgl.Marker | null>(null);
-    const nextStepMarker = useRef<mapboxgl.Marker | null>(null);
+    const startMarker = useRef<MarkerHandle | null>(null);
+    const endMarker = useRef<MarkerHandle | null>(null);
+    const nextStepMarker = useRef<MarkerHandle | null>(null);
     const lastRouteKey = useRef<string>('');
     const lastPosKey = useRef<string>('');
     const [isFollowing, setIsFollowing] = useState(true);
@@ -113,41 +119,49 @@ export const AppMap: React.FC<AppMapProps> = ({
     // Init map (once)
     useEffect(() => {
         if (!mapRef.current || mapInstance.current) return;
+        let cancelled = false;
 
-        const center = userLocation || { lat: -3.7319, lng: -38.5267 };
-        const map = new mapboxgl.Map({
-            container: mapRef.current,
-            style: 'mapbox://styles/mapbox/streets-v12',
-            center: [center.lng, center.lat],
-            zoom: 15,
-            pitch: navigationMode ? 65 : 0,
-            bearing: heading,
+        getMapProviderPromise().then((provider) => {
+            if (cancelled || !mapRef.current || mapInstance.current) return;
+
+            const center = userLocation || { lat: -3.7319, lng: -38.5267 };
+            const handle = createMap(provider, mapRef.current, {
+                center,
+                zoom: 15,
+                pitch: navigationMode ? 65 : 0,
+                bearing: heading,
+                style: 'streets',
+            });
+            mapInstance.current = handle;
+            mapLoaded.current = true;
+
+            const stopFollowing = () => setIsFollowing(false);
+            onDragStart(handle, stopFollowing);
+
+            setMapReadyTick(t => t + 1);
         });
-        mapInstance.current = map;
-
-        map.on('load', () => { mapLoaded.current = true; });
-
-        const stopFollowing = () => setIsFollowing(false);
-        map.on('dragstart', stopFollowing);
 
         return () => {
-            map.remove();
-            mapInstance.current = null;
-            mapLoaded.current = false;
+            cancelled = true;
+            if (mapInstance.current) {
+                destroyMap(mapInstance.current);
+                mapInstance.current = null;
+                mapLoaded.current = false;
+            }
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     // Driver markers with animated position + rotation
     useEffect(() => {
-        const map = mapInstance.current;
-        if (!map) return;
+        const handle = mapInstance.current;
+        if (!handle) return;
 
         const currentIds = new Set(drivers.map(d => d.id));
 
         markers.current.forEach((marker, id) => {
             if (!currentIds.has(id)) {
-                marker.remove();
+                removeMarker(marker);
                 markers.current.delete(id);
                 driverPositions.current.delete(id);
                 driverHeadings.current.delete(id);
@@ -178,8 +192,9 @@ export const AppMap: React.FC<AppMapProps> = ({
                 const fallbackSvg = driver.vehicle_type === 'motorcycle' ? MOTO_SVG : CAR_SVG;
 
                 if (marker) {
-                    marker.setRotation(bearing);
-                    marker.getElement().style.opacity = driver.status === DriverStatus.BUSY ? '0.6' : '1';
+                    updateMarker(marker, { rotation: bearing });
+                    const el = getMarkerElement(marker);
+                    if (el) el.style.opacity = driver.status === DriverStatus.BUSY ? '0.6' : '1';
                     animateMarkerTo(marker, newPos, driver.id);
                 } else {
                     const el = iconUrl
@@ -188,23 +203,22 @@ export const AppMap: React.FC<AppMapProps> = ({
                     el.style.cursor = 'pointer';
                     el.style.opacity = driver.status === DriverStatus.BUSY ? '0.6' : '1';
 
-                    marker = new mapboxgl.Marker({ element: el, rotationAlignment: 'map' })
-                        .setLngLat([newPos.lng, newPos.lat])
-                        .setRotation(bearing)
-                        .addTo(map);
-                    el.addEventListener('click', () => onMarkerClick && onMarkerClick(driver));
+                    marker = addMarker(handle, {
+                        lat: newPos.lat, lng: newPos.lng, element: el, rotation: bearing,
+                        onClick: () => onMarkerClick && onMarkerClick(driver),
+                    });
                     markers.current.set(driver.id, marker);
                 }
             }
         });
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [drivers, settings]);
+    }, [drivers, settings, mapReadyTick]);
 
-    const animateMarkerTo = (marker: mapboxgl.Marker, targetPos: { lat: number; lng: number }, driverId: string) => {
+    const animateMarkerTo = (marker: MarkerHandle, targetPos: { lat: number; lng: number }, driverId: string) => {
         const prevFrame = animationFrames.current.get(driverId);
         if (prevFrame) cancelAnimationFrame(prevFrame);
 
-        const start = marker.getLngLat();
+        const start = getMarkerPosition(marker);
         const startLat = start.lat;
         const startLng = start.lng;
         const duration = 600;
@@ -216,7 +230,7 @@ export const AppMap: React.FC<AppMapProps> = ({
             const ease = 1 - Math.pow(1 - t, 3);
             const lat = startLat + (targetPos.lat - startLat) * ease;
             const lng = startLng + (targetPos.lng - startLng) * ease;
-            marker.setLngLat([lng, lat]);
+            updateMarker(marker, { lat, lng });
             if (t < 1) {
                 animationFrames.current.set(driverId, requestAnimationFrame(step));
             } else {
@@ -228,87 +242,32 @@ export const AppMap: React.FC<AppMapProps> = ({
 
     // Heatmap
     useEffect(() => {
-        const map = mapInstance.current;
+        const handle = mapInstance.current;
         const showHeatmap = navigationMode || !!userVehicleType;
 
-        const removeHeatmap = () => {
-            if (!map) return;
-            try {
-                // map.getStyle()/getLayer()/getSource() lançam exceção (em vez de retornar
-                // falsy) se o mapa foi destruído ou o estilo ainda está carregando, por isso
-                // tudo fica dentro do try.
-                if (!map.isStyleLoaded()) return;
-                if (map.getLayer(HEATMAP_LAYER_ID)) map.removeLayer(HEATMAP_LAYER_ID);
-                if (map.getSource(HEATMAP_SOURCE_ID)) map.removeSource(HEATMAP_SOURCE_ID);
-            } catch (e) {
-                // Mapa pode já ter sido destruído (.remove()) durante o desmonte do componente
-                console.warn('removeHeatmap: mapa indisponível', e);
-            }
-        };
-
-        if (!showHeatmap || !map) {
-            if (map) removeHeatmap();
+        if (!showHeatmap || !handle) {
+            if (handle) removeHeatmap(handle);
             return;
         }
 
         const loadHeatmap = async () => {
             const points = await fetchRideHeatmapData();
-            if (!points || points.length === 0 || !map) return;
-
-            const geojson: GeoJSON.FeatureCollection = {
-                type: 'FeatureCollection',
-                features: points.map(p => ({
-                    type: 'Feature',
-                    properties: {},
-                    geometry: { type: 'Point', coordinates: [p.lng, p.lat] },
-                })),
-            };
-
-            const apply = () => {
-                try {
-                    // Mapa pode ter sido destruído enquanto aguardávamos os dados
-                    if (!map.isStyleLoaded()) return;
-                    if (map.getSource(HEATMAP_SOURCE_ID)) {
-                        (map.getSource(HEATMAP_SOURCE_ID) as mapboxgl.GeoJSONSource).setData(geojson);
-                    } else {
-                        map.addSource(HEATMAP_SOURCE_ID, { type: 'geojson', data: geojson });
-                        map.addLayer({
-                            id: HEATMAP_LAYER_ID,
-                            type: 'heatmap',
-                            source: HEATMAP_SOURCE_ID,
-                            paint: {
-                                'heatmap-radius': navigationMode ? 30 : 25,
-                                'heatmap-opacity': navigationMode ? 0.7 : 0.45,
-                                'heatmap-color': [
-                                    'interpolate', ['linear'], ['heatmap-density'],
-                                    0, 'rgba(0,255,255,0)',
-                                    0.5, 'rgba(255,255,0,1)',
-                                    1, 'rgba(255,0,0,1)',
-                                ],
-                            },
-                        });
-                    }
-                } catch (e) {
-                    console.warn('loadHeatmap: mapa indisponível', e);
-                }
-            };
-
-            try {
-                if (map.isStyleLoaded()) apply(); else map.once('load', apply);
-            } catch (e) {
-                console.warn('loadHeatmap: mapa indisponível', e);
-            }
+            if (!points || points.length === 0 || !mapInstance.current) return;
+            addHeatmap(mapInstance.current, points, {
+                radius: navigationMode ? 30 : 25,
+                opacity: navigationMode ? 0.7 : 0.45,
+            });
         };
 
         loadHeatmap();
-        return () => removeHeatmap();
+        return () => removeHeatmap(mapInstance.current);
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [navigationMode, userVehicleType]);
+    }, [navigationMode, userVehicleType, mapReadyTick]);
 
     // Route + turn-by-turn
     useEffect(() => {
-        const map = mapInstance.current;
-        if (!map) return;
+        const handle = mapInstance.current;
+        if (!handle) return;
 
         if (showRoute && routeOrigin && routeDestination) {
             const shouldRecalc =
@@ -318,17 +277,15 @@ export const AppMap: React.FC<AppMapProps> = ({
                 distMeters(routeDestination, lastDestination.current) > 20;
 
             if (!startMarker.current) {
-                startMarker.current = new mapboxgl.Marker({ element: buildIconMarker(START_PIN_SVG, 32) })
-                    .setLngLat([routeOrigin.lng, routeOrigin.lat]).addTo(map);
+                startMarker.current = addMarker(handle, { lat: routeOrigin.lat, lng: routeOrigin.lng, element: buildIconMarker(START_PIN_SVG, 32) });
             } else {
-                startMarker.current.setLngLat([routeOrigin.lng, routeOrigin.lat]);
+                updateMarker(startMarker.current, { lat: routeOrigin.lat, lng: routeOrigin.lng });
             }
 
             if (!endMarker.current) {
-                endMarker.current = new mapboxgl.Marker({ element: buildIconMarker(END_PIN_SVG, 32) })
-                    .setLngLat([routeDestination.lng, routeDestination.lat]).addTo(map);
+                endMarker.current = addMarker(handle, { lat: routeDestination.lat, lng: routeDestination.lng, element: buildIconMarker(END_PIN_SVG, 32) });
             } else {
-                endMarker.current.setLngLat([routeDestination.lng, routeDestination.lat]);
+                updateMarker(endMarker.current, { lat: routeDestination.lat, lng: routeDestination.lng });
             }
 
             if (!shouldRecalc) return;
@@ -346,32 +303,13 @@ export const AppMap: React.FC<AppMapProps> = ({
                     [routeOrigin.lng, routeOrigin.lat],
                     [routeDestination.lng, routeDestination.lat]
                 );
-                if (!route) return;
+                if (!route || !mapInstance.current) return;
 
-                const applyRoute = () => {
-                    const geojson: GeoJSON.Feature = { type: 'Feature', properties: {}, geometry: route.geometry };
-                    if (map.getSource(ROUTE_SOURCE_ID)) {
-                        (map.getSource(ROUTE_SOURCE_ID) as mapboxgl.GeoJSONSource).setData(geojson);
-                    } else {
-                        map.addSource(ROUTE_SOURCE_ID, { type: 'geojson', data: geojson });
-                        map.addLayer({
-                            id: ROUTE_LAYER_ID,
-                            type: 'line',
-                            source: ROUTE_SOURCE_ID,
-                            layout: { 'line-join': 'round', 'line-cap': 'round' },
-                            paint: { 'line-color': '#25D366', 'line-width': 6, 'line-opacity': 0.9 },
-                        });
-                    }
+                drawRoute(mapInstance.current, route.geometry.coordinates as [number, number][], { color: '#25D366', width: 6, opacity: 0.9 });
 
-                    if (!navigationMode) {
-                        const bounds = route.boundsCoordinates.reduce(
-                            (b, c) => b.extend(c as [number, number]),
-                            new mapboxgl.LngLatBounds(route.boundsCoordinates[0], route.boundsCoordinates[0])
-                        );
-                        map.fitBounds(bounds, { padding: 60 });
-                    }
-                };
-                if (map.isStyleLoaded()) applyRoute(); else map.once('load', applyRoute);
+                if (!navigationMode) {
+                    fitBounds(mapInstance.current, route.boundsCoordinates, 60);
+                }
 
                 const durationMin = Math.round(route.durationSeconds / 60);
                 const distanceKm = (route.distanceMeters / 1000).toFixed(1);
@@ -390,27 +328,26 @@ export const AppMap: React.FC<AppMapProps> = ({
                 }
             })();
         } else {
-            if (map.getLayer(ROUTE_LAYER_ID)) map.removeLayer(ROUTE_LAYER_ID);
-            if (map.getSource(ROUTE_SOURCE_ID)) map.removeSource(ROUTE_SOURCE_ID);
-            startMarker.current?.remove(); startMarker.current = null;
-            endMarker.current?.remove(); endMarker.current = null;
-            nextStepMarker.current?.remove(); nextStepMarker.current = null;
+            clearRoute(handle);
+            removeMarker(startMarker.current); startMarker.current = null;
+            removeMarker(endMarker.current); endMarker.current = null;
+            removeMarker(nextStepMarker.current); nextStepMarker.current = null;
             lastRouteKey.current = '';
             routeSteps.current = [];
             setStepIndex(0);
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [showRoute, routeOrigin, routeDestination]);
+    }, [showRoute, routeOrigin, routeDestination, mapReadyTick]);
 
     const placeNextStepMarker = (pos: { lat: number; lng: number }) => {
-        const map = mapInstance.current;
-        if (!map || !pos.lat || !pos.lng) return;
+        const handle = mapInstance.current;
+        if (!handle || !pos.lat || !pos.lng) return;
         if (!nextStepMarker.current) {
             const el = buildIconMarker(NEXT_STEP_SVG, 34);
             el.style.animation = 'pulse 1.2s ease-in-out infinite';
-            nextStepMarker.current = new mapboxgl.Marker({ element: el }).setLngLat([pos.lng, pos.lat]).addTo(map);
+            nextStepMarker.current = addMarker(handle, { lat: pos.lat, lng: pos.lng, element: el });
         } else {
-            nextStepMarker.current.setLngLat([pos.lng, pos.lat]);
+            updateMarker(nextStepMarker.current, { lat: pos.lat, lng: pos.lng });
         }
     };
 
@@ -418,39 +355,35 @@ export const AppMap: React.FC<AppMapProps> = ({
 
     // User location marker + camera follow
     useEffect(() => {
-        const map = mapInstance.current;
-        if (!map || !userLocation) return;
+        const handle = mapInstance.current;
+        if (!handle || !userLocation) return;
 
         const currentPosKey = `${userLocation.lat.toFixed(5)},${userLocation.lng.toFixed(5)},${navigationMode},${heading},${isFollowing}`;
         if (currentPosKey === lastPosKey.current) return;
         lastPosKey.current = currentPosKey;
 
         if (userMarker.current) {
-            userMarker.current.setLngLat([userLocation.lng, userLocation.lat]);
-            userMarker.current.setRotation(heading);
+            updateMarker(userMarker.current, { lat: userLocation.lat, lng: userLocation.lng, rotation: heading });
         } else {
             const svg = userVehicleType
                 ? (userVehicleType === 'motorcycle' ? MOTO_SVG : CAR_SVG)
                 : USER_ARROW_SVG('#2563eb');
             const el = buildIconMarker(svg, userVehicleType ? 40 : 28);
-            userMarker.current = new mapboxgl.Marker({ element: el, rotationAlignment: 'map' })
-                .setLngLat([userLocation.lng, userLocation.lat])
-                .setRotation(heading)
-                .addTo(map);
+            userMarker.current = addMarker(handle, { lat: userLocation.lat, lng: userLocation.lng, element: el, rotation: heading });
         }
 
         if (isFollowing && navigationMode) {
-            map.easeTo({ center: [userLocation.lng, userLocation.lat], pitch: 65, zoom: 19, bearing: heading, duration: 500 });
+            easeTo(handle, { lat: userLocation.lat, lng: userLocation.lng, pitch: 65, zoom: 19, bearing: heading, durationMs: 500 });
         } else if (isFollowing && !navigationMode) {
-            map.easeTo({ center: [userLocation.lng, userLocation.lat], duration: 500 });
+            easeTo(handle, { lat: userLocation.lat, lng: userLocation.lng, durationMs: 500 });
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [userLocation, navigationMode, heading, isFollowing]);
+    }, [userLocation, navigationMode, heading, isFollowing, mapReadyTick]);
 
     // GPS watcher for live heading/panning during navigation
     useEffect(() => {
-        const map = mapInstance.current;
-        if (!navigationMode || !('geolocation' in navigator) || !map) {
+        const handle = mapInstance.current;
+        if (!navigationMode || !('geolocation' in navigator) || !handle) {
             if (gpsWatchId.current !== null) {
                 navigator.geolocation.clearWatch(gpsWatchId.current);
                 gpsWatchId.current = null;
@@ -471,12 +404,11 @@ export const AppMap: React.FC<AppMapProps> = ({
                 lastGpsPos.current = current;
 
                 if (userMarker.current) {
-                    userMarker.current.setLngLat([current.lng, current.lat]);
-                    userMarker.current.setRotation(heading);
+                    updateMarker(userMarker.current, { lat: current.lat, lng: current.lng, rotation: heading });
                 }
 
                 if (isFollowing) {
-                    map.easeTo({ center: [current.lng, current.lat], bearing: heading, pitch: 50, zoom: 18, duration: 400 });
+                    easeTo(handle, { lat: current.lat, lng: current.lng, bearing: heading, pitch: 50, zoom: 18, durationMs: 400 });
                 }
 
                 if (routeSteps.current.length > 0) {
@@ -515,7 +447,7 @@ export const AppMap: React.FC<AppMapProps> = ({
             }
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [navigationMode, isFollowing, heading]);
+    }, [navigationMode, isFollowing, heading, mapReadyTick]);
 
     useEffect(() => {
         setIsFollowing(!!followCamera);
@@ -524,10 +456,10 @@ export const AppMap: React.FC<AppMapProps> = ({
     // Resize handling
     useEffect(() => {
         if (!mapRef.current || !mapInstance.current) return;
-        const observer = new ResizeObserver(() => mapInstance.current?.resize());
+        const observer = new ResizeObserver(() => mapInstance.current && resizeMap(mapInstance.current));
         observer.observe(mapRef.current);
         return () => observer.disconnect();
-    }, []);
+    }, [mapReadyTick]);
 
     return (
         <div className="w-full h-full relative">

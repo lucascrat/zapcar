@@ -7,8 +7,13 @@ import { ErrorBoundary } from './src/components/shared/ErrorBoundary';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { MAPBOX_TOKEN } from './services/mapboxService';
+import { GOOGLE_MAPS_API_KEY } from './constants';
+import { initMapProvider } from './services/googleMapsLoader';
 
 mapboxgl.accessToken = MAPBOX_TOKEN;
+// Decide uma única vez, no boot, se o app usa Google Maps (principal) ou
+// Mapbox (fallback automático caso o Google falhe/demore para carregar).
+initMapProvider(GOOGLE_MAPS_API_KEY);
 
 // CSS imports - Vite will inject these into the page as style tags
 import './src/index.css';

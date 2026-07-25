@@ -3,7 +3,6 @@
  */
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import mapboxgl from 'mapbox-gl';
 import { UserProfile, DriverStatus } from '../../../types';
 import { checkSubscriptionStatus } from '../../../services/paymentService';
 import { useBreakpoint } from '../../hooks/useMediaQuery';
@@ -17,6 +16,11 @@ import {
     addSubscriptionDays,
     updateDriverPassword
 } from '../../../services/supabaseClient';
+import { getMapProviderPromise } from '../../../services/googleMapsLoader';
+import {
+    createMap, addNavigationControl, addMarker, removeMarker, fitBounds, panTo, setZoom, onMapReady,
+    MapHandle, MarkerHandle,
+} from '../../../services/mapAdapter';
 
 interface AdminDriversViewProps {
     drivers: (UserProfile & { monthly_rides?: number })[];
@@ -216,9 +220,8 @@ export const AdminDriversView: React.FC<AdminDriversViewProps> = ({
 
     // ============ MAPA DE MOTORISTAS ONLINE ============
     const mapContainerRef = useRef<HTMLDivElement>(null);
-    const mapInstanceRef = useRef<mapboxgl.Map | null>(null);
-    const markersRef = useRef<mapboxgl.Marker[]>([]);
-    const popupRef = useRef<mapboxgl.Popup | null>(null);
+    const mapInstanceRef = useRef<MapHandle | null>(null);
+    const markersRef = useRef<MarkerHandle[]>([]);
     const [showMap, setShowMap] = useState(true);
 
     const CAR_SVG = '<svg xmlns="http://www.w3.org/2000/svg" height="36" viewBox="0 0 24 24" width="36"><path d="M0 0h24v24H0z" fill="none"/><path fill="#25D366" stroke="#111b21" stroke-width="0.5" d="M18.92 6.01C18.72 5.42 18.16 5 17.5 5h-11c-.66 0-1.21.42-1.42 1.01L3 12v8c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h12v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-8l-2.08-5.99zM6.5 16c-.83 0-1.5-.67-1.5-1.5S5.67 13 6.5 13s1.5.67 1.5 1.5S7.33 16 6.5 16zm11 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zM5 11l1.5-4.5h11L19 11H5z"/></svg>';
@@ -229,22 +232,19 @@ export const AdminDriversView: React.FC<AdminDriversViewProps> = ({
     );
 
     const updateMapMarkers = useCallback(() => {
-        const map = mapInstanceRef.current;
-        if (!map) return;
+        const handle = mapInstanceRef.current;
+        if (!handle) return;
 
         // Clear existing markers
-        markersRef.current.forEach(m => m.remove());
+        markersRef.current.forEach(m => removeMarker(m));
         markersRef.current = [];
 
-        const bounds = new mapboxgl.LngLatBounds();
-        let hasValidBounds = false;
+        const positions: { lat: number; lng: number }[] = [];
 
         onlineDriversWithLocation.forEach(driver => {
             if (!driver.lat || !driver.lng) return;
 
-            const position: [number, number] = [driver.lng, driver.lat];
-            bounds.extend(position);
-            hasValidBounds = true;
+            positions.push({ lat: driver.lat, lng: driver.lng });
 
             const isMoto = driver.vehicle_type === 'motorcycle';
             const svgIcon = isMoto ? MOTO_SVG : CAR_SVG;
@@ -275,48 +275,53 @@ export const AdminDriversView: React.FC<AdminDriversViewProps> = ({
                     </div>
                 </div>
             `;
-            const popup = new mapboxgl.Popup({ offset: 20, closeButton: false }).setHTML(content);
 
-            const marker = new mapboxgl.Marker({ element: el })
-                .setLngLat(position)
-                .setPopup(popup)
-                .addTo(map);
-
+            const marker = addMarker(handle, {
+                lat: driver.lat, lng: driver.lng, element: el, popupHtml: content,
+            });
             markersRef.current.push(marker);
         });
 
-        if (hasValidBounds && onlineDriversWithLocation.length > 1) {
-            map.fitBounds(bounds, { padding: 60 });
-        } else if (hasValidBounds && onlineDriversWithLocation.length === 1) {
-            map.setCenter(bounds.getCenter());
-            map.setZoom(14);
+        if (positions.length > 1) {
+            fitBounds(handle, positions, 60);
+        } else if (positions.length === 1) {
+            panTo(handle, positions[0]);
+            setZoom(handle, 14);
         }
     }, [onlineDriversWithLocation]);
 
+    // Ref sempre atualizada, para o efeito de inicialização (que roda uma
+    // única vez) não precisar depender de updateMapMarkers — essa função
+    // muda de identidade a cada render (onlineDriversWithLocation é um
+    // array novo sempre), o que fazia o efeito reexecutar repetidamente e
+    // criar mais de uma instância de mapa correndo pro mesmo container.
+    const updateMapMarkersRef = useRef(updateMapMarkers);
+    updateMapMarkersRef.current = updateMapMarkers;
+
     // Initialize map
     useEffect(() => {
-        if (!mapContainerRef.current || !showMap) return;
-        if (mapInstanceRef.current) {
-            updateMapMarkers();
-            return;
-        }
+        if (!mapContainerRef.current || !showMap || mapInstanceRef.current) return;
+        let cancelled = false;
 
-        // Default center (Brazil)
-        const defaultCenter: [number, number] = [-42.8, -5.08];
+        getMapProviderPromise().then((provider) => {
+            if (cancelled || !mapContainerRef.current || mapInstanceRef.current) return;
 
-        const map = new mapboxgl.Map({
-            container: mapContainerRef.current,
-            style: 'mapbox://styles/mapbox/dark-v11',
-            center: defaultCenter,
-            zoom: 13,
+            // Default center (Brazil)
+            const defaultCenter = { lat: -5.08, lng: -42.8 };
+
+            const handle = createMap(provider, mapContainerRef.current, {
+                center: defaultCenter,
+                zoom: 13,
+                style: 'dark',
+            });
+            addNavigationControl(handle);
+            mapInstanceRef.current = handle;
+
+            onMapReady(handle, () => updateMapMarkersRef.current());
         });
-        map.addControl(new mapboxgl.NavigationControl(), 'top-right');
 
-        mapInstanceRef.current = map;
-
-        if (map.isStyleLoaded()) updateMapMarkers();
-        else map.once('load', updateMapMarkers);
-    }, [showMap, updateMapMarkers]);
+        return () => { cancelled = true; };
+    }, [showMap]);
 
     // Update markers when drivers change
     useEffect(() => {

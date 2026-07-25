@@ -1,17 +1,18 @@
 import React, { useState, useEffect, useRef } from 'react';
-import mapboxgl from 'mapbox-gl';
 import { AppSettings, UserProfile } from '../types';
 import { fetchAppSettings } from '../services/supabaseClient';
 import { AddressAutocompleteInput } from './AddressAutocompleteInput';
-import { geocodeForward, geocodeReverse, getDirections, GeocodeResult } from '../services/mapboxService';
+import { geocodeForward, geocodeReverse, getDirections, GeocodeResult } from '../services/placesService';
+import { getMapProviderPromise } from '../services/googleMapsLoader';
+import {
+    createMap, destroyMap, addNavigationControl, addMarker, removeMarker, drawRoute, fitBounds, panTo, setZoom,
+    MapHandle, MarkerHandle,
+} from '../services/mapAdapter';
 
 interface RideCalculatorProps {
     currentUser: UserProfile;
     onClose: () => void;
 }
-
-const ROUTE_SOURCE_ID = 'ride-calc-route';
-const ROUTE_LAYER_ID = 'ride-calc-route-line';
 
 const pinMarker = (svg: string) => {
     const el = document.createElement('div');
@@ -37,9 +38,13 @@ export const RideCalculator: React.FC<RideCalculatorProps> = ({ currentUser, onC
     const [loading, setLoading] = useState(false);
 
     const mapRef = useRef<HTMLDivElement>(null);
-    const mapInstance = useRef<mapboxgl.Map | null>(null);
-    const startMarker = useRef<mapboxgl.Marker | null>(null);
-    const endMarker = useRef<mapboxgl.Marker | null>(null);
+    const mapInstance = useRef<MapHandle | null>(null);
+    const startMarker = useRef<MarkerHandle | null>(null);
+    const endMarker = useRef<MarkerHandle | null>(null);
+    // Incrementa quando o mapa termina de ser criado (async, pode depender do
+    // carregamento do script do Google) — outros efeitos que dependem do
+    // mapa já existir usam isso pra rodar de novo assim que ele fica pronto.
+    const [mapReadyTick, setMapReadyTick] = useState(0);
 
     // Load Settings
     useEffect(() => {
@@ -52,18 +57,26 @@ export const RideCalculator: React.FC<RideCalculatorProps> = ({ currentUser, onC
     // Initialize Map
     useEffect(() => {
         if (!mapRef.current || mapInstance.current) return;
+        let cancelled = false;
 
-        mapInstance.current = new mapboxgl.Map({
-            container: mapRef.current,
-            style: 'mapbox://styles/mapbox/streets-v12',
-            center: [-38.5323, -3.8014], // Default center (Fortaleza/CE approx)
-            zoom: 12,
+        getMapProviderPromise().then((provider) => {
+            if (cancelled || !mapRef.current || mapInstance.current) return;
+            const handle = createMap(provider, mapRef.current, {
+                center: { lat: -3.8014, lng: -38.5323 }, // Default center (Fortaleza/CE approx)
+                zoom: 12,
+                style: 'streets',
+            });
+            addNavigationControl(handle);
+            mapInstance.current = handle;
+            setMapReadyTick(t => t + 1);
         });
-        mapInstance.current.addControl(new mapboxgl.NavigationControl(), 'top-right');
 
         return () => {
-            mapInstance.current?.remove();
-            mapInstance.current = null;
+            cancelled = true;
+            if (mapInstance.current) {
+                destroyMap(mapInstance.current);
+                mapInstance.current = null;
+            }
         };
     }, []);
 
@@ -79,30 +92,22 @@ export const RideCalculator: React.FC<RideCalculatorProps> = ({ currentUser, onC
                 if (address) {
                     setOrigin(address);
                 }
-
-                const map = mapInstance.current;
-                if (map) {
-                    map.setCenter([longitude, latitude]);
-                    map.setZoom(15);
-
-                    const el = document.createElement('div');
-                    el.style.width = '18px';
-                    el.style.height = '18px';
-                    el.style.borderRadius = '50%';
-                    el.style.background = '#4285F4';
-                    el.style.border = '3px solid white';
-                    el.style.boxShadow = '0 0 4px rgba(0,0,0,0.4)';
-
-                    new mapboxgl.Marker({ element: el })
-                        .setLngLat([longitude, latitude])
-                        .setPopup(new mapboxgl.Popup({ offset: 12 }).setText('Sua Localização'))
-                        .addTo(map);
-                }
             }, (err) => {
                 console.warn("Error getting location for calculator:", err);
             });
         }
     }, []);
+
+    // Centraliza o mapa e coloca o marcador "Sua Localização" assim que
+    // tivermos AMBOS a posição do GPS e o mapa pronto (podem ficar prontos
+    // em qualquer ordem, já que a criação do mapa agora é assíncrona).
+    useEffect(() => {
+        const handle = mapInstance.current;
+        if (!handle || !originCoords) return;
+        panTo(handle, originCoords);
+        setZoom(handle, 15);
+        addMarker(handle, { lat: originCoords.lat, lng: originCoords.lng, color: '#4285F4', popupHtml: 'Sua Localização' });
+    }, [originCoords, mapReadyTick]);
 
     const handleCalculate = async () => {
         if (!origin || !destination || !settings) return;
@@ -142,48 +147,21 @@ export const RideCalculator: React.FC<RideCalculatorProps> = ({ currentUser, onC
             }
 
             // Render Route + start/end markers on Map
-            const map = mapInstance.current;
-            if (map) {
-                startMarker.current?.remove();
-                endMarker.current?.remove();
-                startMarker.current = new mapboxgl.Marker({
-                    element: pinMarker('<svg width="32" height="32" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="20" cy="20" r="16" fill="#111B21" stroke="#25D366" stroke-width="4"/><circle cx="20" cy="20" r="5" fill="white"/></svg>')
-                }).setLngLat([originPoint.lng, originPoint.lat]).addTo(map);
-                endMarker.current = new mapboxgl.Marker({
-                    element: pinMarker('<svg width="32" height="32" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="4" y="4" width="32" height="32" rx="8" fill="#111B21" stroke="#FF4444" stroke-width="4"/><path d="M14 10V30M14 12C14 12 17 10 20 10C23 10 26 14 29 14V22C29 22 26 18 23 18C20 18 17 22 14 22" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>')
-                }).setLngLat([destPoint.lng, destPoint.lat]).addTo(map);
+            const handle = mapInstance.current;
+            if (handle) {
+                removeMarker(startMarker.current);
+                removeMarker(endMarker.current);
+                startMarker.current = addMarker(handle, {
+                    lat: originPoint.lat, lng: originPoint.lng,
+                    element: pinMarker('<svg width="32" height="32" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="20" cy="20" r="16" fill="#111B21" stroke="#25D366" stroke-width="4"/><circle cx="20" cy="20" r="5" fill="white"/></svg>'),
+                });
+                endMarker.current = addMarker(handle, {
+                    lat: destPoint.lat, lng: destPoint.lng,
+                    element: pinMarker('<svg width="32" height="32" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="4" y="4" width="32" height="32" rx="8" fill="#111B21" stroke="#FF4444" stroke-width="4"/><path d="M14 10V30M14 12C14 12 17 10 20 10C23 10 26 14 29 14V22C29 22 26 18 23 18C20 18 17 22 14 22" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>'),
+                });
 
-                const applyRoute = () => {
-                    if (map.getSource(ROUTE_SOURCE_ID)) {
-                        (map.getSource(ROUTE_SOURCE_ID) as mapboxgl.GeoJSONSource).setData({
-                            type: 'Feature',
-                            properties: {},
-                            geometry: route.geometry,
-                        });
-                    } else {
-                        map.addSource(ROUTE_SOURCE_ID, {
-                            type: 'geojson',
-                            data: { type: 'Feature', properties: {}, geometry: route.geometry },
-                        });
-                        map.addLayer({
-                            id: ROUTE_LAYER_ID,
-                            type: 'line',
-                            source: ROUTE_SOURCE_ID,
-                            layout: { 'line-join': 'round', 'line-cap': 'round' },
-                            paint: { 'line-color': '#25D366', 'line-width': 6 },
-                        });
-                    }
-
-                    const coords = route.geometry.coordinates as [number, number][];
-                    const bounds = coords.reduce(
-                        (b, c) => b.extend(c),
-                        new mapboxgl.LngLatBounds(coords[0], coords[0])
-                    );
-                    map.fitBounds(bounds, { padding: 40 });
-                };
-
-                if (map.isStyleLoaded()) applyRoute();
-                else map.once('load', applyRoute);
+                drawRoute(handle, route.geometry.coordinates as [number, number][], { color: '#25D366', width: 6 });
+                fitBounds(handle, route.geometry.coordinates as [number, number][], 40);
             }
 
             const distanceMeters = route.distanceMeters;

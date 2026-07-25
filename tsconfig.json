@@ -12,7 +12,8 @@
     "skipLibCheck": true,
     "types": [
       "node",
-      "geojson"
+      "geojson",
+      "google.maps"
     ],
     "moduleResolution": "bundler",
     "isolatedModules": true,

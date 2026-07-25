@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { geocodeForward, GeocodeResult } from '../services/mapboxService';
+import { geocodeForward, GeocodeResult } from '../services/placesService';
 
 interface AddressAutocompleteInputProps {
     value: string;

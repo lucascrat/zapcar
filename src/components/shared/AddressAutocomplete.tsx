@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Input } from './Input';
-import { geocodeForward, GeocodeResult } from '../../../services/mapboxService';
+import { geocodeForward, GeocodeResult } from '../../../services/placesService';
 
 interface AddressAutocompleteProps {
     label?: string;

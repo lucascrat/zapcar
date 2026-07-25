@@ -1,7 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
-import mapboxgl from 'mapbox-gl';
 import { AddressAutocompleteInput } from './AddressAutocompleteInput';
-import { geocodeReverse, GeocodeResult } from '../services/mapboxService';
+import { geocodeReverse, GeocodeResult } from '../services/placesService';
+import { getMapProviderPromise } from '../services/googleMapsLoader';
+import {
+    createMap, destroyMap, addNavigationControl, onMapClick, addMarker, removeMarker, panTo, setZoom,
+    MapHandle, MarkerHandle,
+} from '../services/mapAdapter';
 
 interface LocationPickerModalProps {
     onLocationSelect: (location: { lat: number; lng: number; address?: string }) => void;
@@ -10,72 +14,76 @@ interface LocationPickerModalProps {
 
 export const LocationPickerModal: React.FC<LocationPickerModalProps> = ({ onLocationSelect, onClose }) => {
     const mapRef = useRef<HTMLDivElement>(null);
-    const mapInstanceRef = useRef<mapboxgl.Map | null>(null);
-    const markerRef = useRef<mapboxgl.Marker | null>(null);
+    const mapInstanceRef = useRef<MapHandle | null>(null);
+    const markerRef = useRef<MarkerHandle | null>(null);
     const [searchText, setSearchText] = useState('');
     const [proximity, setProximity] = useState<[number, number] | undefined>(undefined);
     const [selectedLocation, setSelectedLocation] = useState<{ lat: number; lng: number; address?: string } | null>(null);
     const [error, setError] = useState<string>('');
 
-    const updateMarker = (location: { lat: number; lng: number }, map: mapboxgl.Map, address?: string) => {
+    const placeMarker = (handle: MapHandle, location: { lat: number; lng: number }, address?: string) => {
         if (markerRef.current) {
-            markerRef.current.remove();
+            removeMarker(markerRef.current);
         }
-        markerRef.current = new mapboxgl.Marker({ color: '#00a884' })
-            .setLngLat([location.lng, location.lat])
-            .addTo(map);
+        markerRef.current = addMarker(handle, { lat: location.lat, lng: location.lng, color: '#00a884' });
         setSelectedLocation({ ...location, address });
     };
 
     useEffect(() => {
         if (!mapRef.current || mapInstanceRef.current) return;
+        let cancelled = false;
 
-        try {
-            const initialPos: [number, number] = [-38.625, -3.875]; // Fortaleza/CE ou genérico
-            const map = new mapboxgl.Map({
-                container: mapRef.current,
-                style: 'mapbox://styles/mapbox/dark-v11',
-                center: initialPos,
-                zoom: 13,
-            });
-            map.addControl(new mapboxgl.NavigationControl(), 'top-right');
-            mapInstanceRef.current = map;
+        getMapProviderPromise().then((provider) => {
+            if (cancelled || !mapRef.current || mapInstanceRef.current) return;
 
-            if (navigator.geolocation) {
-                navigator.geolocation.getCurrentPosition((position) => {
-                    const pos: [number, number] = [position.coords.longitude, position.coords.latitude];
-                    setProximity(pos);
-                    map.setCenter(pos);
-                    map.setZoom(15);
-                }, (err) => {
-                    console.warn("Geolocation failed", err);
+            try {
+                const initialPos = { lat: -3.875, lng: -38.625 }; // Fortaleza/CE ou genérico
+                const handle = createMap(provider, mapRef.current, {
+                    center: initialPos,
+                    zoom: 13,
+                    style: 'dark',
                 });
-            }
+                addNavigationControl(handle);
+                mapInstanceRef.current = handle;
 
-            map.on('click', async (e: mapboxgl.MapMouseEvent) => {
-                const { lng, lat } = e.lngLat;
-                updateMarker({ lat, lng }, map);
-                const address = await geocodeReverse(lng, lat);
-                setSelectedLocation({ lat, lng, address: address || undefined });
-            });
-        } catch (e) {
-            console.error("Map initialization error", e);
-            setError("Erro ao carregar o mapa. Verifique sua conexão.");
-        }
+                if (navigator.geolocation) {
+                    navigator.geolocation.getCurrentPosition((position) => {
+                        const pos: [number, number] = [position.coords.longitude, position.coords.latitude];
+                        setProximity(pos);
+                        panTo(handle, { lat: position.coords.latitude, lng: position.coords.longitude });
+                        setZoom(handle, 15);
+                    }, (err) => {
+                        console.warn("Geolocation failed", err);
+                    });
+                }
+
+                onMapClick(handle, async ({ lat, lng }) => {
+                    placeMarker(handle, { lat, lng });
+                    const address = await geocodeReverse(lng, lat);
+                    setSelectedLocation({ lat, lng, address: address || undefined });
+                });
+            } catch (e) {
+                console.error("Map initialization error", e);
+                setError("Erro ao carregar o mapa. Verifique sua conexão.");
+            }
+        });
 
         return () => {
-            mapInstanceRef.current?.remove();
-            mapInstanceRef.current = null;
+            cancelled = true;
+            if (mapInstanceRef.current) {
+                destroyMap(mapInstanceRef.current);
+                mapInstanceRef.current = null;
+            }
         };
     }, []);
 
     const handleSelectPlace = (place: GeocodeResult) => {
         setSearchText(place.address);
-        const map = mapInstanceRef.current;
-        if (!map) return;
-        map.setCenter([place.lng, place.lat]);
-        map.setZoom(17);
-        updateMarker({ lat: place.lat, lng: place.lng }, map, place.address);
+        const handle = mapInstanceRef.current;
+        if (!handle) return;
+        panTo(handle, { lat: place.lat, lng: place.lng });
+        setZoom(handle, 17);
+        placeMarker(handle, { lat: place.lat, lng: place.lng }, place.address);
     };
 
     return (

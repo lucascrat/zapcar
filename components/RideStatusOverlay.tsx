@@ -4,7 +4,7 @@ import { AppMap } from './AppMap';
 import { updateRidePayment, supabase } from '../services/supabaseClient';
 import { RidePaymentModal } from './RidePaymentModal';
 import { SUPABASE_SCHEMA } from '../constants';
-import { getDirections } from '../services/mapboxService';
+import { getDirections } from '../services/placesService';
 
 interface RideStatusOverlayProps {
     ride: Ride;

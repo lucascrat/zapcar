@@ -1,5 +1,5 @@
 
-import { geocodeForward, getDirections } from './mapboxService';
+import { geocodeForward, getDirections } from './placesService';
 
 interface RouteInfo {
     distanceKm: number;
@@ -9,7 +9,7 @@ interface RouteInfo {
 }
 
 export const GoogleMapsService = {
-    // Calculate distance between two text addresses (via Mapbox Geocoding + Directions)
+    // Calculate distance between two text addresses (via Google Places/Directions, com fallback Mapbox)
     calculateRoute: async (origin: string, destination: string): Promise<RouteInfo | null> => {
         try {
             const [originMatches, destMatches] = await Promise.all([

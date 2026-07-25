@@ -1,8 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react';
-import mapboxgl from 'mapbox-gl';
 import { UserProfile } from '../types';
 import { supabase } from '../services/supabaseClient';
 import { SUPABASE_SCHEMA } from '../constants';
+import { getMapProviderPromise } from '../services/googleMapsLoader';
+import {
+    createMap, destroyMap, addNavigationControl, addMarker, updateMarker,
+    MapHandle, MarkerHandle,
+} from '../services/mapAdapter';
 
 interface ClientMapModalProps {
     driver: UserProfile;
@@ -26,8 +30,8 @@ const buildMarkerElement = (vehicleType?: string) => {
 
 export const ClientMapModal: React.FC<ClientMapModalProps> = ({ driver, onClose }) => {
     const mapRef = useRef<HTMLDivElement>(null);
-    const mapInstanceRef = useRef<mapboxgl.Map | null>(null);
-    const markerRef = useRef<mapboxgl.Marker | null>(null);
+    const mapInstanceRef = useRef<MapHandle | null>(null);
+    const markerRef = useRef<MarkerHandle | null>(null);
     const [driverLocation, setDriverLocation] = useState<{ lat: number; lng: number } | null>(
         driver.lat && driver.lng ? { lat: driver.lat, lng: driver.lng } : null
     );
@@ -36,40 +40,45 @@ export const ClientMapModal: React.FC<ClientMapModalProps> = ({ driver, onClose 
 
     useEffect(() => {
         if (!mapRef.current || !driverLocation || mapInstanceRef.current) return;
+        let cancelled = false;
 
-        try {
-            const map = new mapboxgl.Map({
-                container: mapRef.current,
-                style: 'mapbox://styles/mapbox/dark-v11',
-                center: [driverLocation.lng, driverLocation.lat],
-                zoom: 15,
-            });
-            map.addControl(new mapboxgl.NavigationControl(), 'top-right');
-            mapInstanceRef.current = map;
+        getMapProviderPromise().then((provider) => {
+            if (cancelled || !mapRef.current || mapInstanceRef.current) return;
+            try {
+                const handle = createMap(provider, mapRef.current, {
+                    center: driverLocation,
+                    zoom: 15,
+                    style: 'dark',
+                });
+                addNavigationControl(handle);
+                mapInstanceRef.current = handle;
 
-            const { el } = buildMarkerElement(driver.vehicle_type);
+                const { el } = buildMarkerElement(driver.vehicle_type);
+                const popupHtml = `
+                    <div style="color: #000; padding: 4px;">
+                        <strong>${driver.username}</strong><br/>
+                        <span style="color: #666;">${driver.vehicle_type === 'motorcycle' ? 'Moto' : 'Carro'}</span>
+                    </div>
+                `;
 
-            const popup = new mapboxgl.Popup({ offset: 25 }).setHTML(`
-                <div style="color: #000; padding: 4px;">
-                    <strong>${driver.username}</strong><br/>
-                    <span style="color: #666;">${driver.vehicle_type === 'motorcycle' ? 'Moto' : 'Carro'}</span>
-                </div>
-            `);
-
-            const marker = new mapboxgl.Marker({ element: el })
-                .setLngLat([driverLocation.lng, driverLocation.lat])
-                .setPopup(popup)
-                .addTo(map);
-
-            markerRef.current = marker;
-        } catch (e) {
-            console.error("Map initialization error", e);
-            setError("Erro ao inicializar o mapa.");
-        }
+                markerRef.current = addMarker(handle, {
+                    lat: driverLocation.lat,
+                    lng: driverLocation.lng,
+                    element: el,
+                    popupHtml,
+                });
+            } catch (e) {
+                console.error("Map initialization error", e);
+                setError("Erro ao inicializar o mapa.");
+            }
+        });
 
         return () => {
-            mapInstanceRef.current?.remove();
-            mapInstanceRef.current = null;
+            cancelled = true;
+            if (mapInstanceRef.current) {
+                destroyMap(mapInstanceRef.current);
+                mapInstanceRef.current = null;
+            }
         };
     }, [driverLocation, driver]);
 
@@ -90,7 +99,7 @@ export const ClientMapModal: React.FC<ClientMapModalProps> = ({ driver, onClose 
                     setLastUpdate(new Date());
 
                     if (markerRef.current) {
-                        markerRef.current.setLngLat([newLocation.lng, newLocation.lat]);
+                        updateMarker(markerRef.current, newLocation);
                     }
                 }
             })
