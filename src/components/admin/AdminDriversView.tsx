@@ -223,6 +223,11 @@ export const AdminDriversView: React.FC<AdminDriversViewProps> = ({
     const mapInstanceRef = useRef<MapHandle | null>(null);
     const markersRef = useRef<MarkerHandle[]>([]);
     const [showMap, setShowMap] = useState(true);
+    // Incrementa quando o mapa termina de ser criado (async, pode depender
+    // do carregamento do script do Google) — o efeito de sincronizar
+    // marcadores usa isso pra rodar de novo assim que o mapa fica pronto,
+    // em vez de depender só da identidade instável de updateMapMarkers.
+    const [mapReadyTick, setMapReadyTick] = useState(0);
 
     const CAR_SVG = '<svg xmlns="http://www.w3.org/2000/svg" height="36" viewBox="0 0 24 24" width="36"><path d="M0 0h24v24H0z" fill="none"/><path fill="#25D366" stroke="#111b21" stroke-width="0.5" d="M18.92 6.01C18.72 5.42 18.16 5 17.5 5h-11c-.66 0-1.21.42-1.42 1.01L3 12v8c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h12v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-8l-2.08-5.99zM6.5 16c-.83 0-1.5-.67-1.5-1.5S5.67 13 6.5 13s1.5.67 1.5 1.5S7.33 16 6.5 16zm11 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zM5 11l1.5-4.5h11L19 11H5z"/></svg>';
     const MOTO_SVG = '<svg xmlns="http://www.w3.org/2000/svg" height="36" viewBox="0 0 24 24" width="36"><path d="M0 0h24v24H0z" fill="none"/><path fill="#FFA500" stroke="#111b21" stroke-width="0.5" d="M19 7c0-1.1-.9-2-2-2h-3l-1.4-1.4C12.2 3.2 11.7 3 11.2 3H8C6.9 3 6 3.9 6 5v2H4c-1.1 0-2 .9-2 2v4h2c0 1.66 1.34 3 3 3s3-1.34 3-3h4c0 1.66 1.34 3 3 3s3-1.34 3-3h2v-4l-3-3zM7 14c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm10 0c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1z"/></svg>';
@@ -316,6 +321,7 @@ export const AdminDriversView: React.FC<AdminDriversViewProps> = ({
             });
             addNavigationControl(handle);
             mapInstanceRef.current = handle;
+            setMapReadyTick(t => t + 1);
 
             onMapReady(handle, () => updateMapMarkersRef.current());
         });
@@ -323,12 +329,12 @@ export const AdminDriversView: React.FC<AdminDriversViewProps> = ({
         return () => { cancelled = true; };
     }, [showMap]);
 
-    // Update markers when drivers change
+    // Update markers when drivers change (ou quando o mapa fica pronto)
     useEffect(() => {
         if (mapInstanceRef.current) {
             updateMapMarkers();
         }
-    }, [drivers, updateMapMarkers]);
+    }, [drivers, updateMapMarkers, mapReadyTick]);
 
     return (
         <div className={`admin-data-grid ${selectedDriver ? 'details-mode' : 'list-mode'}`}>
