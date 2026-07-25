@@ -25,6 +25,18 @@ function toLatLngObj(p: LatLngLike): { lat: number; lng: number } {
     return Array.isArray(p) ? { lat: p[1], lng: p[0] } : p;
 }
 
+// Google Maps e Mapbox GL lançam exceção (em vez de ignorar) quando recebem
+// coordenadas NaN/Infinity/fora do intervalo válido — o que já derrubou o
+// mapa inteiro em produção (ex: geolocalização retornando algo inesperado).
+// Toda função abaixo que recebe lat/lng valida antes de repassar ao SDK.
+function isValidLatLng(lat: number, lng: number): boolean {
+    return Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180;
+}
+
+// Centro seguro de fallback (Brasil) para createMap quando o centro pedido
+// é inválido — evita que o mapa nem consiga ser inicializado.
+const SAFE_FALLBACK_CENTER = { lat: -14.235, lng: -51.9253 };
+
 // Estado por-mapa que o Google não gerencia por id como o Mapbox
 // (addSource/addLayer/getLayer) — guardamos a rota aqui.
 const googleMapState = new WeakMap<MapHandle, {
@@ -155,6 +167,11 @@ export function createMap(provider: MapProvider, container: HTMLElement, opts: {
     bearing?: number;
     style?: 'streets' | 'dark';
 }): MapHandle {
+    if (!isValidLatLng(opts.center.lat, opts.center.lng)) {
+        console.warn('[mapAdapter] createMap: centro inválido, usando fallback', opts.center);
+        opts = { ...opts, center: SAFE_FALLBACK_CENTER };
+    }
+
     if (provider === 'google') {
         const map = new google.maps.Map(container, {
             center: opts.center,
@@ -274,6 +291,14 @@ export function addMarker(handle: MapHandle, opts: {
     lat: number; lng: number; element?: HTMLElement; color?: string; rotation?: number;
     popupHtml?: string; popupOpen?: boolean; onClick?: () => void;
 }): MarkerHandle {
+    if (!isValidLatLng(opts.lat, opts.lng)) {
+        // Mantemos a criação do marcador (componentes guardam a ref e chamam
+        // updateMarker depois) mas em 0,0 em vez de deixar o SDK lançar
+        // exceção com NaN e derrubar o mapa inteiro.
+        console.warn('[mapAdapter] addMarker: coordenadas inválidas, usando 0,0', opts.lat, opts.lng);
+        opts = { ...opts, lat: 0, lng: 0 };
+    }
+
     if (handle.provider === 'google') {
         const element = opts.element || buildDotElement(opts.color || '#00a884');
         const overlayMarker = new GoogleOverlayMarker(handle.raw as google.maps.Map, {
@@ -310,6 +335,12 @@ function buildDotElement(color: string): HTMLElement {
 }
 
 export function updateMarker(markerHandle: MarkerHandle, opts: { lat?: number; lng?: number; rotation?: number }): void {
+    const hasPos = opts.lat !== undefined && opts.lng !== undefined;
+    if (hasPos && !isValidLatLng(opts.lat!, opts.lng!)) {
+        console.warn('[mapAdapter] updateMarker: coordenadas inválidas, ignorando', opts.lat, opts.lng);
+        opts = { ...opts, lat: undefined, lng: undefined };
+    }
+
     if (markerHandle.provider === 'google') {
         const m = markerHandle.raw as GoogleOverlayMarker;
         if (opts.lat !== undefined && opts.lng !== undefined) m.setPosition(opts.lat, opts.lng);
@@ -493,7 +524,11 @@ export function removeHeatmap(handle: MapHandle | null | undefined): void {
 // ============================================================================
 export function fitBounds(handle: MapHandle, coordinates: LatLngLike[], paddingPx: number): void {
     if (!coordinates.length) return;
-    const points = coordinates.map(toLatLngObj);
+    const points = coordinates.map(toLatLngObj).filter(p => isValidLatLng(p.lat, p.lng));
+    if (!points.length) {
+        console.warn('[mapAdapter] fitBounds: nenhuma coordenada válida, ignorando');
+        return;
+    }
 
     if (handle.provider === 'google') {
         try {
@@ -518,6 +553,10 @@ export function fitBounds(handle: MapHandle, coordinates: LatLngLike[], paddingP
 }
 
 export function panTo(handle: MapHandle, pos: { lat: number; lng: number }): void {
+    if (!isValidLatLng(pos.lat, pos.lng)) {
+        console.warn('[mapAdapter] panTo: coordenadas inválidas, ignorando', pos);
+        return;
+    }
     if (handle.provider === 'google') {
         (handle.raw as google.maps.Map).panTo(pos);
     } else {
@@ -537,20 +576,39 @@ export function setZoom(handle: MapHandle, zoom: number): void {
 // Mapbox (easeTo anima suavemente); a câmera do Google "pula" direto para a
 // posição final. Trade-off aceito — ver plano de implementação.
 export function easeTo(handle: MapHandle, opts: { lat: number; lng: number; zoom?: number; pitch?: number; bearing?: number; durationMs?: number }): void {
+    if (!isValidLatLng(opts.lat, opts.lng)) {
+        console.warn('[mapAdapter] easeTo: coordenadas inválidas, ignorando', opts.lat, opts.lng);
+        return;
+    }
+    // zoom/pitch/bearing NaN também derrubam o mapa (mesma classe de erro
+    // que lat/lng inválidos) — descartamos só o campo problemático, não a
+    // chamada inteira, já que lat/lng já foram validados acima.
+    const zoom = opts.zoom !== undefined && Number.isFinite(opts.zoom) ? opts.zoom : undefined;
+    const pitch = opts.pitch !== undefined && Number.isFinite(opts.pitch) ? opts.pitch : undefined;
+    const bearing = opts.bearing !== undefined && Number.isFinite(opts.bearing) ? opts.bearing : undefined;
+
     if (handle.provider === 'google') {
-        const map = handle.raw as google.maps.Map;
-        map.panTo({ lat: opts.lat, lng: opts.lng });
-        if (opts.zoom !== undefined) map.setZoom(opts.zoom);
-        if (opts.pitch !== undefined) map.setTilt(opts.pitch);
-        if (opts.bearing !== undefined) map.setHeading(opts.bearing);
+        try {
+            const map = handle.raw as google.maps.Map;
+            map.panTo({ lat: opts.lat, lng: opts.lng });
+            if (zoom !== undefined) map.setZoom(zoom);
+            if (pitch !== undefined) map.setTilt(pitch);
+            if (bearing !== undefined) map.setHeading(bearing);
+        } catch (e) {
+            console.warn('[mapAdapter] easeTo (Google) falhou', e);
+        }
         return;
     }
 
-    (handle.raw as mapboxgl.Map).easeTo({
-        center: [opts.lng, opts.lat],
-        zoom: opts.zoom,
-        pitch: opts.pitch,
-        bearing: opts.bearing,
-        duration: opts.durationMs ?? 500,
-    });
+    try {
+        (handle.raw as mapboxgl.Map).easeTo({
+            center: [opts.lng, opts.lat],
+            zoom,
+            pitch,
+            bearing,
+            duration: opts.durationMs ?? 500,
+        });
+    } catch (e) {
+        console.warn('[mapAdapter] easeTo (Mapbox) falhou', e);
+    }
 }
