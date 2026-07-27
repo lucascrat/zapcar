@@ -68,6 +68,18 @@ export const AppMap: React.FC<AppMapProps> = ({
     // marcadores/heatmap/rota dependem disso para rodar de novo assim que o
     // mapa existir, caso já tenham rodado (e desistido) antes disso.
     const [mapReadyTick, setMapReadyTick] = useState(0);
+    // O app precisa funcionar em qualquer cidade do Brasil — nunca chutamos
+    // uma cidade fixa como centro inicial. Se ainda não temos a localização
+    // real (GPS ou última posição salva), esperamos até LOCATION_WAIT_MS
+    // antes de desistir e mostrar um mapa neutro (Brasil inteiro, bem
+    // afastado) em vez de uma cidade específica errada.
+    const LOCATION_WAIT_MS = 10000;
+    const [locationTimedOut, setLocationTimedOut] = useState(false);
+    useEffect(() => {
+        if (userLocation) return;
+        const t = setTimeout(() => setLocationTimedOut(true), LOCATION_WAIT_MS);
+        return () => clearTimeout(t);
+    }, [userLocation]);
 
     const userMarker = useRef<MarkerHandle | null>(null);
     const gpsWatchId = useRef<number | null>(null);
@@ -116,20 +128,26 @@ export const AppMap: React.FC<AppMapProps> = ({
         return el;
     };
 
-    // Init map (once)
+    // Init map — só cria quando já temos a localização real (GPS ou última
+    // salva) ou desistimos de esperar (LOCATION_WAIT_MS). Isso evita mostrar
+    // o mapa centralizado numa cidade errada pro usuário: o app precisa
+    // reconhecer a cidade real de cada cliente/motorista em qualquer lugar
+    // do Brasil, não só onde o app opera hoje.
     useEffect(() => {
         if (!mapRef.current || mapInstance.current) return;
+        if (!userLocation && !locationTimedOut) return; // ainda aguardando GPS
         let cancelled = false;
 
         getMapProviderPromise().then((provider) => {
             if (cancelled || !mapRef.current || mapInstance.current) return;
 
-            // Fallback só é usado se não houver GPS nem localização salva do
-            // usuário — Crateús/CE é onde o app realmente opera (não Fortaleza).
-            const center = userLocation || { lat: -5.1775, lng: -40.665 };
+            // Só cai aqui se realmente não há nenhuma localização disponível
+            // após o tempo de espera — mostra o Brasil inteiro, bem afastado,
+            // em vez de chutar uma cidade específica.
+            const center = userLocation || { lat: -14.235, lng: -51.9253 };
             const handle = createMap(provider, mapRef.current, {
                 center,
-                zoom: 15,
+                zoom: userLocation ? 15 : 4,
                 pitch: navigationMode ? 65 : 0,
                 bearing: heading,
                 style: 'streets',
@@ -152,7 +170,7 @@ export const AppMap: React.FC<AppMapProps> = ({
             }
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
+    }, [userLocation, locationTimedOut]);
 
     // Driver markers with animated position + rotation
     useEffect(() => {
@@ -463,9 +481,18 @@ export const AppMap: React.FC<AppMapProps> = ({
         return () => observer.disconnect();
     }, [mapReadyTick]);
 
+    const showLocationLoading = mapReadyTick === 0 && !userLocation && !locationTimedOut;
+
     return (
         <div className="w-full h-full relative">
             <div ref={mapRef} className="w-full h-full" />
+
+            {showLocationLoading && (
+                <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 bg-gray-100">
+                    <span className="w-8 h-8 border-4 border-gray-300 border-t-whatsapp-green rounded-full animate-spin"></span>
+                    <span className="text-gray-500 text-sm font-medium">Localizando você...</span>
+                </div>
+            )}
 
             <div className={`absolute top-4 left-4 bg-black/60 backdrop-blur-md text-white text-[10px] px-4 py-2 rounded-full uppercase font-black tracking-widest border border-white/10 transition-all z-10 ${navigationMode ? 'bg-blue-600' : ''}`}>
                 {navigationMode ? (isFollowing ? 'Navegação Ativa' : 'Pausado') : 'GPS Ativo'}
