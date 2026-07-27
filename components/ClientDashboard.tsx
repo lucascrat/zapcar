@@ -11,7 +11,7 @@ import { AppMap } from './AppMap';
 import { RideStatusOverlay } from './RideStatusOverlay';
 import { sendNotification } from '../services/notificationSender';
 import { RewardsHub } from './RewardsHub';
-import { geocodeForward, geocodeReverse, getDirections } from '../services/mapboxService';
+import { geocodeForward, geocodeReverse, getDirections } from '../services/placesService';
 
 interface ClientDashboardProps {
     currentUser: UserProfile;
@@ -39,7 +39,14 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
     const [coupons, setCoupons] = useState<Coupon[]>([]);
     const [selectedCoupon, setSelectedCoupon] = useState<Coupon | null>(null);
     const [selectedVehicleType, setSelectedVehicleType] = useState<'car' | 'motorcycle'>('car');
-    const [userLocation, setUserLocation] = useState<{ lat: number, lng: number } | undefined>();
+    // Inicializa com a última localização conhecida do cliente (salva no banco
+    // pelo rastreamento contínuo em App.tsx), igual já funciona no dashboard
+    // do motorista — evita que o mapa comece numa cidade errada (hardcoded)
+    // enquanto o GPS atual ainda não respondeu.
+    const [userLocation, setUserLocation] = useState<{ lat: number, lng: number } | undefined>(() =>
+        currentUser.lat && currentUser.lng ? { lat: currentUser.lat, lng: currentUser.lng } : undefined
+    );
+    const gpsWatchIdRef = useRef<number | null>(null);
     const [activeTab, setActiveTab] = useState<'home' | 'drivers' | 'rewards' | 'wallet' | 'profile'>('home');
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     const [isRefreshingWallet, setIsRefreshingWallet] = useState(false);
@@ -239,7 +246,11 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
             .subscribe();
 
         if (navigator.geolocation) {
-            navigator.geolocation.getCurrentPosition((pos) => {
+            // watchPosition em vez de getCurrentPosition: continua tentando/
+            // atualizando em vez de uma única tentativa que pode falhar ou
+            // demorar (GPS frio), garantindo que a localização real do
+            // aparelho é sempre usada assim que disponível.
+            gpsWatchIdRef.current = navigator.geolocation.watchPosition((pos) => {
                 setUserLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude });
                 // Simple reverse geocode for current location if not manual
                 if (!isManualOrigin.current) {
@@ -250,7 +261,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
             }, (err) => {
                 console.warn('Erro ao obter localização:', err);
                 setCurrentAddress(prev => prev === 'Obtendo localização...' ? 'Toque para digitar seu local de partida' : prev);
-            }, { enableHighAccuracy: true, timeout: 10000 });
+            }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 });
         }
         const profileSub = subscribeToProfiles(() => fetchOnlineDrivers().then(setDrivers));
         const rideSub = subscribeToRides(currentUser.id, 'client', async (updatedRide) => {
@@ -281,6 +292,10 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
             rideSub.unsubscribe();
             supabase.removeChannel(settingsSub);
             supabase.removeChannel(couponsSub);
+            if (gpsWatchIdRef.current !== null) {
+                navigator.geolocation.clearWatch(gpsWatchIdRef.current);
+                gpsWatchIdRef.current = null;
+            }
         };
     }, [currentUser.id]);
 

@@ -124,7 +124,9 @@ export const AppMap: React.FC<AppMapProps> = ({
         getMapProviderPromise().then((provider) => {
             if (cancelled || !mapRef.current || mapInstance.current) return;
 
-            const center = userLocation || { lat: -3.7319, lng: -38.5267 };
+            // Fallback só é usado se não houver GPS nem localização salva do
+            // usuário — Crateús/CE é onde o app realmente opera (não Fortaleza).
+            const center = userLocation || { lat: -5.1775, lng: -40.665 };
             const handle = createMap(provider, mapRef.current, {
                 center,
                 zoom: 15,

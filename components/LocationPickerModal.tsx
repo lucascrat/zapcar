@@ -37,7 +37,7 @@ export const LocationPickerModal: React.FC<LocationPickerModalProps> = ({ onLoca
             if (cancelled || !mapRef.current || mapInstanceRef.current) return;
 
             try {
-                const initialPos = { lat: -3.875, lng: -38.625 }; // Fortaleza/CE ou genérico
+                const initialPos = { lat: -5.1775, lng: -40.665 }; // Crateús/CE, cidade real de operação (GPS recentraliza ao carregar)
                 const handle = createMap(provider, mapRef.current, {
                     center: initialPos,
                     zoom: 13,

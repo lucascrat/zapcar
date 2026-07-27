@@ -62,7 +62,7 @@ export const RideCalculator: React.FC<RideCalculatorProps> = ({ currentUser, onC
         getMapProviderPromise().then((provider) => {
             if (cancelled || !mapRef.current || mapInstance.current) return;
             const handle = createMap(provider, mapRef.current, {
-                center: { lat: -3.8014, lng: -38.5323 }, // Default center (Fortaleza/CE approx)
+                center: { lat: -5.1775, lng: -40.665 }, // Crateús/CE, cidade real de operação (GPS recentraliza ao carregar)
                 zoom: 12,
                 style: 'streets',
             });
