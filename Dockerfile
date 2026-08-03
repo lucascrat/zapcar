@@ -35,7 +35,12 @@ ENV VITE_SUPABASE_URL=$VITE_SUPABASE_URL \
     VITE_ADMOB_REWARDED_ID=$VITE_ADMOB_REWARDED_ID
 
 COPY package*.json ./
-RUN npm ci
+# `npm ci` falha aqui com "Cannot find module @rollup/rollup-linux-x64-*":
+# package-lock.json foi gerado no Windows e o npm tem um bug conhecido
+# (npm/cli#4828) que faz `ci` nao instalar o binario nativo certo para a
+# plataforma de build. `npm install` reresolve as dependencias opcionais e
+# corrige sozinho - mesmo contorno que a config anterior deste app usava.
+RUN npm install && npm install @rollup/rollup-linux-x64-gnu
 
 COPY . .
 RUN npm run build
