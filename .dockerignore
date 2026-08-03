@@ -1,0 +1,13 @@
+node_modules
+dist
+android
+android_old
+git
+.git
+*.apk
+*.jks
+*.p12
+*.pem
+.env
+.env.local
+.vercel
