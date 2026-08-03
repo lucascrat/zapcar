@@ -5,7 +5,7 @@
 # bundle). Precisam chegar como --build-arg; no Coolify, marque cada variavel
 # como "Available at Buildtime" para isso acontecer automaticamente.
 # =============================================================================
-FROM node:20-alpine AS build
+FROM node:20-bookworm-slim AS build
 WORKDIR /app
 
 ARG VITE_SUPABASE_URL
