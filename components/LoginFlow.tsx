@@ -6,7 +6,7 @@ import {
     registerClientWithPhoto,
     registerDriver,
     loginDriver,
-    fetchAdminContact
+    loginAdmin
 } from '../services/supabaseClient';
 import { APP_NAME } from '../constants';
 
@@ -161,24 +161,27 @@ export const LoginFlow: React.FC<LoginFlowProps> = ({ onLoginSuccess }) => {
                     }
                 }
             } else if (loginMode === 'admin') {
-                const adminUser = (import.meta as any).env?.VITE_ADMIN_USERNAME || '';
-                const adminPass = (import.meta as any).env?.VITE_ADMIN_PASSWORD || '';
-                if (adminUser && adminPass && entryName === adminUser && authPassword === adminPass) {
-                    const realAdmin = await fetchAdminContact();
-                    if (realAdmin) {
-                        user = realAdmin;
-                    } else {
-                        user = {
-                            id: 'admin-master',
-                            username: 'Holanda2025',
-                            role: UserRole.ADMIN,
-                            status: DriverStatus.AVAILABLE,
-                            avatar_url: 'https://ui-avatars.com/api/?name=Admin&background=0D8ABC&color=fff'
-                        } as UserProfile;
-                    }
-                } else {
-                    alert("Credenciais de administrador incorretas.");
+                if (!entryName.trim() || !authPassword) {
+                    alert("Informe o e-mail e a senha do administrador.");
+                    setIsLoading(false);
+                    return;
                 }
+
+                const result = await loginAdmin(entryName, authPassword);
+
+                if (!result.ok || !result.profile) {
+                    if (result.reason === 'not_admin') {
+                        alert("Esta conta não tem permissão de administrador.");
+                    } else if (result.reason === 'error') {
+                        alert("Erro ao entrar: " + (result.message || 'tente novamente.'));
+                    } else {
+                        alert("Credenciais de administrador incorretas.");
+                    }
+                    setIsLoading(false);
+                    return;
+                }
+
+                user = result.profile;
             }
 
             if (user) {
@@ -206,7 +209,7 @@ export const LoginFlow: React.FC<LoginFlowProps> = ({ onLoginSuccess }) => {
 
                 <button
                     onClick={() => { setLoginMode('admin'); setEntryName(''); setAuthPassword(''); }}
-                    className={`w-12 h-12 rounded-xl flex items-center justify-center shadow-sm transition-all active:scale-95 ${loginMode === 'admin' ? 'bg-blue-600 text-white ring-2 ring-blue-600 ring-offset-2' : 'bg-white border border-gray-200 text-gray-400'}`}
+                    className={`w-12 h-12 rounded-xl flex items-center justify-center shadow-sm transition-all active:scale-95 ${loginMode === 'admin' ? 'bg-accent-600 text-white ring-2 ring-accent-600 ring-offset-2' : 'bg-white border border-gray-200 text-gray-400'}`}
                 >
                     <span className="material-icons text-xl">admin_panel_settings</span>
                 </button>
@@ -252,17 +255,18 @@ export const LoginFlow: React.FC<LoginFlowProps> = ({ onLoginSuccess }) => {
                 <div className="w-full max-w-sm flex flex-col gap-4">
                     <div className="relative w-full">
                         <input
-                            type="text"
-                            placeholder={loginMode === 'client' ? "Seu Nome Completo" : "Nome de Usuário"}
+                            type={loginMode === 'admin' ? 'email' : 'text'}
+                            autoComplete={loginMode === 'admin' ? 'username' : 'off'}
+                            placeholder={loginMode === 'client' ? "Seu Nome Completo" : loginMode === 'admin' ? "E-mail do administrador" : "Nome de Usuário"}
                             value={entryName}
                             onChange={e => setEntryName(e.target.value)}
-                            onBlur={() => handleCheckUser('username', entryName)}
-                            maxLength={20}
+                            onBlur={() => { if (loginMode !== 'admin') handleCheckUser('username', entryName); }}
+                            maxLength={loginMode === 'admin' ? 120 : 20}
                             disabled={isLoading}
                             className="w-full h-14 pl-4 pr-16 rounded-xl border border-gray-200 bg-gray-50 focus:bg-white focus:border-whatsapp-green focus:ring-2 focus:ring-whatsapp-green/20 transition-all outline-none text-base text-gray-900 placeholder-gray-400 font-medium"
                         />
                         <div className="absolute right-4 top-0 h-full flex items-center justify-center pointer-events-none text-gray-400">
-                            <span className="material-icons">person</span>
+                            <span className="material-icons">{loginMode === 'admin' ? 'mail' : 'person'}</span>
                         </div>
                     </div>
 
@@ -368,7 +372,7 @@ export const LoginFlow: React.FC<LoginFlowProps> = ({ onLoginSuccess }) => {
                     <button
                         onClick={handleLogin}
                         disabled={isLoading}
-                        className={`w-full mt-2 h-14 text-white text-base font-bold uppercase tracking-wide rounded-xl shadow-lg flex justify-center items-center transition-all transform active:scale-95 hover:shadow-xl ${loginMode === 'admin' ? 'bg-blue-600 active:bg-blue-700' : 'bg-whatsapp-green active:bg-whatsapp-dark'} ${isLoading ? 'opacity-70 cursor-not-allowed' : ''}`}
+                        className={`w-full mt-2 h-14 text-white text-base font-bold uppercase tracking-wide rounded-xl shadow-lg flex justify-center items-center transition-all transform active:scale-95 hover:shadow-xl ${loginMode === 'admin' ? 'bg-accent-600 active:bg-accent-700' : 'bg-whatsapp-green active:bg-whatsapp-dark'} ${isLoading ? 'opacity-70 cursor-not-allowed' : ''}`}
                     >
                         {isLoading ? (
                             <span className="w-5 h-5 border-2 border-white/40 border-t-white rounded-full animate-spin"></span>

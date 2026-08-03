@@ -494,7 +494,7 @@ export const AppMap: React.FC<AppMapProps> = ({
                 </div>
             )}
 
-            <div className={`absolute top-4 left-4 bg-black/60 backdrop-blur-md text-white text-[10px] px-4 py-2 rounded-full uppercase font-black tracking-widest border border-white/10 transition-all z-10 ${navigationMode ? 'bg-blue-600' : ''}`}>
+            <div className={`absolute top-4 left-4 bg-black/60 backdrop-blur-md text-white text-[10px] px-4 py-2 rounded-full uppercase font-black tracking-widest border border-white/10 transition-all z-10 ${navigationMode ? 'bg-accent-600' : ''}`}>
                 {navigationMode ? (isFollowing ? 'Navegação Ativa' : 'Pausado') : 'GPS Ativo'}
             </div>
 
@@ -502,7 +502,7 @@ export const AppMap: React.FC<AppMapProps> = ({
                 <div className="absolute bottom-28 left-1/2 -translate-x-1/2 z-[30] animate-fade-in-up">
                     <button
                         onClick={() => setIsFollowing(true)}
-                        className="bg-white text-blue-600 px-6 py-2 rounded-full shadow-xl font-bold text-xs uppercase tracking-widest border border-gray-100 flex items-center gap-2 active:scale-95 transition hover:bg-gray-50"
+                        className="bg-white text-accent-600 px-6 py-2 rounded-full shadow-xl font-bold text-xs uppercase tracking-widest border border-gray-100 flex items-center gap-2 active:scale-95 transition hover:bg-gray-50"
                     >
                         <span className="material-icons text-sm">my_location</span>
                         {navigationMode ? 'Retomar' : 'Re-centralizar'}
@@ -517,7 +517,7 @@ export const AppMap: React.FC<AppMapProps> = ({
                             const url = `https://www.google.com/maps/dir/?api=1&origin=${userLocation?.lat},${userLocation?.lng}&destination=${routeDestination.lat},${routeDestination.lng}&travelmode=driving`;
                             window.open(url, '_blank');
                         }}
-                        className="pointer-events-auto bg-blue-600/90 backdrop-blur-md text-white p-3 rounded-2xl shadow-xl flex items-center gap-2 transition active:scale-95 border border-white/10"
+                        className="pointer-events-auto bg-accent-600/90 backdrop-blur-md text-white p-3 rounded-2xl shadow-xl flex items-center gap-2 transition active:scale-95 border border-white/10"
                     >
                         <span className="material-icons text-xl">navigation</span>
                         <div className="flex flex-col items-start pr-1">

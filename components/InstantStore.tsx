@@ -393,7 +393,7 @@ export const InstantStore: React.FC<InstantStoreProps> = ({ currentUser, onClose
 
             {/* Bottom Note */}
             <div className="p-4 bg-whatsapp-panel border-t border-white/5 flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-blue-500/10 flex items-center justify-center text-blue-500 shrink-0">
+                <div className="w-10 h-10 rounded-full bg-accent-500/10 flex items-center justify-center text-accent-500 shrink-0">
                     <span className="material-icons">info</span>
                 </div>
                 <p className="text-[10px] text-gray-500 font-medium leading-tight">
@@ -425,7 +425,7 @@ export const InstantStore: React.FC<InstantStoreProps> = ({ currentUser, onClose
                                 <img src={selectedProduct.image_url} className="w-16 h-16 rounded-xl object-cover shadow-sm" alt={selectedProduct.name} />
                                 <div className="flex-1">
                                     <h4 className="font-bold text-sm leading-tight text-gray-800">{selectedProduct.name}</h4>
-                                    <p className="text-blue-600 font-black text-lg">R$ {selectedProduct.price_brl.toFixed(2)}</p>
+                                    <p className="text-accent-600 font-black text-lg">R$ {selectedProduct.price_brl.toFixed(2)}</p>
                                 </div>
                             </div>
 
@@ -565,7 +565,7 @@ export const InstantStore: React.FC<InstantStoreProps> = ({ currentUser, onClose
                                             </button>
                                             <button
                                                 onClick={() => setPaymentMethod('card')}
-                                                className={`p-4 rounded-2xl border-2 flex flex-col items-center gap-2 transition-all ${paymentMethod === 'card' ? 'border-blue-500 bg-blue-50 text-blue-500' : 'border-gray-50 opacity-40 hover:opacity-100'}`}
+                                                className={`p-4 rounded-2xl border-2 flex flex-col items-center gap-2 transition-all ${paymentMethod === 'card' ? 'border-accent-500 bg-accent-50 text-accent-500' : 'border-gray-50 opacity-40 hover:opacity-100'}`}
                                             >
                                                 <span className="material-icons">credit_card</span>
                                                 <span className="text-[9px] font-black uppercase">Cartão</span>
@@ -614,8 +614,8 @@ export const InstantStore: React.FC<InstantStoreProps> = ({ currentUser, onClose
                                             />
                                             {cardData.cardNumber.length >= 2 && (
                                                 <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2 bg-white/80 px-2 py-1 rounded-lg border border-gray-200">
-                                                    <span className="text-[9px] font-black uppercase text-blue-600">{getCardBrand(cardData.cardNumber)}</span>
-                                                    <span className="material-icons text-sm text-blue-600">credit_card</span>
+                                                    <span className="text-[9px] font-black uppercase text-accent-600">{getCardBrand(cardData.cardNumber)}</span>
+                                                    <span className="material-icons text-sm text-accent-600">credit_card</span>
                                                 </div>
                                             )}
                                         </div>
@@ -661,7 +661,7 @@ export const InstantStore: React.FC<InstantStoreProps> = ({ currentUser, onClose
                                     <button
                                         onClick={handleProcessCardPayment}
                                         disabled={isVerifying}
-                                        className="w-full bg-blue-600 text-white p-5 rounded-2xl font-black uppercase tracking-widest text-sm shadow-xl mt-6 active:scale-95 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                                        className="w-full bg-accent-600 text-white p-5 rounded-2xl font-black uppercase tracking-widest text-sm shadow-xl mt-6 active:scale-95 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
                                     >
                                         {isVerifying ? (
                                             <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
@@ -714,7 +714,7 @@ export const InstantStore: React.FC<InstantStoreProps> = ({ currentUser, onClose
                                                             navigator.clipboard.writeText(pixData.point_of_interaction.transaction_data.qr_code);
                                                             alert("Código Copiado!");
                                                         }}
-                                                        className="bg-blue-600 text-white p-2 rounded-lg hover:bg-blue-700 transition"
+                                                        className="bg-accent-600 text-white p-2 rounded-lg hover:bg-accent-700 transition"
                                                     >
                                                         <span className="material-icons text-sm">content_copy</span>
                                                     </button>
@@ -723,7 +723,7 @@ export const InstantStore: React.FC<InstantStoreProps> = ({ currentUser, onClose
                                         </>
                                     ) : (
                                         <div className="py-10">
-                                            <div className="w-20 h-20 bg-blue-50 text-blue-500 rounded-full flex items-center justify-center mx-auto mb-4">
+                                            <div className="w-20 h-20 bg-accent-50 text-accent-500 rounded-full flex items-center justify-center mx-auto mb-4">
                                                 <span className="material-icons text-4xl">credit_card</span>
                                             </div>
                                             <h4 className="font-bold text-gray-800 mb-2">Pagamento com Cartão</h4>

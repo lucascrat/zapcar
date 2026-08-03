@@ -297,7 +297,7 @@ export const DriverSubscription: React.FC<DriverSubscriptionProps> = ({ currentU
             <div className="w-full max-w-4xl bg-white md:rounded-2xl overflow-hidden flex flex-col h-full md:max-h-[90vh]">
                 {/* AdMob Banner Removed */}
                 {/* HEADER */}
-                <div className={`${isBlocked ? 'bg-red-600' : 'bg-blue-600'} p-4 text-white shrink-0 flex items-center shadow-md relative`}>
+                <div className={`${isBlocked ? 'bg-red-600' : 'bg-accent-600'} p-4 text-white shrink-0 flex items-center shadow-md relative`}>
                     {/* Botão Voltar (Esquerda) */}
                     <button
                         onClick={handleBack}
@@ -334,7 +334,7 @@ export const DriverSubscription: React.FC<DriverSubscriptionProps> = ({ currentU
                     {step === 'plans' && (
                         loading ? (
                             <div className="text-center py-12">
-                                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-accent-600 mx-auto mb-4"></div>
                                 <p className="text-gray-600">Carregando planos...</p>
                             </div>
                         ) : plans.length === 0 ? (
@@ -352,7 +352,7 @@ export const DriverSubscription: React.FC<DriverSubscriptionProps> = ({ currentU
                                         )}
                                         <div className="p-6 flex-1 text-center">
                                             <h3 className="font-bold text-gray-800 text-lg mb-2">{plan.title}</h3>
-                                            <div className="text-3xl font-bold text-blue-600 mb-2">
+                                            <div className="text-3xl font-bold text-accent-600 mb-2">
                                                 R$ {plan.price.toFixed(2).replace('.', ',')}
                                             </div>
                                             <p className="text-gray-500 text-sm mb-4">{plan.description}</p>
@@ -386,7 +386,7 @@ export const DriverSubscription: React.FC<DriverSubscriptionProps> = ({ currentU
                                         type="email"
                                         value={payerData.email}
                                         onChange={e => setPayerData({ ...payerData, email: e.target.value })}
-                                        className="w-full p-3 border border-gray-300 rounded-lg outline-none focus:ring-2 ring-blue-500 text-black"
+                                        className="w-full p-3 border border-gray-300 rounded-lg outline-none focus:ring-2 ring-accent-500 text-black"
                                         placeholder="seu@email.com"
                                     />
                                 </div>
@@ -403,7 +403,7 @@ export const DriverSubscription: React.FC<DriverSubscriptionProps> = ({ currentU
                                                     .replace(/(\d{3})(\d{1,2})$/, '$1-$2');
                                                 setPayerData({ ...payerData, cpf: val.slice(0, 14) });
                                             }}
-                                            className="w-full p-3 border border-gray-300 rounded-lg outline-none focus:ring-2 ring-blue-500 text-black"
+                                            className="w-full p-3 border border-gray-300 rounded-lg outline-none focus:ring-2 ring-accent-500 text-black"
                                             placeholder="000.000.000-00"
                                             maxLength={14}
                                         />
@@ -419,7 +419,7 @@ export const DriverSubscription: React.FC<DriverSubscriptionProps> = ({ currentU
                                                     .replace(/(\d{5})(\d)/, '$1-$2');
                                                 setPayerData({ ...payerData, phone: val.slice(0, 15) });
                                             }}
-                                            className="w-full p-3 border border-gray-300 rounded-lg outline-none focus:ring-2 ring-blue-500 text-black"
+                                            className="w-full p-3 border border-gray-300 rounded-lg outline-none focus:ring-2 ring-accent-500 text-black"
                                             placeholder="(00) 00000-0000"
                                             maxLength={15}
                                         />
@@ -432,7 +432,7 @@ export const DriverSubscription: React.FC<DriverSubscriptionProps> = ({ currentU
                                             type="date"
                                             value={payerData.birthDate}
                                             onChange={e => setPayerData({ ...payerData, birthDate: e.target.value })}
-                                            className="w-full p-3 border border-gray-300 rounded-lg outline-none focus:ring-2 ring-blue-500 text-black"
+                                            className="w-full p-3 border border-gray-300 rounded-lg outline-none focus:ring-2 ring-accent-500 text-black"
                                         />
                                     </div>
                                     <div>
@@ -445,7 +445,7 @@ export const DriverSubscription: React.FC<DriverSubscriptionProps> = ({ currentU
                                                 const val = e.target.value.replace(/\D/g, '').replace(/^(\d{5})(\d)/, '$1-$2');
                                                 setPayerData({ ...payerData, zipCode: val.slice(0, 9) });
                                             }}
-                                            className="w-full p-3 border border-gray-300 rounded-lg outline-none focus:ring-2 ring-blue-500 text-black"
+                                            className="w-full p-3 border border-gray-300 rounded-lg outline-none focus:ring-2 ring-accent-500 text-black"
                                             placeholder="00000-000"
                                             maxLength={9}
                                         />
@@ -457,7 +457,7 @@ export const DriverSubscription: React.FC<DriverSubscriptionProps> = ({ currentU
                                         type="text"
                                         value={payerData.street}
                                         onChange={e => setPayerData({ ...payerData, street: e.target.value })}
-                                        className="w-full p-3 border border-gray-300 rounded-lg outline-none focus:ring-2 ring-blue-500 text-black"
+                                        className="w-full p-3 border border-gray-300 rounded-lg outline-none focus:ring-2 ring-accent-500 text-black"
                                         placeholder="Ex: Av. Paulista"
                                     />
                                 </div>
@@ -468,7 +468,7 @@ export const DriverSubscription: React.FC<DriverSubscriptionProps> = ({ currentU
                                             type="text"
                                             value={payerData.number}
                                             onChange={e => setPayerData({ ...payerData, number: e.target.value })}
-                                            className="w-full p-3 border border-gray-300 rounded-lg outline-none focus:ring-2 ring-blue-500 text-black"
+                                            className="w-full p-3 border border-gray-300 rounded-lg outline-none focus:ring-2 ring-accent-500 text-black"
                                             placeholder="Ex: 1000"
                                         />
                                     </div>
@@ -478,7 +478,7 @@ export const DriverSubscription: React.FC<DriverSubscriptionProps> = ({ currentU
                                             type="text"
                                             value={payerData.neighborhood}
                                             onChange={e => setPayerData({ ...payerData, neighborhood: e.target.value })}
-                                            className="w-full p-3 border border-gray-300 rounded-lg outline-none focus:ring-2 ring-blue-500 text-black"
+                                            className="w-full p-3 border border-gray-300 rounded-lg outline-none focus:ring-2 ring-accent-500 text-black"
                                             placeholder="Ex: Bela Vista"
                                         />
                                     </div>
@@ -490,7 +490,7 @@ export const DriverSubscription: React.FC<DriverSubscriptionProps> = ({ currentU
                                             type="text"
                                             value={payerData.city}
                                             onChange={e => setPayerData({ ...payerData, city: e.target.value })}
-                                            className="w-full p-3 border border-gray-300 rounded-lg outline-none focus:ring-2 ring-blue-500 text-black"
+                                            className="w-full p-3 border border-gray-300 rounded-lg outline-none focus:ring-2 ring-accent-500 text-black"
                                         />
                                     </div>
                                     <div>
@@ -500,7 +500,7 @@ export const DriverSubscription: React.FC<DriverSubscriptionProps> = ({ currentU
                                             maxLength={2}
                                             value={payerData.state}
                                             onChange={e => setPayerData({ ...payerData, state: e.target.value.toUpperCase() })}
-                                            className="w-full p-3 border border-gray-300 rounded-lg outline-none focus:ring-2 ring-blue-500 text-black"
+                                            className="w-full p-3 border border-gray-300 rounded-lg outline-none focus:ring-2 ring-accent-500 text-black"
                                             placeholder="Ex: SP"
                                         />
                                     </div>
@@ -512,14 +512,14 @@ export const DriverSubscription: React.FC<DriverSubscriptionProps> = ({ currentU
                                 <div className="grid grid-cols-2 gap-3">
                                     <button
                                         onClick={() => setPaymentMethod('pix')}
-                                        className={`p-4 rounded-xl border-2 flex flex-col items-center gap-2 transition-all ${paymentMethod === 'pix' ? 'border-blue-600 bg-blue-50 text-blue-600' : 'border-gray-200 opacity-60 text-gray-400'}`}
+                                        className={`p-4 rounded-xl border-2 flex flex-col items-center gap-2 transition-all ${paymentMethod === 'pix' ? 'border-accent-600 bg-accent-50 text-accent-600' : 'border-gray-200 opacity-60 text-gray-400'}`}
                                     >
                                         <span className="material-icons">pix</span>
                                         <span className="text-xs font-bold">PIX Agora</span>
                                     </button>
                                     <button
                                         onClick={() => setPaymentMethod('card')}
-                                        className={`p-4 rounded-xl border-2 flex flex-col items-center gap-2 transition-all ${paymentMethod === 'card' ? 'border-blue-600 bg-blue-50 text-blue-600' : 'border-gray-200 opacity-60 text-gray-400'}`}
+                                        className={`p-4 rounded-xl border-2 flex flex-col items-center gap-2 transition-all ${paymentMethod === 'card' ? 'border-accent-600 bg-accent-50 text-accent-600' : 'border-gray-200 opacity-60 text-gray-400'}`}
                                     >
                                         <span className="material-icons">credit_card</span>
                                         <span className="text-xs font-bold">Cartão</span>
@@ -539,7 +539,7 @@ export const DriverSubscription: React.FC<DriverSubscriptionProps> = ({ currentU
                                 <button
                                     onClick={handleGeneratePayment}
                                     disabled={loading}
-                                    className="flex-[2] py-4 text-white bg-blue-600 hover:bg-blue-700 rounded-xl font-bold shadow-lg shadow-blue-600/20 flex items-center justify-center gap-2 active:scale-95 disabled:opacity-50"
+                                    className="flex-[2] py-4 text-white bg-accent-600 hover:bg-accent-700 rounded-xl font-bold shadow-lg shadow-accent-600/20 flex items-center justify-center gap-2 active:scale-95 disabled:opacity-50"
                                 >
                                     {loading ? 'Processando...' : (paymentMethod === 'pix' ? 'Gerar PIX' : 'Ir para Pagamento')}
                                     {!loading && <span className="material-icons text-sm">{paymentMethod === 'pix' ? 'qr_code' : 'open_in_new'}</span>}
@@ -557,9 +557,9 @@ export const DriverSubscription: React.FC<DriverSubscriptionProps> = ({ currentU
                                     <div className="flex justify-between items-center mb-1">
                                         <label className="block text-sm font-medium text-gray-700">Número do Cartão</label>
                                         {cardData.cardNumber.length >= 2 && (
-                                            <div className="flex items-center gap-1.5 px-2 py-0.5 bg-blue-50 rounded-lg border border-blue-100">
-                                                <span className="text-[10px] font-black uppercase text-blue-600">{getCardBrand(cardData.cardNumber)}</span>
-                                                <span className="material-icons text-sm text-blue-600">credit_card</span>
+                                            <div className="flex items-center gap-1.5 px-2 py-0.5 bg-accent-50 rounded-lg border border-accent-100">
+                                                <span className="text-[10px] font-black uppercase text-accent-600">{getCardBrand(cardData.cardNumber)}</span>
+                                                <span className="material-icons text-sm text-accent-600">credit_card</span>
                                             </div>
                                         )}
                                     </div>
@@ -575,7 +575,7 @@ export const DriverSubscription: React.FC<DriverSubscriptionProps> = ({ currentU
                                                 .replace(/(\d{4})\d+?$/, '$1');
                                             setCardData({ ...cardData, cardNumber: val });
                                         }}
-                                        className="w-full p-3 border border-gray-300 rounded-lg outline-none focus:ring-2 ring-blue-500 text-black"
+                                        className="w-full p-3 border border-gray-300 rounded-lg outline-none focus:ring-2 ring-accent-500 text-black"
                                         placeholder="0000 0000 0000 0000"
                                         maxLength={19}
                                     />
@@ -586,7 +586,7 @@ export const DriverSubscription: React.FC<DriverSubscriptionProps> = ({ currentU
                                         type="text"
                                         value={cardData.cardholderName}
                                         onChange={e => setCardData({ ...cardData, cardholderName: e.target.value.toUpperCase() })}
-                                        className="w-full p-3 border border-gray-300 rounded-lg outline-none focus:ring-2 ring-blue-500 text-black"
+                                        className="w-full p-3 border border-gray-300 rounded-lg outline-none focus:ring-2 ring-accent-500 text-black"
                                         placeholder="NOME COMPLETO"
                                     />
                                 </div>
@@ -599,7 +599,7 @@ export const DriverSubscription: React.FC<DriverSubscriptionProps> = ({ currentU
                                                 maxLength={2}
                                                 value={cardData.expirationMonth}
                                                 onChange={e => setCardData({ ...cardData, expirationMonth: e.target.value.replace(/\D/g, '') })}
-                                                className="w-1/2 p-3 border border-gray-300 rounded-lg outline-none focus:ring-2 ring-blue-500 text-black"
+                                                className="w-1/2 p-3 border border-gray-300 rounded-lg outline-none focus:ring-2 ring-accent-500 text-black"
                                                 placeholder="MM"
                                             />
                                             <input
@@ -607,7 +607,7 @@ export const DriverSubscription: React.FC<DriverSubscriptionProps> = ({ currentU
                                                 maxLength={2}
                                                 value={cardData.expirationYear}
                                                 onChange={e => setCardData({ ...cardData, expirationYear: e.target.value.replace(/\D/g, '') })}
-                                                className="w-1/2 p-3 border border-gray-300 rounded-lg outline-none focus:ring-2 ring-blue-500 text-black"
+                                                className="w-1/2 p-3 border border-gray-300 rounded-lg outline-none focus:ring-2 ring-accent-500 text-black"
                                                 placeholder="AA"
                                             />
                                         </div>
@@ -619,7 +619,7 @@ export const DriverSubscription: React.FC<DriverSubscriptionProps> = ({ currentU
                                             maxLength={4}
                                             value={cardData.securityCode}
                                             onChange={e => setCardData({ ...cardData, securityCode: e.target.value.replace(/\D/g, '') })}
-                                            className="w-full p-3 border border-gray-300 rounded-lg outline-none focus:ring-2 ring-blue-500 text-black"
+                                            className="w-full p-3 border border-gray-300 rounded-lg outline-none focus:ring-2 ring-accent-500 text-black"
                                             placeholder="123"
                                         />
                                     </div>
@@ -638,7 +638,7 @@ export const DriverSubscription: React.FC<DriverSubscriptionProps> = ({ currentU
                                 <button
                                     onClick={handleProcessCardPayment}
                                     disabled={loading}
-                                    className="flex-[2] py-4 text-white bg-blue-600 hover:bg-blue-700 rounded-xl font-bold shadow-lg shadow-blue-600/20 flex items-center justify-center gap-2 active:scale-95 disabled:opacity-50"
+                                    className="flex-[2] py-4 text-white bg-accent-600 hover:bg-accent-700 rounded-xl font-bold shadow-lg shadow-accent-600/20 flex items-center justify-center gap-2 active:scale-95 disabled:opacity-50"
                                 >
                                     {loading ? 'Processando...' : 'Pagar Agora'}
                                     {!loading && <span className="material-icons text-sm">lock</span>}
@@ -678,7 +678,7 @@ export const DriverSubscription: React.FC<DriverSubscriptionProps> = ({ currentU
                                                 value={pixData.point_of_interaction.transaction_data.qr_code}
                                                 className="flex-1 bg-transparent px-2 text-[10px] text-gray-600 outline-none truncate"
                                             />
-                                            <button onClick={handleCopyCode} className="bg-blue-600 text-white p-2 rounded-lg hover:bg-blue-700 transition" title="Copiar">
+                                            <button onClick={handleCopyCode} className="bg-accent-600 text-white p-2 rounded-lg hover:bg-accent-700 transition" title="Copiar">
                                                 <span className="material-icons text-sm">content_copy</span>
                                             </button>
                                         </div>
@@ -686,7 +686,7 @@ export const DriverSubscription: React.FC<DriverSubscriptionProps> = ({ currentU
                                 </>
                             ) : (
                                 <div className="py-8">
-                                    <span className="material-icons text-6xl text-blue-100 mb-4">credit_card</span>
+                                    <span className="material-icons text-6xl text-accent-100 mb-4">credit_card</span>
                                     <h3 className="font-bold text-gray-800 text-lg mb-2">Pagamento com Cartão</h3>
                                     <p className="text-gray-500 text-sm mb-8">Após pagar no navegador, clique no botão abaixo para liberar seu acesso.</p>
                                 </div>

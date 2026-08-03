@@ -381,8 +381,8 @@ export const WalletScreen: React.FC<WalletScreenProps> = ({ currentUser, onClose
                             </button>
                         </>
                     ) : (
-                        <div className="bg-blue-600/10 border border-blue-500/20 p-6 rounded-[24px] flex flex-col gap-3">
-                            <h3 className="text-blue-400 font-bold flex items-center gap-2">
+                        <div className="bg-accent-600/10 border border-accent-500/20 p-6 rounded-[24px] flex flex-col gap-3">
+                            <h3 className="text-accent-400 font-bold flex items-center gap-2">
                                 <span className="material-icons text-sm">info</span> Regras de Pagamento
                             </h3>
                             <p className="text-xs text-gray-400 leading-relaxed text-justify">
@@ -390,7 +390,7 @@ export const WalletScreen: React.FC<WalletScreenProps> = ({ currentUser, onClose
                             </p>
                             <button
                                 onClick={() => setShowEditProfile(true)}
-                                className="mt-2 bg-blue-600 hover:bg-blue-500 text-white font-black py-4 rounded-2xl flex items-center justify-center gap-2 transition-all active:scale-95 shadow-lg uppercase text-[10px] tracking-wider"
+                                className="mt-2 bg-accent-600 hover:bg-accent-500 text-white font-black py-4 rounded-2xl flex items-center justify-center gap-2 transition-all active:scale-95 shadow-lg uppercase text-[10px] tracking-wider"
                             >
                                 <span className="material-icons text-sm">edit</span>
                                 Alterar Dados de Recebimento

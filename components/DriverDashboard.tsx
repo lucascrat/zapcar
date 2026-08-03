@@ -501,10 +501,10 @@ export const DriverDashboard: React.FC<DriverDashboardProps> = ({
 
                                 <button
                                     onClick={() => { onOpenCalculator(); setShowMenu(false); }}
-                                    className="w-full flex items-center gap-4 px-4 py-3.5 hover:bg-gradient-to-r hover:from-blue-500/10 hover:to-transparent rounded-2xl transition-all group"
+                                    className="w-full flex items-center gap-4 px-4 py-3.5 hover:bg-gradient-to-r hover:from-accent-500/10 hover:to-transparent rounded-2xl transition-all group"
                                 >
-                                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500/20 to-blue-600/10 flex items-center justify-center group-hover:scale-110 transition-transform">
-                                        <span className="material-icons text-blue-400">calculate</span>
+                                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-accent-500/20 to-accent-600/10 flex items-center justify-center group-hover:scale-110 transition-transform">
+                                        <span className="material-icons text-accent-400">calculate</span>
                                     </div>
                                     <div className="flex-1 text-left">
                                         <p className="text-white font-semibold text-sm">Simular Corrida</p>
@@ -587,26 +587,26 @@ export const DriverDashboard: React.FC<DriverDashboardProps> = ({
                     </button>
                 </div>
 
-                {/* Panic Button - Always visible */}
+                {/* Panic Button - Always visible, but quiet until pressed */}
                 <button
                     onClick={handlePanicButton}
-                    className="absolute top-3 md:top-4 right-3 md:right-4 z-10 w-12 h-12 md:w-14 md:h-14 rounded-full bg-red-600 hover:bg-red-500 text-white shadow-xl flex items-center justify-center active:scale-95 transition animate-pulse"
+                    className="absolute top-3 md:top-4 right-3 md:right-4 z-10 w-11 h-11 md:w-12 md:h-12 rounded-full bg-white/10 hover:bg-red-600 text-white/80 hover:text-white backdrop-blur-sm border border-white/10 shadow-lg flex items-center justify-center active:scale-95 transition-colors"
                     title="Botão do Pânico"
                 >
-                    <span className="material-icons text-xl md:text-2xl">warning</span>
+                    <span className="material-icons text-lg md:text-xl">warning</span>
                 </button>
 
                 {/* Taximeter FAB - Start Ride */}
                 {!taximeterActive && (
                     <div className="absolute bottom-32 right-4 z-[40] flex flex-col items-center gap-2">
-                        <span className={`text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-tighter ${isOnline ? 'bg-blue-600 text-white animate-pulse' : 'bg-gray-800 text-gray-500'}`}>
+                        <span className={`text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-tighter ${isOnline ? 'bg-accent-500 text-accent-ink' : 'bg-gray-800 text-gray-500'}`}>
                             Taxímetro
                         </span>
                         <button
                             onClick={handleStartTaximeter}
                             disabled={!isOnline}
                             className={`w-16 h-16 rounded-2xl flex items-center justify-center shadow-[0_10px_30px_rgba(0,0,0,0.5)] transition-all active:scale-90 ${isOnline
-                                ? 'bg-gradient-to-br from-blue-600 to-blue-500 text-white border border-white/20'
+                                ? 'bg-gradient-to-br from-accent-600 to-accent-500 text-white border border-white/20'
                                 : 'bg-gray-800 text-gray-600 cursor-not-allowed border border-white/5 opacity-50'
                                 }`}
                         >
@@ -620,8 +620,8 @@ export const DriverDashboard: React.FC<DriverDashboardProps> = ({
             {taximeterActive ? (
                 <div className="shrink-0 bg-[#0b141a] border-t border-white/10 p-2 pb-safe z-[50] shadow-[0_-10px_30px_rgba(0,0,0,0.5)]">
                     <div className="bg-[#121b24] rounded-xl border border-white/10 overflow-hidden mb-2">
-                        <div className="bg-blue-600/10 py-1 flex justify-center border-b border-white/5">
-                            <span className="text-[9px] text-blue-400 uppercase tracking-widest font-black flex items-center gap-1">
+                        <div className="bg-accent-500/10 py-1 flex justify-center border-b border-white/5">
+                            <span className="text-[9px] text-accent-400 uppercase tracking-widest font-black flex items-center gap-1">
                                 <span className="material-icons text-[10px] text-yellow-500 animate-pulse">local_taxi</span>
                                 Taxímetro Ativo
                             </span>
@@ -671,7 +671,7 @@ export const DriverDashboard: React.FC<DriverDashboardProps> = ({
                         )}
                         <button
                             onClick={handleFinishRide}
-                            className="flex-1 bg-blue-600 text-white font-black py-3 rounded-xl flex items-center justify-center gap-2 shadow-xl active:scale-95 transition text-xs uppercase tracking-widest"
+                            className="flex-1 bg-accent-500 text-accent-ink font-black py-3 rounded-xl flex items-center justify-center gap-2 shadow-xl active:scale-95 transition text-xs uppercase tracking-widest"
                         >
                             <span className="material-icons text-lg">check_circle</span>
                             Finalizar

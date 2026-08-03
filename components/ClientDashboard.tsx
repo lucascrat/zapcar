@@ -737,7 +737,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
                                 type="button"
                                 className="w-full bg-gray-100 rounded-2xl p-4 flex items-center gap-3 active:scale-[0.98] transition-all border border-gray-200 shadow-sm cursor-pointer hover:bg-gray-200"
                             >
-                                <span className="material-icons text-blue-600">search</span>
+                                <span className="material-icons text-accent-600">search</span>
                                 <p className="text-gray-600 text-sm font-medium w-full text-left">Escolher destino</p>
                             </button>
 
@@ -775,7 +775,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
                             <div className="flex flex-col items-center pt-4 w-6">
                                 <div className="w-3 h-3 rounded-full border-2 border-gray-400 bg-white mb-1"></div>
                                 <div className="w-0.5 flex-1 bg-gray-300 my-1"></div>
-                                <div className="w-3 h-3 rounded-full bg-blue-600 border-2 border-blue-200 mt-1"></div>
+                                <div className="w-3 h-3 rounded-full bg-accent-600 border-2 border-accent-100 mt-1"></div>
                             </div>
 
                             {/* Fields */}
@@ -816,10 +816,10 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
                                                             }, { enableHighAccuracy: true, timeout: 10000 });
                                                         }
                                                     }}
-                                                    className="w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center hover:bg-blue-200 transition shrink-0"
+                                                    className="w-6 h-6 rounded-full bg-accent-50 flex items-center justify-center hover:bg-accent-100 transition shrink-0"
                                                     title="Atualizar localização"
                                                 >
-                                                    <span className="material-icons text-blue-600 text-xs">my_location</span>
+                                                    <span className="material-icons text-accent-600 text-xs">my_location</span>
                                                 </button>
                                             )}
                                         </div>
@@ -827,8 +827,8 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
                                 </div>
 
                                 {/* Destination */}
-                                <div className="bg-blue-50 p-3 rounded-xl border border-blue-300 ring-1 ring-blue-200">
-                                    <p className="text-[10px] text-blue-700 uppercase font-bold mb-1">Destino</p>
+                                <div className="bg-accent-50 p-3 rounded-xl border border-accent-400 ring-1 ring-accent-100">
+                                    <p className="text-[10px] text-accent-700 uppercase font-bold mb-1">Destino</p>
                                     <input
                                         ref={destinationInputRef}
                                         type="text"
@@ -855,7 +855,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
                                         onClick={() => handleSelectAddress(item)}
                                         className="p-4 border-b border-gray-200 flex items-center gap-4 hover:bg-gray-50 active:bg-gray-100 transition-colors cursor-pointer"
                                     >
-                                        <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${item.isHistory ? 'bg-yellow-100 text-yellow-600' : 'bg-blue-100 text-blue-600'}`}>
+                                        <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${item.isHistory ? 'bg-yellow-100 text-yellow-600' : 'bg-accent-100 text-accent-600'}`}>
                                             <span className="material-icons text-sm">{item.isHistory ? 'history' : 'place'}</span>
                                         </div>
                                         <div className="flex-1 min-w-0">
@@ -910,7 +910,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
                                     setViewState('location_check');
                                     updateEstimates({ lat: destination.lat, lng: destination.lng });
                                 }}
-                                className="w-full bg-blue-600 hover:bg-blue-700 text-white py-5 rounded-2xl font-black text-lg shadow-2xl active:scale-[0.98] transition-all flex items-center justify-center gap-3"
+                                className="w-full bg-accent-500 hover:bg-accent-600 text-accent-ink py-5 rounded-2xl font-black text-lg shadow-2xl active:scale-[0.98] transition-all flex items-center justify-center gap-3"
                             >
                                 Confirmar e Continuar <span className="material-icons text-sm">arrow_forward</span>
                             </button>
@@ -946,7 +946,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
                                     <div className="flex flex-col items-center pt-1.5 h-full absolute left-0 top-0 bottom-0">
                                         <div className="w-2 h-2 rounded-full bg-gray-400"></div>
                                         <div className="w-0.5 h-8 bg-gray-300 my-1"></div>
-                                        <div className="w-2 h-2 rounded-full bg-blue-600"></div>
+                                        <div className="w-2 h-2 rounded-full bg-accent-600"></div>
                                     </div>
                                     <div className="flex-1 space-y-4 pl-5">
                                         <div onClick={() => startSearch('origin')} className="cursor-pointer active:bg-gray-50 p-1 -m-1 rounded-lg">
@@ -954,8 +954,8 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
                                             <p className="text-gray-900 text-xs font-bold truncate pr-8">{currentAddress || 'Loc. Atual'}</p>
                                         </div>
                                         <div className="h-px bg-gray-200 w-full"></div>
-                                        <div onClick={() => startSearch('destination')} className="cursor-pointer active:bg-blue-50 p-1 -m-1 rounded-lg">
-                                            <p className="text-[10px] text-blue-700 uppercase font-bold leading-none mb-1">Destino</p>
+                                        <div onClick={() => startSearch('destination')} className="cursor-pointer active:bg-accent-50 p-1 -m-1 rounded-lg">
+                                            <p className="text-[10px] text-accent-700 uppercase font-bold leading-none mb-1">Destino</p>
                                             <p className="text-gray-900 text-xs font-bold truncate pr-8">{destination.address}</p>
                                         </div>
                                     </div>
@@ -993,7 +993,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
                             <div className="absolute bottom-0 left-0 right-0 bg-white rounded-t-[32px] shadow-[0_-8px_32px_rgba(0,0,0,0.15)] z-30 overflow-hidden flex flex-col max-h-[60%] animate-slide-up border-t border-gray-200 pb-16">
                                 <div className="p-4 border-b border-gray-200 flex items-center justify-between bg-gray-50">
                                     <h3 className="text-gray-900 font-bold text-sm pl-2">Escolha como viajar</h3>
-                                    <span className="text-[10px] bg-blue-100 text-blue-700 px-2 py-1 rounded-lg font-bold">Opcionais</span>
+                                    <span className="text-[10px] bg-accent-100 text-accent-700 px-2 py-1 rounded-lg font-bold">Opcionais</span>
                                 </div>
 
                                 <div className="overflow-y-auto p-4 space-y-3 pb-32">
@@ -1069,7 +1069,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
                                     {/* Car Option */}
                                     <div
                                         onClick={() => setSelectedVehicleType('car')}
-                                        className={`bg-gray-100 border-2 ${selectedVehicleType === 'car' ? 'border-blue-500 bg-blue-50/30' : 'border-gray-200'} rounded-2xl p-4 flex items-center justify-between cursor-pointer active:scale-[0.99] transition-all group shadow-sm`}
+                                        className={`bg-gray-100 border-2 ${selectedVehicleType === 'car' ? 'border-accent-500 bg-accent-50/30' : 'border-gray-200'} rounded-2xl p-4 flex items-center justify-between cursor-pointer active:scale-[0.99] transition-all group shadow-sm`}
                                     >
                                         <div className="flex items-center gap-4">
                                             <div className="relative">
@@ -1079,7 +1079,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
                                                     onError={(e) => (e.currentTarget.src = 'https://cdn-icons-png.flaticon.com/512/3097/3097180.png')}
                                                 />
                                                 {selectedVehicleType === 'car' && (
-                                                    <div className="absolute -top-1 -right-1 bg-blue-600 text-white rounded-full p-0.5 shadow-md">
+                                                    <div className="absolute -top-1 -right-1 bg-accent-600 text-white rounded-full p-0.5 shadow-md">
                                                         <span className="material-icons text-[12px]">check</span>
                                                     </div>
                                                 )}
@@ -1109,7 +1109,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
                                                         {hasDiscount && (
                                                             <p className="text-gray-400 line-through text-[10px] font-bold">R$ {basePrice.toFixed(2)}</p>
                                                         )}
-                                                        <p className="text-blue-600 font-black text-lg">R$ {finalPrice.toFixed(2)}</p>
+                                                        <p className="text-accent-600 font-black text-lg">R$ {finalPrice.toFixed(2)}</p>
                                                     </>
                                                 );
                                             })()}
@@ -1214,7 +1214,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
                                     {/* Main Action Button - BIGGER with more padding */}
                                     <button
                                         onClick={() => handleRequestRide(selectedVehicleType)}
-                                        className={`w-full ${selectedVehicleType === 'car' ? 'bg-blue-600 hover:bg-blue-700' : 'bg-orange-500 hover:bg-orange-600'} text-white py-5 rounded-2xl font-black text-base shadow-xl active:scale-[0.98] transition-all mb-24`}
+                                        className={`w-full ${selectedVehicleType === 'car' ? 'bg-accent-500 hover:bg-accent-600 text-accent-ink' : 'bg-orange-500 hover:bg-orange-600 text-white'} py-5 rounded-2xl font-black text-base shadow-xl active:scale-[0.98] transition-all mb-24`}
                                     >
                                         Confirmar {selectedVehicleType === 'car' ? (settings?.car_name || 'CARRO') : (settings?.moto_name || 'MOTO')}
                                     </button>
@@ -1272,7 +1272,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
                                 <h2 className="text-xl font-black text-gray-900 uppercase flex-1">Meu Perfil</h2>
                                 <button
                                     onClick={handleSaveClientProfile}
-                                    className="bg-blue-600 text-white px-4 py-2 rounded-xl text-xs font-black uppercase active:scale-95 transition-all"
+                                    className="bg-accent-600 text-white px-4 py-2 rounded-xl text-xs font-black uppercase active:scale-95 transition-all"
                                 >
                                     Salvar
                                 </button>
@@ -1285,7 +1285,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
                                     <div className="relative">
                                         <img
                                             src={currentUser.avatar_url || "/logo.png"}
-                                            className="w-24 h-24 rounded-full border-4 border-blue-500 object-cover shadow-lg"
+                                            className="w-24 h-24 rounded-full border-4 border-accent-500 object-cover shadow-lg"
                                             alt="Foto de perfil"
                                         />
                                         <button
@@ -1324,7 +1324,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
                                                 };
                                                 input.click();
                                             }}
-                                            className="absolute bottom-0 right-0 w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center text-white shadow-lg hover:bg-blue-700 active:scale-95 transition-all"
+                                            className="absolute bottom-0 right-0 w-8 h-8 bg-accent-600 rounded-full flex items-center justify-center text-white shadow-lg hover:bg-accent-700 active:scale-95 transition-all"
                                         >
                                             <span className="material-icons text-sm">edit</span>
                                         </button>
@@ -1346,7 +1346,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
                                             <input
                                                 type="text"
                                                 defaultValue={currentUser.username?.split(' ')[0] || ''}
-                                                className="w-full bg-gray-100 border border-gray-200 rounded-xl px-4 py-3 text-gray-900 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                                                className="w-full bg-gray-100 border border-gray-200 rounded-xl px-4 py-3 text-gray-900 text-sm focus:ring-2 focus:ring-accent-500 focus:border-transparent outline-none"
                                                 placeholder="Seu nome"
                                                 id="firstName"
                                             />
@@ -1356,7 +1356,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
                                             <input
                                                 type="text"
                                                 defaultValue={currentUser.username?.split(' ').slice(1).join(' ') || ''}
-                                                className="w-full bg-gray-100 border border-gray-200 rounded-xl px-4 py-3 text-gray-900 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                                                className="w-full bg-gray-100 border border-gray-200 rounded-xl px-4 py-3 text-gray-900 text-sm focus:ring-2 focus:ring-accent-500 focus:border-transparent outline-none"
                                                 placeholder="Sobrenome"
                                                 id="lastName"
                                             />
@@ -1369,7 +1369,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
                                         <input
                                             type="tel"
                                             defaultValue={currentUser.whatsapp || currentUser.phone || ''}
-                                            className="w-full bg-gray-100 border border-gray-200 rounded-xl px-4 py-3 text-gray-900 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                                            className="w-full bg-gray-100 border border-gray-200 rounded-xl px-4 py-3 text-gray-900 text-sm focus:ring-2 focus:ring-accent-500 focus:border-transparent outline-none"
                                             placeholder="(00) 00000-0000"
                                             id="whatsapp"
                                         />
@@ -1381,7 +1381,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
                                         <input
                                             type="text"
                                             defaultValue={(currentUser as any).cpf || ''}
-                                            className="w-full bg-gray-100 border border-gray-200 rounded-xl px-4 py-3 text-gray-900 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                                            className="w-full bg-gray-100 border border-gray-200 rounded-xl px-4 py-3 text-gray-900 text-sm focus:ring-2 focus:ring-accent-500 focus:border-transparent outline-none"
                                             placeholder="000.000.000-00"
                                             id="cpf"
                                             maxLength={14}
@@ -1396,7 +1396,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
                                         <input
                                             type="text"
                                             defaultValue={currentUser.pix_key || ''}
-                                            className="w-full bg-gray-100 border border-gray-200 rounded-xl px-4 py-3 text-gray-900 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                                            className="w-full bg-gray-100 border border-gray-200 rounded-xl px-4 py-3 text-gray-900 text-sm focus:ring-2 focus:ring-accent-500 focus:border-transparent outline-none"
                                             placeholder="CPF, e-mail, telefone ou chave aleatória"
                                             id="pixKey"
                                         />
@@ -1411,7 +1411,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
                                         <input
                                             type="text"
                                             defaultValue={(currentUser as any).address_street || ''}
-                                            className="w-full bg-gray-100 border border-gray-200 rounded-xl px-4 py-3 text-gray-900 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                                            className="w-full bg-gray-100 border border-gray-200 rounded-xl px-4 py-3 text-gray-900 text-sm focus:ring-2 focus:ring-accent-500 focus:border-transparent outline-none"
                                             placeholder="Nome da rua"
                                             id="addressStreet"
                                         />
@@ -1423,7 +1423,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
                                             <input
                                                 type="text"
                                                 defaultValue={(currentUser as any).address_number || ''}
-                                                className="w-full bg-gray-100 border border-gray-200 rounded-xl px-4 py-3 text-gray-900 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                                                className="w-full bg-gray-100 border border-gray-200 rounded-xl px-4 py-3 text-gray-900 text-sm focus:ring-2 focus:ring-accent-500 focus:border-transparent outline-none"
                                                 placeholder="Nº"
                                                 id="addressNumber"
                                             />
@@ -1433,7 +1433,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
                                             <input
                                                 type="text"
                                                 defaultValue={(currentUser as any).address_neighborhood || ''}
-                                                className="w-full bg-gray-100 border border-gray-200 rounded-xl px-4 py-3 text-gray-900 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                                                className="w-full bg-gray-100 border border-gray-200 rounded-xl px-4 py-3 text-gray-900 text-sm focus:ring-2 focus:ring-accent-500 focus:border-transparent outline-none"
                                                 placeholder="Bairro"
                                                 id="addressNeighborhood"
                                             />
@@ -1446,7 +1446,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
                                             <input
                                                 type="text"
                                                 defaultValue={(currentUser as any).address_city || ''}
-                                                className="w-full bg-gray-100 border border-gray-200 rounded-xl px-4 py-3 text-gray-900 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                                                className="w-full bg-gray-100 border border-gray-200 rounded-xl px-4 py-3 text-gray-900 text-sm focus:ring-2 focus:ring-accent-500 focus:border-transparent outline-none"
                                                 placeholder="Cidade"
                                                 id="addressCity"
                                             />
@@ -1456,7 +1456,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
                                             <input
                                                 type="text"
                                                 defaultValue={(currentUser as any).address_zip || ''}
-                                                className="w-full bg-gray-100 border border-gray-200 rounded-xl px-4 py-3 text-gray-900 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                                                className="w-full bg-gray-100 border border-gray-200 rounded-xl px-4 py-3 text-gray-900 text-sm focus:ring-2 focus:ring-accent-500 focus:border-transparent outline-none"
                                                 placeholder="00000-000"
                                                 id="addressZip"
                                                 maxLength={9}

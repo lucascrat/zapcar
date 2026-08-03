@@ -201,8 +201,8 @@ public class MainActivity extends AppCompatActivity {
         </div>
 
         <div className="p-6 overflow-y-auto bg-gray-50 custom-scrollbar text-gray-800">
-          <div className="bg-blue-100 border-l-4 border-blue-500 p-4 mb-6 text-sm">
-            <p className="font-bold text-blue-800">Instruções:</p>
+          <div className="bg-accent-100 border-l-4 border-accent-500 p-4 mb-6 text-sm">
+            <p className="font-bold text-accent-800">Instruções:</p>
             <p>Copie os códigos abaixo e cole em um projeto <strong>Android Studio (Java)</strong>. Este código cria a "ponte" necessária para que o site comande o celular (Tocar alarme, Abrir sozinho).</p>
           </div>
 
@@ -217,7 +217,7 @@ public class MainActivity extends AppCompatActivity {
           <h3 className="font-bold text-lg mb-2 text-whatsapp-dark">2. MainActivity.java</h3>
           <p className="text-sm text-gray-600 mb-2">Lógica para abrir o app ao receber mensagem (bringToFront) e tocar alarme.</p>
           <div className="relative mb-6 group">
-            <pre className="bg-gray-800 text-blue-300 p-4 rounded-lg text-xs overflow-x-auto select-all shadow-inner">
+            <pre className="bg-gray-800 text-accent-300 p-4 rounded-lg text-xs overflow-x-auto select-all shadow-inner">
                 {javaCode}
             </pre>
           </div>

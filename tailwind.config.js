@@ -8,13 +8,32 @@ export default {
     ],
     theme: {
         extend: {
+            fontFamily: {
+                sans: ['Inter', '-apple-system', 'Segoe UI', 'Roboto', 'Helvetica', 'Arial', 'sans-serif'],
+            },
             colors: {
                 'whatsapp-green': '#00a884',
                 'whatsapp-dark': '#111b21',
                 'whatsapp-panel': '#202c33',
                 'whatsapp-incoming': '#202c33',
                 'whatsapp-outgoing': '#005c4b',
-                'app-bg': '#111b21'
+                'app-bg': '#111b21',
+                // Acento único da UI (CTAs, seleção, destaques) - separado das
+                // cores semânticas (verde=sucesso/online, vermelho=perigo).
+                accent: {
+                    50: '#FDF2E4',
+                    100: '#FBE3C4',
+                    200: '#F7CD97',
+                    300: '#F2B76A',
+                    400: '#EDA34C',
+                    500: '#E8A23D',
+                    600: '#C97A1F',
+                    700: '#A8631A',
+                    800: '#7A4813',
+                    900: '#4D2E0C',
+                    DEFAULT: '#E8A23D',
+                    ink: '#241A05',
+                },
             },
             gridTemplateColumns: {
                 '15': 'repeat(15, minmax(0, 1fr))',

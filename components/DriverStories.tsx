@@ -25,7 +25,7 @@ export const DriverStories: React.FC<DriverStoriesProps> = ({ drivers, onSelectD
                             />
                         </div>
                         <div className="absolute -bottom-1 -right-1 bg-white rounded-full p-0.5 shadow-sm">
-                            <span className="material-icons text-[12px] text-blue-500">
+                            <span className="material-icons text-[12px] text-accent-500">
                                 {driver.vehicle_type === 'motorcycle' ? 'two_wheeler' : 'directions_car'}
                             </span>
                         </div>

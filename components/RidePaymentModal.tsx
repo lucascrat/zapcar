@@ -323,7 +323,7 @@ export const RidePaymentModal: React.FC<RidePaymentModalProps> = ({ ride, curren
                     </div>
                     <div className="flex gap-2 bg-gray-50 p-2 rounded-xl border border-gray-200 mt-4">
                         <input readOnly value={pixData.point_of_interaction.transaction_data.qr_code} className="flex-1 bg-transparent px-2 text-xs truncate" />
-                        <button onClick={() => navigator.clipboard.writeText(pixData.point_of_interaction.transaction_data.qr_code)} className="text-blue-600 font-bold text-xs uppercase">Copiar</button>
+                        <button onClick={() => navigator.clipboard.writeText(pixData.point_of_interaction.transaction_data.qr_code)} className="text-accent-600 font-bold text-xs uppercase">Copiar</button>
                     </div>
                     <p className="text-xs text-gray-500 mt-4 animate-pulse">Aguardando confirmação automática...</p>
                 </>

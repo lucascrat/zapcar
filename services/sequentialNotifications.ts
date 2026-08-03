@@ -284,54 +284,38 @@ export const notifyNextDriver = async (rideId: string, _skipRetryCount: number =
 
         const driverToken = nextDriver.push_tokens?.[0]?.token;
 
-        if (!driverToken) {
-            console.log(`[Sequential] Driver ${nextDriver.id} has no push token`);
+        // A falta de push token só impede o envio da notificação push (útil
+        // com o app fechado) - o motorista continua recebendo a chamada via
+        // realtime no app (DriverRideCall), então NÃO deve ser excluído da
+        // corrida nem fazer a corrida ser cancelada por causa disso. Se ele
+        // não responder, o fluxo de timeout já existente assume o rodízio.
+        if (driverToken) {
+            console.log(`[Sequential] Notifying driver: ${nextDriver.username} (${nextDriver.id})`);
 
-            // Marcar como sem token e tentar próximo
-            attempts.push({
-                driver_id: nextDriver.id,
-                notified_at: new Date().toISOString(),
-                response: 'no_token',
-                responded_at: new Date().toISOString(),
-                distance_km: nextDriver.distance
+            // 4. Enviar notificação via Edge Function existente
+            const { error: notifError } = await supabase.functions.invoke('send-notification', {
+                body: {
+                    title: '🚗 Nova Corrida Disponível!',
+                    body: `Origem: ${ride.origin_address?.substring(0, 50)}...`,
+                    data: {
+                        type: 'new_ride',
+                        ride_id: rideId
+                    },
+                    targetType: 'user',
+                    targetUserId: nextDriver.id,
+                    sound: 'ubb',
+                    location: {
+                        lat: ride.origin_lat,
+                        lng: ride.origin_lng
+                    }
+                }
             });
 
-            await supabase
-                .from('rides')
-                .update({
-                    notification_attempts: attempts,
-                    ignored_drivers: [...(ride.ignored_drivers || []), nextDriver.id]
-                })
-                .eq('id', rideId);
-
-            // Chamar próximo (com contador de skip para evitar loop infinito)
-            return notifyNextDriver(rideId, _skipRetryCount + 1);
-        }
-
-        console.log(`[Sequential] Notifying driver: ${nextDriver.username} (${nextDriver.id})`);
-
-        // 4. Enviar notificação via Edge Function existente
-        const { data: notifResult, error: notifError } = await supabase.functions.invoke('send-notification', {
-            body: {
-                title: '🚗 Nova Corrida Disponível!',
-                body: `Origem: ${ride.origin_address?.substring(0, 50)}...`,
-                data: {
-                    type: 'new_ride',
-                    ride_id: rideId
-                },
-                targetType: 'user',
-                targetUserId: nextDriver.id,
-                sound: 'ubb',
-                location: {
-                    lat: ride.origin_lat,
-                    lng: ride.origin_lng
-                }
+            if (notifError) {
+                console.warn('[Sequential] Failed to send push notification (continuando via realtime):', notifError);
             }
-        });
-
-        if (notifError) {
-            console.error('[Sequential] Failed to send notification:', notifError);
-            return { success: false, message: 'Failed to send notification' };
+        } else {
+            console.log(`[Sequential] Driver ${nextDriver.id} has no push token - relying on in-app realtime only`);
         }
 
         // 5. Atualizar ride com motorista notificado (NÃO setar driver_id - só via atomic_accept_ride)

@@ -8,24 +8,44 @@ import { supabase } from '../../../services/supabaseClient';
 
 interface Plan {
     id: string;
-    name: string;
+    title: string;
     days: number;
     price: number;
     description: string;
-    is_active: boolean;
     created_at: string;
 }
+
+// Mensagem para falhas de permissão (RLS). Um bloqueio de RLS pode chegar como
+// erro 42501 (INSERT) ou, no caso de UPDATE/DELETE, como sucesso com 0 linhas
+// afetadas - por isso os handlers abaixo checam as duas situações.
+const RLS_HINT =
+    'O banco recusou a operação por falta de permissão (RLS) na tabela driver_plans. ' +
+    'É necessário liberar a política de escrita no Supabase.';
+
+// A coluna "id" é TEXT e não tem valor padrão no banco, então precisa ser
+// gerada aqui na criação do plano.
+const buildPlanId = (title: string): string => {
+    const slug = title
+        .trim()
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/\p{M}+/gu, '')
+        .replace(/[^a-z0-9]+/g, '_')
+        .replace(/^_+|_+$/g, '')
+        .slice(0, 24);
+    return `plan_${slug || 'custom'}_${Math.random().toString(36).slice(2, 7)}`;
+};
 
 export const AdminPlansView: React.FC = () => {
     const [plans, setPlans] = useState<Plan[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [showAddModal, setShowAddModal] = useState(false);
+    const [isSaving, setIsSaving] = useState(false);
     const [formData, setFormData] = useState({
-        name: '',
+        title: '',
         days: 30,
         price: 0,
-        description: '',
-        is_active: true
+        description: ''
     });
 
     useEffect(() => {
@@ -35,59 +55,77 @@ export const AdminPlansView: React.FC = () => {
     const loadPlans = async () => {
         setIsLoading(true);
         const { data, error } = await supabase
-            .from('chegoja.driver_plans')
+            .from('driver_plans')
             .select('*')
             .order('price', { ascending: true });
 
-        if (!error && data) {
-            setPlans(data);
+        if (error) {
+            console.error('[AdminPlansView] Erro ao carregar planos:', error);
+            alert('Erro ao carregar planos: ' + error.message);
+        } else if (data) {
+            setPlans(data as Plan[]);
         }
         setIsLoading(false);
     };
 
     const handleAddPlan = async () => {
-        if (!formData.name || formData.price <= 0) {
-            alert('Preencha todos os campos obrigatórios');
+        if (!formData.title.trim() || formData.price <= 0 || formData.days <= 0) {
+            alert('Preencha nome, preço e dias de acesso.');
             return;
         }
 
-        const { error } = await supabase
-            .from('chegoja.driver_plans')
-            .insert([formData]);
+        setIsSaving(true);
+        const { data, error } = await supabase
+            .from('driver_plans')
+            .insert([{
+                id: buildPlanId(formData.title),
+                title: formData.title.trim(),
+                description: formData.description.trim(),
+                price: formData.price,
+                days: formData.days
+            }])
+            .select();
+        setIsSaving(false);
 
-        if (!error) {
-            alert('✅ Plano criado com sucesso!');
-            setShowAddModal(false);
-            setFormData({ name: '', days: 30, price: 0, description: '', is_active: true });
-            loadPlans();
-        } else {
-            alert('Erro ao criar plano: ' + error.message);
+        if (error) {
+            console.error('[AdminPlansView] Erro ao criar plano:', error);
+            alert('Erro ao criar plano: ' + error.message + (error.code === '42501' ? `\n\n${RLS_HINT}` : ''));
+            return;
         }
-    };
 
-    const handleToggleStatus = async (planId: string, currentStatus: boolean) => {
-        const { error } = await supabase
-            .from('chegoja.driver_plans')
-            .update({ is_active: !currentStatus })
-            .eq('id', planId);
-
-        if (!error) {
-            loadPlans();
+        if (!data || data.length === 0) {
+            alert(RLS_HINT);
+            return;
         }
+
+        alert('✅ Plano criado com sucesso!');
+        setShowAddModal(false);
+        setFormData({ title: '', days: 30, price: 0, description: '' });
+        loadPlans();
     };
 
     const handleDeletePlan = async (planId: string) => {
         if (!confirm('Deseja excluir este plano?')) return;
 
-        const { error } = await supabase
-            .from('chegoja.driver_plans')
+        const { data, error } = await supabase
+            .from('driver_plans')
             .delete()
-            .eq('id', planId);
+            .eq('id', planId)
+            .select();
 
-        if (!error) {
-            alert('Plano excluído!');
-            loadPlans();
+        if (error) {
+            console.error('[AdminPlansView] Erro ao excluir plano:', error);
+            alert('Erro ao excluir plano: ' + error.message);
+            return;
         }
+
+        if (!data || data.length === 0) {
+            alert(RLS_HINT);
+            return;
+        }
+
+        alert('Plano excluído!');
+        loadPlans();
     };
 
     return (
@@ -122,18 +160,16 @@ export const AdminPlansView: React.FC = () => {
             ) : (
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     {plans.map((plan) => (
-                        <Card key={plan.id} variant={plan.is_active ? 'default' : 'glass'}>
+                        <Card key={plan.id}>
                             <div className="admin-card-body">
                                 <div className="flex items-start justify-between mb-4">
-                                    <h3 className="text-xl font-bold text-white">{plan.name}</h3>
-                                    <span className={`admin-status-badge ${plan.is_active ? 'online' : 'offline'}`}>
-                                        {plan.is_active ? 'Ativo' : 'Inativo'}
-                                    </span>
+                                    <h3 className="text-xl font-bold text-white">{plan.title}</h3>
+                                    <span className="text-xs text-gray-500 font-mono">{plan.days}d</span>
                                 </div>
 
                                 <div className="mb-6">
                                     <p className="text-4xl font-bold text-white">
-                                        R$ {plan.price.toFixed(2)}
+                                        R$ {Number(plan.price).toFixed(2)}
                                     </p>
                                     <p className="text-sm text-gray-400 mt-1">{plan.days} dias de acesso</p>
                                 </div>
@@ -144,19 +180,11 @@ export const AdminPlansView: React.FC = () => {
 
                                 <div className="flex gap-2 pt-4 border-t border-gray-700">
                                     <button
-                                        className="admin-detail-action-btn secondary flex-1"
-                                        onClick={() => handleToggleStatus(plan.id, plan.is_active)}
-                                    >
-                                        <span className="material-icons" style={{ fontSize: '16px' }}>
-                                            {plan.is_active ? 'visibility_off' : 'visibility'}
-                                        </span>
-                                        {plan.is_active ? 'Desativar' : 'Ativar'}
-                                    </button>
-                                    <button
                                         className="admin-detail-action-btn danger"
                                         onClick={() => handleDeletePlan(plan.id)}
                                     >
                                         <span className="material-icons" style={{ fontSize: '16px' }}>delete</span>
+                                        Excluir
                                     </button>
                                 </div>
                             </div>
@@ -182,8 +210,8 @@ export const AdminPlansView: React.FC = () => {
                                     type="text"
                                     className="admin-form-input"
                                     placeholder="Ex: Plano Mensal"
-                                    value={formData.name}
-                                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                                    value={formData.title}
+                                    onChange={(e) => setFormData({ ...formData, title: e.target.value })}
                                 />
                             </div>
 
@@ -225,8 +253,8 @@ export const AdminPlansView: React.FC = () => {
                                 <Button variant="secondary" onClick={() => setShowAddModal(false)} className="flex-1">
                                     Cancelar
                                 </Button>
-                                <Button variant="primary" onClick={handleAddPlan} className="flex-1">
-                                    Criar Plano
+                                <Button variant="primary" onClick={handleAddPlan} className="flex-1" disabled={isSaving}>
+                                    {isSaving ? 'Criando...' : 'Criar Plano'}
                                 </Button>
                             </div>
                         </div>

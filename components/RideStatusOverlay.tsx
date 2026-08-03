@@ -198,7 +198,7 @@ export const RideStatusOverlay: React.FC<RideStatusOverlayProps> = ({ ride, onCa
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="bg-[#1f2c34] p-4 rounded-2xl border border-white/5 flex items-center gap-3">
                                     <div className="bg-white/5 p-2 rounded-xl">
-                                        <span className="material-icons text-blue-400">directions_car</span>
+                                        <span className="material-icons text-accent-400">directions_car</span>
                                     </div>
                                     <div>
                                         <p className="text-[10px] text-gray-500 uppercase font-bold">Veículo</p>
@@ -222,7 +222,7 @@ export const RideStatusOverlay: React.FC<RideStatusOverlayProps> = ({ ride, onCa
                             <div className="flex flex-col gap-4">
                                 <div className="flex gap-4">
                                     <button
-                                        className="flex-1 h-16 bg-blue-600 hover:bg-blue-500 text-white rounded-2xl flex items-center justify-center gap-3 shadow-xl active:scale-95 transition-all font-black uppercase tracking-wider text-sm"
+                                        className="flex-1 h-16 bg-accent-600 hover:bg-accent-500 text-white rounded-2xl flex items-center justify-center gap-3 shadow-xl active:scale-95 transition-all font-black uppercase tracking-wider text-sm"
                                         onClick={onChat}
                                     >
                                         <span className="material-icons">chat</span>

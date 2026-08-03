@@ -634,7 +634,7 @@ export const RewardsHub: React.FC<RewardsHubProps> = ({ currentUser, onClose, on
                         </div>
                         <div className="grid grid-cols-2 gap-4">
                             <div className="bg-[#1f2c34] p-4 rounded-2xl border border-white/5">
-                                <span className="material-icons text-blue-400 text-lg mb-2">trending_up</span>
+                                <span className="material-icons text-accent-400 text-lg mb-2">trending_up</span>
                                 <h4 className="text-[10px] font-black uppercase text-gray-500 mb-1">Status de Ganho</h4>
                                 <p className="text-sm font-bold text-white">Ilimitado</p>
                             </div>
@@ -970,7 +970,7 @@ export const RewardsHub: React.FC<RewardsHubProps> = ({ currentUser, onClose, on
                                             type="email"
                                             value={payerData.email}
                                             onChange={e => setPayerData({ ...payerData, email: e.target.value })}
-                                            className="w-full p-3 border border-gray-300 rounded-xl outline-none focus:ring-2 ring-blue-500 text-black"
+                                            className="w-full p-3 border border-gray-300 rounded-xl outline-none focus:ring-2 ring-accent-500 text-black"
                                             placeholder="seu@email.com"
                                         />
                                     </div>
@@ -987,7 +987,7 @@ export const RewardsHub: React.FC<RewardsHubProps> = ({ currentUser, onClose, on
                                                         .replace(/(\d{3})(\d{1,2})$/, '$1-$2');
                                                     setPayerData({ ...payerData, cpf: val.slice(0, 14) });
                                                 }}
-                                                className="w-full p-3 border border-gray-300 rounded-xl outline-none focus:ring-2 ring-blue-500 text-black"
+                                                className="w-full p-3 border border-gray-300 rounded-xl outline-none focus:ring-2 ring-accent-500 text-black"
                                                 placeholder="000.000.000-00"
                                                 maxLength={14}
                                             />
@@ -1003,7 +1003,7 @@ export const RewardsHub: React.FC<RewardsHubProps> = ({ currentUser, onClose, on
                                                         .replace(/(\d{5})(\d)/, '$1-$2');
                                                     setPayerData({ ...payerData, phone: val.slice(0, 15) });
                                                 }}
-                                                className="w-full p-3 border border-gray-300 rounded-xl outline-none focus:ring-2 ring-blue-500 text-black"
+                                                className="w-full p-3 border border-gray-300 rounded-xl outline-none focus:ring-2 ring-accent-500 text-black"
                                                 placeholder="(00) 00000-0000"
                                                 maxLength={15}
                                             />
@@ -1016,7 +1016,7 @@ export const RewardsHub: React.FC<RewardsHubProps> = ({ currentUser, onClose, on
                                                 type="date"
                                                 value={payerData.birthDate}
                                                 onChange={e => setPayerData({ ...payerData, birthDate: e.target.value })}
-                                                className="w-full p-3 border border-gray-300 rounded-xl outline-none focus:ring-2 ring-blue-500 text-black"
+                                                className="w-full p-3 border border-gray-300 rounded-xl outline-none focus:ring-2 ring-accent-500 text-black"
                                             />
                                         </div>
                                         <div>
@@ -1029,7 +1029,7 @@ export const RewardsHub: React.FC<RewardsHubProps> = ({ currentUser, onClose, on
                                                     const val = e.target.value.replace(/\D/g, '').replace(/^(\d{5})(\d)/, '$1-$2');
                                                     setPayerData({ ...payerData, zipCode: val.slice(0, 9) });
                                                 }}
-                                                className="w-full p-3 border border-gray-300 rounded-xl outline-none focus:ring-2 ring-blue-500 text-black"
+                                                className="w-full p-3 border border-gray-300 rounded-xl outline-none focus:ring-2 ring-accent-500 text-black"
                                                 placeholder="00000-000"
                                                 maxLength={9}
                                             />
@@ -1041,7 +1041,7 @@ export const RewardsHub: React.FC<RewardsHubProps> = ({ currentUser, onClose, on
                                             type="text"
                                             value={payerData.street}
                                             onChange={e => setPayerData({ ...payerData, street: e.target.value })}
-                                            className="w-full p-3 border border-gray-300 rounded-xl outline-none focus:ring-2 ring-blue-500 text-black"
+                                            className="w-full p-3 border border-gray-300 rounded-xl outline-none focus:ring-2 ring-accent-500 text-black"
                                             placeholder="Ex: Av. Paulista"
                                         />
                                     </div>
@@ -1052,7 +1052,7 @@ export const RewardsHub: React.FC<RewardsHubProps> = ({ currentUser, onClose, on
                                                 type="text"
                                                 value={payerData.number}
                                                 onChange={e => setPayerData({ ...payerData, number: e.target.value })}
-                                                className="w-full p-3 border border-gray-300 rounded-xl outline-none focus:ring-2 ring-blue-500 text-black"
+                                                className="w-full p-3 border border-gray-300 rounded-xl outline-none focus:ring-2 ring-accent-500 text-black"
                                                 placeholder="Ex: 1000"
                                             />
                                         </div>
@@ -1062,7 +1062,7 @@ export const RewardsHub: React.FC<RewardsHubProps> = ({ currentUser, onClose, on
                                                 type="text"
                                                 value={payerData.neighborhood}
                                                 onChange={e => setPayerData({ ...payerData, neighborhood: e.target.value })}
-                                                className="w-full p-3 border border-gray-300 rounded-xl outline-none focus:ring-2 ring-blue-500 text-black"
+                                                className="w-full p-3 border border-gray-300 rounded-xl outline-none focus:ring-2 ring-accent-500 text-black"
                                                 placeholder="Ex: Bela Vista"
                                             />
                                         </div>
@@ -1074,7 +1074,7 @@ export const RewardsHub: React.FC<RewardsHubProps> = ({ currentUser, onClose, on
                                                 type="text"
                                                 value={payerData.city}
                                                 onChange={e => setPayerData({ ...payerData, city: e.target.value })}
-                                                className="w-full p-3 border border-gray-300 rounded-xl outline-none focus:ring-2 ring-blue-500 text-black"
+                                                className="w-full p-3 border border-gray-300 rounded-xl outline-none focus:ring-2 ring-accent-500 text-black"
                                             />
                                         </div>
                                         <div>
@@ -1084,7 +1084,7 @@ export const RewardsHub: React.FC<RewardsHubProps> = ({ currentUser, onClose, on
                                                 maxLength={2}
                                                 value={payerData.state}
                                                 onChange={e => setPayerData({ ...payerData, state: e.target.value.toUpperCase() })}
-                                                className="w-full p-3 border border-gray-300 rounded-xl outline-none focus:ring-2 ring-blue-500 text-black"
+                                                className="w-full p-3 border border-gray-300 rounded-xl outline-none focus:ring-2 ring-accent-500 text-black"
                                                 placeholder="Ex: SP"
                                             />
                                         </div>
@@ -1094,7 +1094,7 @@ export const RewardsHub: React.FC<RewardsHubProps> = ({ currentUser, onClose, on
                                         <button
                                             onClick={handleGeneratePix}
                                             disabled={!!buying}
-                                            className="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl flex items-center justify-center gap-2 disabled:opacity-50 mt-4"
+                                            className="w-full py-4 bg-accent-600 hover:bg-accent-700 text-white font-bold rounded-xl flex items-center justify-center gap-2 disabled:opacity-50 mt-4"
                                         >
                                             {buying ? 'Gerando...' : 'Gerar QR Code PIX'}
                                             {!buying && <span className="material-icons text-sm">qr_code</span>}
@@ -1145,7 +1145,7 @@ export const RewardsHub: React.FC<RewardsHubProps> = ({ currentUser, onClose, on
                                                     navigator.clipboard.writeText(pixData.point_of_interaction.transaction_data.qr_code);
                                                     alert("Código Pix copiado!");
                                                 }}
-                                                className="bg-blue-600 text-white p-2 rounded-lg hover:bg-blue-700"
+                                                className="bg-accent-600 text-white p-2 rounded-lg hover:bg-accent-700"
                                                 title="Copiar"
                                             >
                                                 <span className="material-icons text-sm">content_copy</span>

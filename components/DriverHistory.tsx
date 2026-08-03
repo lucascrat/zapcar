@@ -122,7 +122,7 @@ export const DriverHistory: React.FC<DriverHistoryProps> = ({ currentUser, onClo
                     <p className="text-lg font-bold text-white">R$ {stats.totalEarnings.toFixed(2)}</p>
                     <p className="text-[10px] text-gray-500">{stats.count} corridas</p>
                 </div>
-                <div className="bg-[#202c33] p-3 rounded-xl border-l-4 border-blue-500">
+                <div className="bg-[#202c33] p-3 rounded-xl border-l-4 border-accent-500">
                     <p className="text-[10px] text-gray-400 uppercase">A Receber (Bônus Cupons)</p>
                     <p className="text-lg font-bold text-white">R$ {stats.digitalEarnings.toFixed(2)}</p>
                     <p className="text-[10px] text-gray-500">Subsídio App</p>

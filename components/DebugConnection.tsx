@@ -68,12 +68,12 @@ export const DebugConnection: React.FC = () => {
                         {details}
                     </pre>
                     {userCount !== null && (
-                        <div className="mt-1 text-blue-300">Usuários encontrados: {userCount}</div>
+                        <div className="mt-1 text-accent-300">Usuários encontrados: {userCount}</div>
                     )}
                 </div>
                 <button 
                     onClick={checkConnection}
-                    className="bg-blue-600 px-3 py-1 rounded text-white hover:bg-blue-500"
+                    className="bg-accent-600 px-3 py-1 rounded text-white hover:bg-accent-500"
                 >
                     Retestar
                 </button>

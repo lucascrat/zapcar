@@ -170,7 +170,7 @@ export const ClientMapModal: React.FC<ClientMapModalProps> = ({ driver, onClose 
                             href={`https://www.google.com/maps/search/?api=1&query=${driverLocation.lat},${driverLocation.lng}`}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="bg-blue-600 text-white px-4 py-2 rounded-full text-sm font-bold hover:bg-blue-700 transition flex items-center gap-1"
+                            className="bg-accent-600 text-white px-4 py-2 rounded-full text-sm font-bold hover:bg-accent-700 transition flex items-center gap-1"
                         >
                             <span className="material-icons text-sm">navigation</span>
                             Abrir

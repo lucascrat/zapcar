@@ -42,7 +42,6 @@ import {
   fetchActiveRide, // Import fetch active
   updateDriverBalanceForCoupon,
   supabase, // Import supabase
-  loginDriver,
   fetchAdminContact
 } from './services/supabaseClient';
 import { acceptRideSequential, rejectRideSequential } from './services/sequentialNotifications';
@@ -1008,7 +1007,7 @@ export default function App() {
       console.log("Monitorando aprovação do motorista...");
       sub = subscribeToProfiles(async () => {
         if (currentUser) {
-          const me = await loginDriver(currentUser.username, currentUser.password || undefined);
+          const me = await fetchUserProfile(currentUser.id);
           if (me && me.is_approved) {
             console.log("Motorista aprovado! Atualizando tela...");
             setCurrentUser(me);

@@ -8,8 +8,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "update": "powershell -ExecutionPolicy Bypass -File ./update.ps1",
-    "install-device": "powershell -ExecutionPolicy Bypass -File ./install-device.ps1",
-    "test:wallet": "node tests/run-currency-tests.mjs"
+    "install-device": "powershell -ExecutionPolicy Bypass -File ./install-device.ps1"
   },
   "dependencies": {
     "@capacitor-community/admob": "^6.2.0",

@@ -118,7 +118,7 @@ export const InstallPrompt: React.FC = () => {
             <div className="bg-gray-50 p-4 rounded-xl w-full text-left space-y-4 border border-gray-100">
               <div className="flex items-center gap-3 text-sm text-gray-700">
                 <span className="min-w-[32px] h-8 flex items-center justify-center bg-white border border-gray-200 rounded shadow-sm">
-                  <span className="material-icons text-blue-500 text-lg">ios_share</span>
+                  <span className="material-icons text-accent-500 text-lg">ios_share</span>
                 </span>
                 <span>1. Toque no botão <b>Compartilhar</b>.</span>
               </div>
@@ -130,7 +130,7 @@ export const InstallPrompt: React.FC = () => {
               </div>
               <button
                 onClick={handleClose}
-                className="w-full py-3 mt-2 text-blue-600 font-bold text-sm bg-blue-50 hover:bg-blue-100 rounded-lg transition"
+                className="w-full py-3 mt-2 text-accent-600 font-bold text-sm bg-accent-50 hover:bg-accent-100 rounded-lg transition"
               >
                 Entendi
               </button>

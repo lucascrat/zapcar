@@ -339,7 +339,7 @@ export const DriverProfileEditor: React.FC<DriverProfileEditorProps> = ({ curren
                         {/* Contact Info */}
                         <div className="bg-whatsapp-panel/40 p-5 rounded-2xl border border-white/5 space-y-4">
                             <h3 className="text-white font-bold flex items-center gap-2">
-                                <span className="material-icons text-blue-400 text-sm">contact_phone</span>
+                                <span className="material-icons text-accent-400 text-sm">contact_phone</span>
                                 Contato
                             </h3>
 
@@ -379,7 +379,7 @@ export const DriverProfileEditor: React.FC<DriverProfileEditorProps> = ({ curren
                                     <button
                                         onClick={() => setVehicleType('car')}
                                         className={`flex-1 py-3 rounded-xl flex items-center justify-center gap-2 font-bold transition ${vehicleType === 'car'
-                                            ? 'bg-blue-500 text-white'
+                                            ? 'bg-accent-500 text-white'
                                             : 'bg-black/30 text-gray-400 border border-white/10'
                                             }`}
                                     >

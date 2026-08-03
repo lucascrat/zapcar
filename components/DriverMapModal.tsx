@@ -109,7 +109,7 @@ export const DriverMapModal: React.FC<DriverMapModalProps> = ({ clientLocation, 
                     href={`https://www.google.com/maps/dir/?api=1&origin=${driverLocation.lat},${driverLocation.lng}&destination=${clientLocation.lat},${clientLocation.lng}&travelmode=driving`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="absolute bottom-6 right-6 bg-blue-600 text-white p-4 rounded-full shadow-lg flex items-center gap-2 hover:bg-blue-700 transition animate-bounce"
+                    className="absolute bottom-6 right-6 bg-accent-600 text-white p-4 rounded-full shadow-lg flex items-center gap-2 hover:bg-accent-700 transition animate-bounce"
                 >
                     <span className="material-icons">navigation</span>
                     <span className="font-bold">Navegar</span>

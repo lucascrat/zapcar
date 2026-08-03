@@ -20,21 +20,24 @@ export const DriverRideCall: React.FC<DriverRideCallProps> = ({ ride, onAccept, 
     useEffect(() => {
         console.log("Timer iniciado para corrida:", ride.id);
         const timer = setInterval(() => {
-            setTimeLeft((prev) => {
-                if (prev <= 1) {
-                    console.log("Timeout da corrida atingido. Rejeitando automaticamente:", ride.id);
-                    clearInterval(timer); // Para o timer
-                    onReject();
-                    return 0;
-                }
-                return prev - 1;
-            });
+            setTimeLeft((prev) => (prev > 0 ? prev - 1 : 0));
         }, 1000);
         return () => {
             console.log("Limpando timer da corrida:", ride.id);
             clearInterval(timer);
         };
-    }, [onReject, ride.id]); // Adicionado dependências corretas
+    }, [ride.id]);
+
+    // Dispara a rejeição automática num efeito próprio, fora do updater de
+    // estado do timer - chamar onReject() (que atualiza o componente pai)
+    // durante o setState do timer causava o aviso do React "Cannot update a
+    // component while rendering a different component".
+    useEffect(() => {
+        if (timeLeft === 0) {
+            console.log("Timeout da corrida atingido. Rejeitando automaticamente:", ride.id);
+            onReject();
+        }
+    }, [timeLeft, onReject, ride.id]);
 
     return (
         <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-[#0a0f12]/90 backdrop-blur-xl animate-fade-in touch-none">

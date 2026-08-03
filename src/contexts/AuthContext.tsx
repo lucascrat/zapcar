@@ -7,6 +7,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import { UserProfile, UserRole } from '../../types';
 import { supabase } from '../../services/supabaseClient';
+import { hashPassword, verifyPassword, isHashedPassword } from '../../utils/passwordHash';
 
 // Types
 interface AuthState {
@@ -106,8 +107,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             let query = supabase
                 .from('profiles')
                 .select('*')
-                .eq('username', username)
-                .eq('password', password);
+                .eq('username', username);
 
             // Filter by role if provided
             if (role) {
@@ -123,6 +123,24 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                     error: 'Usuário ou senha incorretos',
                 }));
                 return false;
+            }
+
+            const storedPassword = (data as { password?: string }).password;
+            const passwordValid = await verifyPassword(password, storedPassword);
+            if (!passwordValid) {
+                setState(prev => ({
+                    ...prev,
+                    isLoading: false,
+                    error: 'Usuário ou senha incorretos',
+                }));
+                return false;
+            }
+
+            // Migração transparente para o novo formato com hash.
+            if (!isHashedPassword(storedPassword)) {
+                const upgraded = await hashPassword(password);
+                await supabase.from('profiles').update({ password: upgraded }).eq('id', (data as UserProfile).id);
+                (data as { password?: string }).password = upgraded;
             }
 
             const user = data as UserProfile;
@@ -223,7 +241,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             // Create profile
             const newProfile: Partial<UserProfile> = {
                 username: data.username,
-                password: data.password, // TODO: Hash password
+                password: await hashPassword(data.password),
                 phone: data.phone,
                 role: data.role,
                 avatar_url: avatarUrl,

@@ -200,7 +200,7 @@ export const Taximeter: React.FC<TaximeterProps> = ({ currentUser, onClose }) =>
           <div className="grid grid-cols-2 gap-4 border-t border-gray-800 pt-6">
             <div>
               <p className="text-gray-500 text-xs uppercase">Distância</p>
-              <p className="text-2xl text-blue-400">{distance.toFixed(2)} <span className="text-sm">km</span></p>
+              <p className="text-2xl text-accent-400">{distance.toFixed(2)} <span className="text-sm">km</span></p>
             </div>
             <div>
               <p className="text-gray-500 text-xs uppercase">Tempo</p>

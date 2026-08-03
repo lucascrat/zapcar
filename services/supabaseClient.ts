@@ -1,6 +1,13 @@
 import { createClient } from '@supabase/supabase-js';
 import { SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SCHEMA } from '../constants';
 import { Message, UserProfile, UserRole, DriverStatus, AppSettings, BingoSettings, BingoCard, BingoRankingUser, BroadcastMessage, DriverPlan, Ride, Banner, Coupon, StoreProduct, WalletTransaction, StoreOrder, AppPaymentRequest } from '../types';
+import { hashPassword, verifyPassword, isHashedPassword } from '../utils/passwordHash';
+
+// Escapa um valor para uso seguro dentro do mini-DSL de filtros do PostgREST
+// (usado em .or()), evitando que vírgulas/parênteses no valor alterem a
+// semântica do filtro (ex: "a,role.eq.admin" injetando uma condição extra).
+const escapePostgrestValue = (value: string): string =>
+  `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   db: {
@@ -284,9 +291,10 @@ export const updateUserProfile = async (
 };
 
 export const updateDriverPassword = async (driverId: string, newPassword: string): Promise<boolean> => {
+  const hashedPassword = await hashPassword(newPassword);
   const { error } = await supabase
     .from('profiles')
-    .update({ password: newPassword })
+    .update({ password: hashedPassword })
     .eq('id', driverId);
 
   if (error) {
@@ -994,10 +1002,11 @@ export const registerDriver = async (
     if (!password || password.trim().length < 4) {
       throw new Error("Senha muito curta.");
     }
+    const hashedPassword = await hashPassword(password);
     const { data: rpcData, error: rpcError } = await supabase
       .rpc('register_driver', {
         p_username: finalUsername,
-        p_password: password,
+        p_password: hashedPassword,
         p_vehicle_type: vehicleType,
         p_vehicle_model: vehicleModel,
         p_vehicle_plate: vehiclePlate,
@@ -1031,7 +1040,7 @@ export const registerDriver = async (
       .from('profiles')
       .insert([{
         username: finalUsername,
-        password,
+        password: hashedPassword,
         phone: cleanPhone,
         role: UserRole.DRIVER,
         status: DriverStatus.OFFLINE,
@@ -1065,17 +1074,15 @@ export const loginUser = async (identifier: string, password?: string, role?: Us
     // Nota: Como o Supabase não tem "OR" simples combinado com ANDs complexos facilmente via query builder encadeado para este caso específico sem usar .or() na raiz,
     // faremos a lógica de filtro com .or()
 
-    // Construção da query: (username = identifier OR phone = identifier) AND role = role AND password = password
+    // Construção da query: (username = identifier OR phone = identifier) AND role = role
     // Sintaxe do .or(): "username.eq.Valor,phone.eq.Valor"
+    // O valor é escapado para não permitir que vírgulas/parênteses alterem o filtro.
 
-    query = query.or(`username.eq.${identifier},phone.eq.${identifier}`);
+    const escapedIdentifier = escapePostgrestValue(identifier);
+    query = query.or(`username.eq.${escapedIdentifier},phone.eq.${escapedIdentifier}`);
 
     if (role) {
       query = query.eq('role', role);
-    }
-
-    if (password) {
-      query = query.eq('password', password);
     }
 
     const { data, error } = await query.maybeSingle();
@@ -1089,6 +1096,33 @@ export const loginUser = async (identifier: string, password?: string, role?: Us
 
     if (!data) {
       console.warn(`[Login] Usuário não encontrado para: ${identifier} (Role: ${role})`);
+      return null;
+    }
+
+    // A senha é comparada no cliente (não mais via filtro no banco), pois a
+    // partir de agora ela pode estar armazenada com hash (ver utils/passwordHash.ts).
+    if (password) {
+      const stored = (data as UserProfile).password as unknown as string | undefined;
+      const valid = await verifyPassword(password, stored);
+      if (!valid) {
+        return null;
+      }
+
+      // Migração transparente: se a conta ainda tem senha em texto puro,
+      // faz o upgrade para o novo formato com hash agora que ela foi validada.
+      if (!isHashedPassword(stored)) {
+        const upgraded = await hashPassword(password);
+        supabase
+          .from('profiles')
+          .update({ password: upgraded })
+          .eq('id', (data as UserProfile).id)
+          .then(({ error: upgradeError }) => {
+            if (upgradeError) {
+              console.warn('[Login] Falha ao migrar senha para hash:', upgradeError);
+            }
+          });
+        (data as any).password = upgraded;
+      }
     }
 
     return data as UserProfile;
@@ -1113,6 +1147,70 @@ export const loginDriver = async (username: string, password?: string): Promise<
   }
 
   return null;
+};
+
+// Formato único (em vez de união discriminada) porque este projeto compila com
+// `strict` desligado, e nesse modo o TypeScript não estreita união por campo
+// booleano - o consumidor checaria `result.reason` e receberia erro de tipo.
+export interface AdminLoginResult {
+  ok: boolean;
+  profile?: UserProfile;
+  reason?: 'invalid_credentials' | 'not_admin' | 'error';
+  message?: string;
+}
+
+/**
+ * Login do administrador via Supabase Auth.
+ *
+ * Diferente de cliente/motorista (que são validados contra a tabela `profiles`),
+ * o admin autentica de verdade no Supabase. Isso faz o `auth.uid()` existir nas
+ * requisições seguintes, que é o que as policies de RLS usam para liberar as
+ * operações administrativas - ver supabase/migrations/20260801_admin_auth.sql.
+ */
+export const loginAdmin = async (email: string, password: string): Promise<AdminLoginResult> => {
+  try {
+    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+      email: email.trim(),
+      password
+    });
+
+    if (authError || !authData?.session) {
+      return { ok: false, reason: 'invalid_credentials' };
+    }
+
+    // Autenticar não basta: a conta precisa estar registrada como admin.
+    const { data: isAdmin, error: rpcError } = await supabase.rpc('is_admin');
+
+    if (rpcError) {
+      await supabase.auth.signOut();
+      return { ok: false, reason: 'error', message: rpcError.message };
+    }
+
+    if (!isAdmin) {
+      await supabase.auth.signOut();
+      return { ok: false, reason: 'not_admin' };
+    }
+
+    // Perfil usado pela UI (nome, avatar, chat de suporte). Se ainda não existir
+    // um perfil com role=admin, monta um objeto mínimo com o id do Auth.
+    const profile = await fetchAdminContact();
+    if (profile) {
+      return { ok: true, profile };
+    }
+
+    return {
+      ok: true,
+      profile: {
+        id: authData.user.id,
+        username: authData.user.email ?? 'Administrador',
+        role: UserRole.ADMIN,
+        status: DriverStatus.AVAILABLE,
+        avatar_url: 'https://ui-avatars.com/api/?name=Admin&background=0D8ABC&color=fff'
+      } as UserProfile
+    };
+  } catch (e: any) {
+    return { ok: false, reason: 'error', message: e?.message };
+  }
 };
 
 export const checkUserExists = async (field: 'username' | 'phone', value: string): Promise<boolean> => {
