@@ -254,6 +254,18 @@ export interface Ride {
   is_direct?: boolean; // Novo campo
   last_driver_offered_at?: string;
 
+  // Sistema de Notificação Sequencial (ver services/sequentialNotifications.ts)
+  current_notified_driver_id?: string; // Motorista da vez a receber a chamada
+  notification_sent_at?: string;
+  notification_timeout_seconds?: number;
+  notification_attempts?: Array<{
+    driver_id: string;
+    notified_at: string;
+    response: 'accepted' | 'rejected' | 'timeout' | 'no_token' | 'too_far';
+    responded_at: string;
+    distance_km?: number;
+  }>;
+
   // Detalhes extras carregados via join
   driver?: UserProfile;
   client?: UserProfile;

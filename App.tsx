@@ -44,7 +44,7 @@ import {
   supabase, // Import supabase
   fetchAdminContact
 } from './services/supabaseClient';
-import { acceptRideSequential, rejectRideSequential } from './services/sequentialNotifications';
+import { acceptRideSequential, rejectRideSequential, checkNotificationTimeouts } from './services/sequentialNotifications';
 import { activatePlan, checkSubscriptionStatus } from './services/paymentService';
 import { UserProfile, UserRole, DriverStatus, Message, BroadcastMessage, Ride, AppSettings } from './types';
 import { APP_NAME } from './constants';
@@ -295,6 +295,23 @@ export default function App() {
             return;
           }
 
+          // CORREÇÃO: Sistema Sequencial (notifyNextDriver) usa 'current_notified_driver_id',
+          // não 'driver_id', para marcar de quem é a vez. Sem este check, TODOS os motoristas
+          // disponíveis com o mesmo tipo de veículo recebiam a chamada ao mesmo tempo, e o
+          // rodízio por proximidade virava um broadcast de fato.
+          if (!ride.driver_id && ride.current_notified_driver_id && ride.current_notified_driver_id !== currentUser.id) {
+            console.log(`[Realtime] Corrida ignorada (é a vez do motorista ${ride.current_notified_driver_id})`);
+            return;
+          }
+
+          // Corrida sequencial ainda sem motorista notificado (janela entre o INSERT e o
+          // UPDATE do notifyNextDriver) e que não é broadcast explícito: aguardar a próxima
+          // atualização em vez de mostrar para todo mundo.
+          if (!ride.driver_id && !ride.current_notified_driver_id && !ride.is_broadcast) {
+            console.log(`[Realtime] Corrida ${ride.id} ainda sem motorista notificado. Aguardando.`);
+            return;
+          }
+
           // IMPORTANTE: Verificar se esta corrida foi rejeitada recentemente
           if (rejectedRidesRef.current.has(ride.id)) {
             console.log(`[Realtime] Corrida ${ride.id} foi rejeitada. Ignorando.`);
@@ -436,7 +453,23 @@ export default function App() {
     };
   }, [currentUser?.id, currentUser?.role]); // Fix: Removed activeRideRef dependency to prevent reconnection gaps
 
+  // Watchdog do Sistema de Notificação Sequencial: se o motorista da vez (current_notified_driver_id)
+  // não responder dentro do timeout (ex: recebeu só a push e não abriu o app), alguém precisa
+  // detectar isso e chamar o próximo motorista da fila. checkNotificationTimeouts existia mas nunca
+  // era chamada em lugar nenhum - a corrida ficava presa esperando indefinidamente. Como qualquer
+  // usuário (cliente aguardando ou motorista navegando) pode ter o app aberto, rodamos aqui para
+  // qualquer papel: é uma query leve e idempotente (só age em corridas realmente expiradas).
+  useEffect(() => {
+    if (!currentUser) return;
 
+    const interval = setInterval(() => {
+      checkNotificationTimeouts().catch(err => {
+        console.error('[Watchdog] Erro ao checar timeouts de notificação:', err);
+      });
+    }, 10000);
+
+    return () => clearInterval(interval);
+  }, [currentUser?.id]);
 
   const handleAcceptRide = async () => {
     if (!incomingRide || !currentUser) return;
