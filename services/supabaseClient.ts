@@ -440,23 +440,6 @@ export const sendMessage = async (message: Partial<Message>) => {
   return data as Message;
 };
 
-export const deleteMessageForEveryone = async (messageId: string): Promise<boolean> => {
-  const { error } = await supabase
-    .from('messages')
-    .update({
-      content: '🚫 Esta mensagem foi apagada',
-      media_url: null,
-      media_type: 'text'
-    })
-    .eq('id', messageId);
-
-  if (error) {
-    handleDbError(error, "deleteMessageForEveryone");
-    return false;
-  }
-  return true;
-};
-
 // --- Settings Functions (Taximeter & App) ---
 
 export const fetchAppSettings = async (): Promise<AppSettings> => {
