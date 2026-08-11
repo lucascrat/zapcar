@@ -400,6 +400,13 @@ export default function App() {
             setIncomingRide(null);
             soundService.stopRingtone();
           }
+          // CASO SECUNDÁRIO (Sequencial): Ainda em 'searching', sem driver_id, mas o rodízio
+          // (current_notified_driver_id) passou para outro motorista - encerrar minha chamada.
+          else if (ride.status === 'searching' && !ride.driver_id && ride.current_notified_driver_id && ride.current_notified_driver_id !== currentUser.id) {
+            console.log("[Realtime] 🚫 Rodízio passou para outro motorista. Encerrando chamada.");
+            setIncomingRide(null);
+            soundService.stopRingtone();
+          }
         }
 
         // Se a corrida que eu estou fazendo mudar (cancelamento, etc)
