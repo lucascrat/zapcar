@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { UserProfile, UserRole, Ride, DriverStatus, AppSettings, Coupon } from '../types';
-import { fetchOnlineDrivers, createRideRequest, fetchActiveRide, fetchRideById, subscribeToRides, fetchAppSettings, cancelRide, subscribeToProfiles, fetchAvailableCoupons, useCoupon, updateUserProfile, supabase, fetchUserProfile, findAndAssignNextDriver } from '../services/supabaseClient';
+import { fetchOnlineDrivers, createRideRequest, fetchActiveRide, fetchRideById, subscribeToRides, fetchAppSettings, cancelRide, subscribeToProfiles, fetchAvailableCoupons, useCoupon, updateUserProfile, supabase, fetchUserProfile } from '../services/supabaseClient';
 import { notifyNextDriver } from '../services/sequentialNotifications';
 // AdMob e banners removidos da tela do cliente para experiência limpa
 // import { AdMobService } from '../services/adMobService';
@@ -338,12 +338,18 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
                     }
                 }
 
-                // BACKUP DISPATCH LOOP (If no Bot)
-                // If still searching and no driver, poke the dispatch logic
-                if (check && check.status === 'searching' && !check.driver_id) {
-                    // This will increment search_attempts until MAX
-                    findAndAssignNextDriver(check.id, '').catch(console.error);
-                }
+                // REMOVIDO: loop de backup que chamava findAndAssignNextDriver a cada 3s.
+                // Esse loop escrevia direto em `driver_id` (sem lock atômico, ao contrário
+                // de atomic_accept_ride) em paralelo com o sistema sequencial
+                // (notifyNextDriver/current_notified_driver_id, ver services/sequentialNotifications.ts),
+                // que roda de forma independente e sem coordenação com este. Resultado: os
+                // dois sistemas podiam atribuir motoristas DIFERENTES pra mesma corrida ao
+                // mesmo tempo, e o filtro de exibição da chamada no App.tsx prioriza
+                // `driver_id`, então quem esse loop escolhia "vencia" a visibilidade mesmo
+                // que o sistema sequencial estivesse no meio do rodízio com outro motorista -
+                // gerando corridas "roubadas"/comportamento imprevisível. Agora que o watchdog
+                // do sistema sequencial (checkNotificationTimeouts, ver App.tsx) realmente
+                // roda, esse backup não é mais necessário.
             }, 3000);
         }
         return () => clearInterval(interval);
