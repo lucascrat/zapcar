@@ -34,3 +34,6 @@ android_old/
 .env
 .env.local
 .env.*.local
+
+# Supabase CLI local cache/state
+supabase/.temp/
