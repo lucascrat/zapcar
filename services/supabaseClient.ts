@@ -1782,15 +1782,34 @@ export const subscribeToRides = (userId: string, role: 'client' | 'driver', call
       }
     );
   } else {
-    // Motorista: Ouve todas as mudanças na tabela rides e filtra no App.tsx
-    // Isso é mais robusto do que usar filtros no servidor que podem perder transições de status
+    // Motorista: antes ouvia TODA mudança na tabela rides (de todo motorista e
+    // cliente da plataforma) e filtrava no App.tsx. Isso sobrecarregava o
+    // canal com tráfego irrelevante e causava atraso perceptível pra chamada
+    // chegar (medido em teste real: ~10s+ de atraso). Agora inscreve em 3
+    // filtros no servidor, cobrindo exatamente os casos que o motorista
+    // precisa ver:
+    // 1. Corridas onde ele é o motorista da vez no rodízio sequencial
+    // 2. Corridas diretas/da central endereçadas a ele (ou que ele já aceitou)
+    // 3. Corridas de broadcast puro (central manda pra todos)
+    const rideHandler = (payload: any) => {
+      const ride = (payload.new || payload.old) as Ride;
+      if (ride) callback(ride);
+    };
+
     channel.on(
       'postgres_changes',
-      { event: '*', schema: SUPABASE_SCHEMA, table: 'rides' },
-      (payload) => {
-        const ride = (payload.new || payload.old) as Ride;
-        if (ride) callback(ride);
-      }
+      { event: '*', schema: SUPABASE_SCHEMA, table: 'rides', filter: `current_notified_driver_id=eq.${userId}` },
+      rideHandler
+    );
+    channel.on(
+      'postgres_changes',
+      { event: '*', schema: SUPABASE_SCHEMA, table: 'rides', filter: `driver_id=eq.${userId}` },
+      rideHandler
+    );
+    channel.on(
+      'postgres_changes',
+      { event: '*', schema: SUPABASE_SCHEMA, table: 'rides', filter: `is_broadcast=eq.true` },
+      rideHandler
     );
   }
 

@@ -284,6 +284,35 @@ export const notifyNextDriver = async (rideId: string, _skipRetryCount: number =
 
         const driverToken = nextDriver.push_tokens?.[0]?.token;
 
+        // 4. Reivindicar a vez do motorista de forma atomica ANTES de mandar
+        // qualquer notificacao. O WHERE status='searching' torna isto seguro
+        // contra corrida com um cancelamento concorrente: se o cliente (ou um
+        // admin) cancelou a corrida um instante antes, essa condicao nao bate
+        // e nenhuma linha e afetada - a funcao aborta sem notificar ninguem.
+        // Sem isso, era possivel mandar push pro proximo motorista mesmo com
+        // a corrida ja cancelada (visto num teste real: cancelamento e o
+        // timeout do motorista anterior correndo quase juntos).
+        const { data: claimedRows, error: updateError } = await supabase
+            .from('rides')
+            .update({
+                current_notified_driver_id: nextDriver.id,
+                notification_sent_at: new Date().toISOString(),
+                last_driver_offered_at: new Date().toISOString()
+            })
+            .eq('id', rideId)
+            .eq('status', 'searching')
+            .select('id');
+
+        if (updateError) {
+            console.error('[Sequential] Failed to update ride:', updateError);
+            return { success: false, message: 'Failed to update ride' };
+        }
+
+        if (!claimedRows || claimedRows.length === 0) {
+            console.log(`[Sequential] Corrida ${rideId} nao esta mais em 'searching' (cancelada/aceita em paralelo). Abortando sem notificar.`);
+            return { success: false, message: 'Ride no longer searching - aborted before notifying' };
+        }
+
         // A falta de push token só impede o envio da notificação push (útil
         // com o app fechado) - o motorista continua recebendo a chamada via
         // realtime no app (DriverRideCall), então NÃO deve ser excluído da
@@ -292,7 +321,8 @@ export const notifyNextDriver = async (rideId: string, _skipRetryCount: number =
         if (driverToken) {
             console.log(`[Sequential] Notifying driver: ${nextDriver.username} (${nextDriver.id})`);
 
-            // 4. Enviar notificação via Edge Function existente
+            // 5. Enviar notificação via Edge Function existente (só depois de
+            // ter reivindicado a vez com sucesso acima)
             const { error: notifError } = await supabase.functions.invoke('send-notification', {
                 body: {
                     title: '🚗 Nova Corrida Disponível!',
@@ -316,21 +346,6 @@ export const notifyNextDriver = async (rideId: string, _skipRetryCount: number =
             }
         } else {
             console.log(`[Sequential] Driver ${nextDriver.id} has no push token - relying on in-app realtime only`);
-        }
-
-        // 5. Atualizar ride com motorista notificado (NÃO setar driver_id - só via atomic_accept_ride)
-        const { error: updateError } = await supabase
-            .from('rides')
-            .update({
-                current_notified_driver_id: nextDriver.id,
-                notification_sent_at: new Date().toISOString(),
-                last_driver_offered_at: new Date().toISOString()
-            })
-            .eq('id', rideId);
-
-        if (updateError) {
-            console.error('[Sequential] Failed to update ride:', updateError);
-            return { success: false, message: 'Failed to update ride' };
         }
 
         console.log(`[Sequential] Notification sent! Waiting ${ride.notification_timeout_seconds || 30}s for response`);
