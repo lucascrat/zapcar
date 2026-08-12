@@ -18,14 +18,11 @@ if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
 // O nome da aplicação usado em toda a interface
 export const APP_NAME = "ChegoJá";
 
-// EFIBANK CONFIG - Credenciais via .env (NUNCA hardcode!)
-export const EFI_CLIENT_ID = env.VITE_EFI_CLIENT_ID || '';
-export const EFI_CLIENT_SECRET = env.VITE_EFI_CLIENT_SECRET || '';
-export const EFI_ACCOUNT_CODE = env.VITE_EFI_ACCOUNT_CODE || '';
-
-if (!EFI_CLIENT_ID || !EFI_CLIENT_SECRET) {
-  console.warn('[Config] AVISO: Credenciais EFI Bank não configuradas no .env. Pagamentos não funcionarão.');
-}
+// EFÍ CONFIG - O Client ID/Secret ficam SÓ no servidor (Supabase Edge Function
+// efi-payment), nunca em variável VITE_* (essas são embutidas no bundle público
+// e ficariam visíveis pra qualquer um). O único dado da Efí que o navegador
+// precisa é o Account Code, usado pelo SDK de tokenização de cartão - ele lê
+// VITE_EFI_ACCOUNT_CODE diretamente em services/paymentService.ts.
 
 export const GOOGLE_MAPS_API_KEY = env.VITE_GOOGLE_MAPS_API_KEY || '';
 

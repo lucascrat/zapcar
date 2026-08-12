@@ -2,6 +2,7 @@ import { Capacitor, CapacitorHttp } from '@capacitor/core';
 import { supabase, fetchDriverPlans } from './supabaseClient';
 import { UserProfile, PayerFormData, PixPaymentResponse, StoreProduct, CardFormData } from '../types';
 import { validateCPF } from '../utils/validateCPF';
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from '../constants';
 
 // --- HELPERS ---
 
@@ -23,10 +24,13 @@ export const initializeEfi = async () => {
 // --- MAIN EXPORTED METHODS ---
 
 const IS_NATIVE = Capacitor.isNativePlatform();
-const VPS_IP_URL = 'http://168.231.98.99:3000/payment-manager';
-const FINAL_VPS_URL = IS_NATIVE
-    ? VPS_IP_URL
-    : '/api/payment-vps/payment-manager';
+// Backend de pagamentos: Edge Function do Supabase (efi-payment), que fala
+// direto com a API da Efí via mTLS. Substituiu o VPS externo antigo.
+const FINAL_VPS_URL = `${SUPABASE_URL}/functions/v1/efi-payment`;
+const PAYMENT_AUTH_HEADERS = {
+    'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+    'apikey': SUPABASE_ANON_KEY,
+};
 
 // Log seguro - sem expor URL em produção
 if ((import.meta as any).env?.DEV) {
@@ -53,7 +57,8 @@ export const createPixPayment = async (
                 url: FINAL_VPS_URL,
                 headers: {
                     'Content-Type': 'application/json',
-                    'Accept': 'application/json'
+                    'Accept': 'application/json',
+                    ...PAYMENT_AUTH_HEADERS
                 },
                 data: {
                     action: 'create',
@@ -74,7 +79,7 @@ export const createPixPayment = async (
         } else {
             const response = await fetch(FINAL_VPS_URL, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', ...PAYMENT_AUTH_HEADERS },
                 body: JSON.stringify({
                     action: 'create',
                     planId,
@@ -119,7 +124,7 @@ export const createProductPixPayment = async (
         if (IS_NATIVE) {
             const response = await CapacitorHttp.post({
                 url: FINAL_VPS_URL,
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', ...PAYMENT_AUTH_HEADERS },
                 data: {
                     action: 'create',
                     user,
@@ -139,7 +144,7 @@ export const createProductPixPayment = async (
         } else {
             const response = await fetch(FINAL_VPS_URL, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', ...PAYMENT_AUTH_HEADERS },
                 body: JSON.stringify({
                     action: 'create',
                     user,
@@ -256,14 +261,14 @@ export const createProductCardPayment = async (
         if (IS_NATIVE) {
             const response = await CapacitorHttp.post({
                 url: FINAL_VPS_URL,
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', ...PAYMENT_AUTH_HEADERS },
                 data: cardBody
             });
             responseData = response.data;
         } else {
             const response = await fetch(FINAL_VPS_URL, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', ...PAYMENT_AUTH_HEADERS },
                 body: JSON.stringify(cardBody)
             });
             responseData = await safeParseJson(response);
@@ -357,14 +362,14 @@ export const createSubscriptionCardPayment = async (
         if (IS_NATIVE) {
             const response = await CapacitorHttp.post({
                 url: FINAL_VPS_URL,
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', ...PAYMENT_AUTH_HEADERS },
                 data: subBody
             });
             responseData = response.data;
         } else {
             const response = await fetch(FINAL_VPS_URL, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', ...PAYMENT_AUTH_HEADERS },
                 body: JSON.stringify(subBody)
             });
             responseData = await safeParseJson(response);
@@ -385,14 +390,14 @@ export const checkPaymentByReference = async (reference: string): Promise<{ foun
         if (IS_NATIVE) {
             const response = await CapacitorHttp.post({
                 url: FINAL_VPS_URL,
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', ...PAYMENT_AUTH_HEADERS },
                 data: { action: 'check_reference', reference }
             });
             responseData = response.data;
         } else {
             const response = await fetch(FINAL_VPS_URL, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', ...PAYMENT_AUTH_HEADERS },
                 body: JSON.stringify({ action: 'check_reference', reference })
             });
             responseData = await safeParseJson(response);
@@ -410,14 +415,14 @@ export const getPaymentStatus = async (paymentId: string | number): Promise<stri
         if (IS_NATIVE) {
             const response = await CapacitorHttp.post({
                 url: FINAL_VPS_URL,
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', ...PAYMENT_AUTH_HEADERS },
                 data: { action: 'check', paymentId: String(paymentId) }
             });
             responseData = response.data;
         } else {
             const response = await fetch(FINAL_VPS_URL, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', ...PAYMENT_AUTH_HEADERS },
                 body: JSON.stringify({ action: 'check', paymentId: String(paymentId) })
             });
             responseData = await safeParseJson(response);
@@ -540,7 +545,7 @@ export const createRidePixPayment = async (
         if (IS_NATIVE) {
             const response = await CapacitorHttp.post({
                 url: FINAL_VPS_URL,
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', ...PAYMENT_AUTH_HEADERS },
                 data: payload
             });
             if (response.status !== 200) {
@@ -551,7 +556,7 @@ export const createRidePixPayment = async (
         } else {
             const response = await fetch(FINAL_VPS_URL, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', ...PAYMENT_AUTH_HEADERS },
                 body: JSON.stringify(payload)
             });
             if (!response.ok) {
@@ -663,14 +668,14 @@ export const createRideCardPayment = async (
         if (IS_NATIVE) {
             const response = await CapacitorHttp.post({
                 url: FINAL_VPS_URL,
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', ...PAYMENT_AUTH_HEADERS },
                 data: cardBody
             });
             responseData = response.data;
         } else {
             const response = await fetch(FINAL_VPS_URL, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', ...PAYMENT_AUTH_HEADERS },
                 body: JSON.stringify(cardBody)
             });
             responseData = await safeParseJson(response);

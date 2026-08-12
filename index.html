@@ -53,56 +53,6 @@
     type='text/javascript'
     onerror="console.error('ERRO EFÍ PAY: O script de pagamento não pôde ser carregado. Verifique se o domínio chegoja.pro e localhost estão autorizados no seu Painel Efí.');"></script>
 
-  <!-- PagSeguro (PagBank) SDK for Transparent Checkout -->
-  <script src="https://assets.pagseguro.com.br/checkout-sdk-js/rc/dist/browser/pagseguro.min.js"></script>
-  <script>
-    // Inicializar o PagSeguro SDK
-    window.pagSeguroInstance = null;
-    window.pagSeguroReady = false;
-    window.pagSeguroPublicKey = null;
-
-    window.initPagSeguro = async function (publicKey) {
-      try {
-        if (typeof PagSeguro === 'undefined') {
-          console.error('[PagSeguro] SDK não carregado');
-          return;
-        }
-        window.pagSeguroPublicKey = publicKey;
-        window.pagSeguroInstance = PagSeguro.instance({
-          publicKey: publicKey
-        });
-        window.pagSeguroReady = true;
-        console.log('[PagSeguro] SDK inicializado com sucesso!');
-      } catch (e) {
-        console.error('[PagSeguro] Erro ao inicializar:', e);
-      }
-    };
-
-    // Função global para criptografar cartão
-    window.pagSeguroEncryptCard = async function (cardData) {
-      if (!window.pagSeguroInstance) {
-        throw new Error('PagSeguro não inicializado. Tente novamente.');
-      }
-
-      const card = {
-        number: cardData.cardNumber.replace(/\s/g, ''),
-        cvv: cardData.securityCode,
-        expirationMonth: cardData.expirationMonth.padStart(2, '0'),
-        expirationYear: cardData.expirationYear.length === 2 ? '20' + cardData.expirationYear : cardData.expirationYear,
-        holder_name: cardData.cardholderName.toUpperCase()
-      };
-
-      return new Promise((resolve, reject) => {
-        const encrypted = window.pagSeguroInstance.encryptCard(card);
-        if (encrypted && encrypted.encryptedCard) {
-          resolve(encrypted.encryptedCard);
-        } else {
-          reject(new Error('Erro ao criptografar cartão. Verifique os dados.'));
-        }
-      });
-    };
-  </script>
-
   <!-- PushAlert Integration -->
   <script type="text/javascript">
     (function (d, t) {

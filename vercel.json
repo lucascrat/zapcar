@@ -1,10 +1,6 @@
 {
   "rewrites": [
     {
-      "source": "/api/payment-vps/:path*",
-      "destination": "http://168.231.98.99:3000/:path*"
-    },
-    {
       "source": "/(.*)",
       "destination": "/index.html"
     }
