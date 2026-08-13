@@ -1897,16 +1897,14 @@ export const createPaymentRequest = async (
       });
       if (deductError) return { success: false, message: "Erro ao debitar moedas." };
     } else {
-      // Driver Payout
-      if ((user.financial_balance || 0) < amountMoney) {
-        return { success: false, message: "Saldo financeiro insuficiente." };
-      }
-      // Deduct Money (Assuming we have a way, or just trust the request. Let's update profile)
-      const { error: deductError } = await supabase
-        .from('profiles')
-        .update({ financial_balance: (user.financial_balance || 0) - amountMoney })
-        .eq('id', userId);
+      // Driver Payout - RPC atômica: checa saldo suficiente e debita num só
+      // UPDATE no banco (evita corrida entre leitura em JS e escrita de volta)
+      const { data: success, error: deductError } = await supabase.rpc('decrement_financial_balance_if_available', {
+        user_id_param: userId,
+        amount_param: amountMoney
+      });
       if (deductError) return { success: false, message: "Erro ao debitar saldo financeiro." };
+      if (!success) return { success: false, message: "Saldo financeiro insuficiente." };
     }
 
     // 2. Create Request
@@ -1992,13 +1990,12 @@ export const updatePaymentRequestStatus = async (
           amount_param: request.amount_coins
         });
       } else {
-        // Driver refund (Fetch current + add back)
-        const { data: user } = await supabase.from('profiles').select('financial_balance').eq('id', request.user_id).single();
-        if (user) {
-          await supabase.from('profiles').update({
-            financial_balance: (user.financial_balance || 0) + request.amount_money
-          }).eq('id', request.user_id);
-        }
+        // Driver refund - RPC atômica (mesmo motivo dos outros pontos: evita
+        // perder o estorno se dois updates de saldo rodarem quase juntos)
+        await supabase.rpc('increment_financial_balance', {
+          user_id_param: request.user_id,
+          amount_param: request.amount_money
+        });
       }
 
       // Log Refund
@@ -2224,12 +2221,16 @@ export const updateStoreOrderStatus = async (orderId: string, status: 'delivered
 
 export const payDriverBalance = async (driverId: string, amount: number): Promise<boolean> => {
   try {
-    const { data: user } = await supabase.from('profiles').select('financial_balance').eq('id', driverId).single();
-    const currentBalance = Number(user?.financial_balance || 0);
+    // RPC atômica (chegoja.decrement_financial_balance_if_available): faz o
+    // check de saldo suficiente e o débito num único UPDATE no banco, evitando
+    // a corrida de "ler saldo em JS, escrever de volta" que fazia dois débitos
+    // concorrentes se sobrescreverem (um deles simplesmente desaparecia).
+    const { data: success, error } = await supabase.rpc('decrement_financial_balance_if_available', {
+      user_id_param: driverId,
+      amount_param: amount
+    });
 
-    if (currentBalance < amount) return false;
-
-    await supabase.from('profiles').update({ financial_balance: currentBalance - amount }).eq('id', driverId);
+    if (error || !success) return false;
 
     await supabase.from('wallet_transactions').insert({
       user_id: driverId,
@@ -2246,10 +2247,20 @@ export const payDriverBalance = async (driverId: string, amount: number): Promis
 
 export const updateDriverBalanceForCoupon = async (driverId: string, amount: number, rideId: string): Promise<boolean> => {
   try {
-    const { data: user } = await supabase.from('profiles').select('financial_balance').eq('id', driverId).single();
-    const currentBalance = Number(user?.financial_balance || 0);
+    // RPC atômica (chegoja.increment_financial_balance): incrementa direto no
+    // banco (financial_balance = financial_balance + amount_param) em vez de
+    // ler o saldo em JS e escrever de volta - essa versão antiga perdia
+    // crédito quando duas corridas com cupom terminavam quase juntas (as duas
+    // liam o mesmo saldo antigo e a segunda escrita sobrescrevia a primeira).
+    const { error } = await supabase.rpc('increment_financial_balance', {
+      user_id_param: driverId,
+      amount_param: amount
+    });
 
-    await supabase.from('profiles').update({ financial_balance: currentBalance + amount }).eq('id', driverId);
+    if (error) {
+      console.error('[Wallet] Error updating driver balance (RPC):', error);
+      return false;
+    }
 
     await supabase.from('wallet_transactions').insert({
       user_id: driverId,
