@@ -6,7 +6,8 @@ import {
     registerClientWithPhoto,
     registerDriver,
     loginDriver,
-    loginAdmin
+    loginAdmin,
+    supabase
 } from '../services/supabaseClient';
 import { APP_NAME } from '../constants';
 
@@ -91,6 +92,30 @@ export const LoginFlow: React.FC<LoginFlowProps> = ({ onLoginSuccess }) => {
                     alert(`Este ${field === 'username' ? 'nome de usuário' : 'telefone'} já está em uso. Por favor, tente outro.`);
                 }
             }
+        }
+    };
+
+    const [isSendingReset, setIsSendingReset] = useState(false);
+
+    const handleForgotPassword = async () => {
+        if (!entryName.trim() || !entryName.includes('@')) {
+            alert('Digite o e-mail do administrador no campo acima antes de pedir a redefinição.');
+            return;
+        }
+        setIsSendingReset(true);
+        try {
+            const { error } = await supabase.auth.resetPasswordForEmail(entryName.trim(), {
+                redirectTo: window.location.origin
+            });
+            if (error) {
+                alert('Erro ao enviar e-mail de redefinição: ' + error.message);
+            } else {
+                alert('Se esse e-mail tiver uma conta de administrador, enviamos um link de redefinição de senha. Confira sua caixa de entrada (e o spam).');
+            }
+        } catch (e: any) {
+            alert('Erro ao enviar e-mail de redefinição: ' + (e?.message || 'tente novamente.'));
+        } finally {
+            setIsSendingReset(false);
         }
     };
 
@@ -380,6 +405,17 @@ export const LoginFlow: React.FC<LoginFlowProps> = ({ onLoginSuccess }) => {
                             loginMode === 'client' ? 'Entrar Agora' : (isRegisteringDriver ? 'Concluir' : 'Autenticar')
                         )}
                     </button>
+
+                    {loginMode === 'admin' && (
+                        <button
+                            type="button"
+                            onClick={handleForgotPassword}
+                            disabled={isSendingReset}
+                            className="mt-1 text-accent-600 font-semibold text-sm hover:underline py-2 px-4 rounded-lg hover:bg-accent-50 active:bg-accent-100 transition-colors self-center disabled:opacity-60"
+                        >
+                            {isSendingReset ? 'Enviando...' : 'Esqueci minha senha'}
+                        </button>
+                    )}
                 </div>
 
                 {loginMode === 'driver' && (

@@ -12,6 +12,7 @@ import { ClientDashboard } from './components/ClientDashboard'; // Importar Dash
 import { DriverRideCall } from './components/DriverRideCall'; // Importar Chamada
 import { DriverRideScreen } from './components/DriverRideScreen'; // Import Tela de Corrida Ativa
 import { LoginFlow } from './components/LoginFlow';
+import { AdminPasswordReset } from './components/AdminPasswordReset';
 import { WalletScreen } from './components/WalletScreen';
 import { InstantStore } from './components/InstantStore';
 import { RewardsHub } from './components/RewardsHub';
@@ -64,6 +65,7 @@ export default function App() {
     } catch (e) { }
   }, []);
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
+  const [isPasswordRecovery, setIsPasswordRecovery] = useState(false);
   const [activeContact, setActiveContact] = useState<UserProfile | null>(null);
 
   const [contactList, setContactList] = useState<UserProfile[]>([]);
@@ -111,6 +113,21 @@ export default function App() {
       if (incomingRide?.id === activeRide.id) setIncomingRide(null);
     }
   }, [activeRide, incomingRide]);
+
+  // Detecta quando o usuário chega pelo link de "esqueci minha senha" (e-mail
+  // de recuperação do Supabase Auth, usado só pelo login de admin). Quando
+  // isso acontece, o SDK autentica uma sessão temporária e dispara esse
+  // evento - mostramos a tela de definir nova senha em vez do app normal.
+  useEffect(() => {
+    const { data: authListener } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        setIsPasswordRecovery(true);
+      }
+    });
+    return () => {
+      authListener.subscription.unsubscribe();
+    };
+  }, []);
 
   // Carregar dados iniciais (Settings e Corrida Ativa)
   useEffect(() => {
@@ -1333,6 +1350,11 @@ export default function App() {
         </div>
       </div>
     );
+  }
+
+  // --- Render: Redefinir senha de administrador (link de e-mail) ---
+  if (isPasswordRecovery) {
+    return <AdminPasswordReset onDone={() => setIsPasswordRecovery(false)} />;
   }
 
   // --- Render: Login Screen ---
