@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { UserProfile, UserRole } from '../../../types';
-import { supabase, handleDbError } from '../../../services/supabaseClient';
+import { supabase, handleDbError, PROFILE_SAFE_COLUMNS } from '../../../services/supabaseClient';
 import { Badge, Button, Input, Card } from '../shared';
 
 export const AdminClientsView: React.FC = () => {
@@ -17,7 +17,7 @@ export const AdminClientsView: React.FC = () => {
         try {
             const { data, error } = await supabase
                 .from('profiles')
-                .select('*')
+                .select(PROFILE_SAFE_COLUMNS)
                 .eq('role', UserRole.CLIENT)
                 .order('created_at', { ascending: false });
 

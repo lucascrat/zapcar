@@ -794,9 +794,12 @@ export default function App() {
         updateDriverPipStatus(currentUser.id, false);
       }
 
-      setTimeout(() => {
-        soundService.playPipExitSound();
-      }, 500);
+      // Só toca o som de chamada se houver uma corrida real pendente
+      if (incomingRideRef.current) {
+        setTimeout(() => {
+          soundService.playRingtone();
+        }, 500);
+      }
     };
 
     const handlePipEnter = () => {

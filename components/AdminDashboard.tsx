@@ -1,6 +1,6 @@
 
 import React, { useEffect, useState, useRef } from 'react';
-import { supabase, fetchAllDriversForAdmin, fetchAllDriversWithStats, deleteDriver, updateDriverStatus, updateDriverVehicle, updateDriverPassword, fetchAppSettings, updateAppSettings, approveDriver, fetchMessages, subscribeToMessages, subscribeToProfiles, fetchBingoSettings, updateBingoSettings, drawBingoNumber, drawSpecificBingoNumber, resetBingo, fetchBingoRanking, subscribeToBingo, sendBroadcast, addSubscriptionDays, fetchBanners, addBanner, deleteBanner, updateBannerOrder, uploadBannerImage, fetchAllCoupons, createCoupon, deleteCoupon, createDispatchRide, cleanupDuplicateUsers, fetchDuplicateUsers, fetchStoreProducts, createStoreProduct, updateStoreProduct, deleteStoreProduct, uploadStoreProductImage, updateUserProfile, fetchAllRides } from '../services/supabaseClient';
+import { supabase, PROFILE_SAFE_COLUMNS, fetchAllDriversForAdmin, fetchAllDriversWithStats, deleteDriver, updateDriverStatus, updateDriverVehicle, updateDriverPassword, fetchAppSettings, updateAppSettings, approveDriver, fetchMessages, subscribeToMessages, subscribeToProfiles, fetchBingoSettings, updateBingoSettings, drawBingoNumber, drawSpecificBingoNumber, resetBingo, fetchBingoRanking, subscribeToBingo, sendBroadcast, addSubscriptionDays, fetchBanners, addBanner, deleteBanner, updateBannerOrder, uploadBannerImage, fetchAllCoupons, createCoupon, deleteCoupon, createDispatchRide, cleanupDuplicateUsers, fetchDuplicateUsers, fetchStoreProducts, createStoreProduct, updateStoreProduct, deleteStoreProduct, uploadStoreProductImage, updateUserProfile, fetchAllRides } from '../services/supabaseClient';
 import { UserProfile, DriverStatus, CallRecord, AppSettings, Message, BingoSettings, BingoRankingUser, AdminTab, Banner, Coupon, StoreProduct, Ride } from '../types';
 import { AdminWalletManager } from './AdminWalletManager';
 import { soundService } from '../services/soundService';
@@ -558,7 +558,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onL
             // Fetch directly from database for accurate real-time status
             const { data, error } = await supabase
                 .from('profiles')
-                .select('*')
+                .select(PROFILE_SAFE_COLUMNS)
                 .eq('role', 'driver')
                 .eq('status', 'available')
                 .eq('is_approved', true)

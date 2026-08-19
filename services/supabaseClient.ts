@@ -1,13 +1,16 @@
 import { createClient } from '@supabase/supabase-js';
 import { SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SCHEMA } from '../constants';
 import { Message, UserProfile, UserRole, DriverStatus, AppSettings, BingoSettings, BingoCard, BingoRankingUser, BroadcastMessage, DriverPlan, Ride, Banner, Coupon, StoreProduct, WalletTransaction, StoreOrder, AppPaymentRequest } from '../types';
-import { hashPassword, verifyPassword, isHashedPassword } from '../utils/passwordHash';
+import { hashPassword } from '../utils/passwordHash';
 
-// Escapa um valor para uso seguro dentro do mini-DSL de filtros do PostgREST
-// (usado em .or()), evitando que vírgulas/parênteses no valor alterem a
-// semântica do filtro (ex: "a,role.eq.admin" injetando uma condição extra).
-const escapePostgrestValue = (value: string): string =>
-  `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
+// Colunas de `profiles` seguras para devolver ao cliente depois de um INSERT/UPDATE.
+// Não inclui `password`: desde a migration 20260819_login_rpc_and_password_lockdown.sql,
+// a role `anon` não tem mais SELECT nessa coluna (só a RPC verify_login lê). Um
+// `.select()` sem argumentos pede "*" implicitamente (é o que vira o RETURNING do
+// INSERT/UPDATE no PostgREST) e falha com "permission denied" se password entrar
+// nessa lista - por isso todo insert/update em `profiles` que precisa da linha de
+// volta usa esta constante em vez de `.select()`.
+export const PROFILE_SAFE_COLUMNS = 'id, username, phone, role, status, is_approved, subscription_expires_at, avatar_url, vehicle_model, vehicle_plate, vehicle_color, vehicle_type, lat, lng, wallet_coins, financial_balance, pix_key, whatsapp, cpf, address_street, address_number, address_neighborhood, address_city, address_zip, email, is_pip_active, unread_count, created_at, updated_at';
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   db: {
@@ -82,7 +85,7 @@ export const handleDbError = (error: any, context: string): string => {
 export const fetchUserProfile = async (userId: string): Promise<UserProfile | null> => {
   const { data, error } = await supabase
     .from('profiles')
-    .select('*')
+    .select(PROFILE_SAFE_COLUMNS)
     .eq('id', userId)
     .maybeSingle();
 
@@ -96,7 +99,7 @@ export const fetchUserProfile = async (userId: string): Promise<UserProfile | nu
 export const fetchOnlineDrivers = async (): Promise<UserProfile[]> => {
   const { data, error } = await supabase
     .from('profiles')
-    .select('*')
+    .select(PROFILE_SAFE_COLUMNS)
     .eq('role', UserRole.DRIVER)
     .eq('is_approved', true) // Only approved drivers
     .eq('status', DriverStatus.AVAILABLE)
@@ -144,7 +147,7 @@ export const fetchAllDriversForAdmin = async (): Promise<UserProfile[]> => {
   try {
     const { data, error } = await supabase
       .from('profiles')
-      .select('*')
+      .select(PROFILE_SAFE_COLUMNS)
       .eq('role', 'driver')
       .order('created_at', { ascending: false });
 
@@ -165,7 +168,7 @@ export const fetchAllDriversForAdmin = async (): Promise<UserProfile[]> => {
 export const fetchAllProfilesForAdmin = async (): Promise<UserProfile[]> => {
   const { data, error } = await supabase
     .from('profiles')
-    .select('*')
+    .select(PROFILE_SAFE_COLUMNS)
     .order('created_at', { ascending: false });
 
   if (error) {
@@ -179,7 +182,7 @@ export const fetchAdminContact = async (): Promise<UserProfile | null> => {
   // Busca o primeiro admin disponível para o chat de suporte
   const { data, error } = await supabase
     .from('profiles')
-    .select('*')
+    .select(PROFILE_SAFE_COLUMNS)
     .eq('role', UserRole.ADMIN)
     .limit(1)
     .maybeSingle();
@@ -388,7 +391,7 @@ export const fetchMyClients = async (driverId: string): Promise<UserProfile[]> =
 
     const { data: profiles, error: profileError } = await supabase
       .from('profiles')
-      .select('*')
+      .select(PROFILE_SAFE_COLUMNS)
       .in('id', idsArray);
 
     if (profileError) {
@@ -937,7 +940,7 @@ export const registerClientWithPhoto = async (username: string, phone: string, a
     }
 
     // Check if exists
-    const { data: existing } = await supabase.from('profiles').select('*').eq('phone', phone).maybeSingle();
+    const { data: existing } = await supabase.from('profiles').select(PROFILE_SAFE_COLUMNS).eq('phone', phone).maybeSingle();
     if (existing) {
       // Auto login
       return existing as UserProfile;
@@ -952,7 +955,7 @@ export const registerClientWithPhoto = async (username: string, phone: string, a
         status: DriverStatus.AVAILABLE,
         avatar_url: finalUrl || `https://ui-avatars.com/api/?name=${username}`
       }])
-      .select()
+      .select(PROFILE_SAFE_COLUMNS)
       .single();
 
     if (error) {
@@ -1003,7 +1006,7 @@ export const registerDriver = async (
     if (cleanPhone) {
       const { data: existing } = await supabase
         .from('profiles')
-        .select('*')
+        .select(PROFILE_SAFE_COLUMNS)
         .eq('phone', cleanPhone)
         .maybeSingle();
 
@@ -1034,7 +1037,7 @@ export const registerDriver = async (
         vehicle_color: vehicleColor,
         avatar_url: avatar_url || `https://ui-avatars.com/api/?name=${username}`
       }])
-      .select()
+      .select(PROFILE_SAFE_COLUMNS)
       .single();
 
     if (error) {
@@ -1050,62 +1053,31 @@ export const registerDriver = async (
 
 export const loginUser = async (identifier: string, password?: string, role?: UserRole): Promise<UserProfile | null> => {
   try {
-    // Tenta buscar por username ou phone
-    let query = supabase.from('profiles').select('*');
-
-    // Se o identificador parece um número de telefone (tem apenas números ou +), buscamos por phone OU username
-    // Nota: Como o Supabase não tem "OR" simples combinado com ANDs complexos facilmente via query builder encadeado para este caso específico sem usar .or() na raiz,
-    // faremos a lógica de filtro com .or()
-
-    // Construção da query: (username = identifier OR phone = identifier) AND role = role
-    // Sintaxe do .or(): "username.eq.Valor,phone.eq.Valor"
-    // O valor é escapado para não permitir que vírgulas/parênteses alterem o filtro.
-
-    const escapedIdentifier = escapePostgrestValue(identifier);
-    query = query.or(`username.eq.${escapedIdentifier},phone.eq.${escapedIdentifier}`);
-
-    if (role) {
-      query = query.eq('role', role);
-    }
-
-    const { data, error } = await query.maybeSingle();
+    // A verificação de senha roda inteira dentro do banco (RPC SECURITY DEFINER
+    // chegoja.verify_login, ver supabase/migrations/20260819_login_rpc_and_password_lockdown.sql).
+    // Antes disso, o hash de senha era buscado com a chave anon pública e
+    // comparado aqui no navegador - qualquer um com a chave conseguia ler o
+    // hash de qualquer usuário. Agora a coluna password nem é mais legível via
+    // SELECT direto; só essa RPC tem acesso a ela, e nunca a devolve.
+    //
+    // De brinde, a RPC também valida senhas em formato bcrypt legado (via
+    // pgcrypto), que verifyPassword() não reconhecia - eram ~12 contas que não
+    // conseguiam mais logar de jeito nenhum antes desta correção.
+    const { data, error } = await supabase.rpc('verify_login', {
+      p_identifier: identifier,
+      p_password: password ?? null,
+      p_role: role ?? null
+    });
 
     if (error) {
-      // Se houver erro de permissão (RLS) ou outro
-      console.error("[Login] Erro ao buscar usuário:", error);
+      console.error("[Login] Erro ao verificar login:", error);
       handleDbError(error, "loginUser");
       return null;
     }
 
     if (!data) {
-      console.warn(`[Login] Usuário não encontrado para: ${identifier} (Role: ${role})`);
+      console.warn(`[Login] Usuário não encontrado ou senha inválida para: ${identifier} (Role: ${role})`);
       return null;
-    }
-
-    // A senha é comparada no cliente (não mais via filtro no banco), pois a
-    // partir de agora ela pode estar armazenada com hash (ver utils/passwordHash.ts).
-    if (password) {
-      const stored = (data as UserProfile).password as unknown as string | undefined;
-      const valid = await verifyPassword(password, stored);
-      if (!valid) {
-        return null;
-      }
-
-      // Migração transparente: se a conta ainda tem senha em texto puro,
-      // faz o upgrade para o novo formato com hash agora que ela foi validada.
-      if (!isHashedPassword(stored)) {
-        const upgraded = await hashPassword(password);
-        supabase
-          .from('profiles')
-          .update({ password: upgraded })
-          .eq('id', (data as UserProfile).id)
-          .then(({ error: upgradeError }) => {
-            if (upgradeError) {
-              console.warn('[Login] Falha ao migrar senha para hash:', upgradeError);
-            }
-          });
-        (data as any).password = upgraded;
-      }
     }
 
     return data as UserProfile;
