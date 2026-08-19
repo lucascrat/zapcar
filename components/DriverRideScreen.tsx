@@ -205,10 +205,18 @@ export const DriverRideScreen: React.FC<DriverRideScreenProps> = ({ ride, driver
                 <div className="px-5 pt-1 pb-2 space-y-2">
                     <div className="w-10 h-0.5 bg-white/10 rounded-full mx-auto mb-1"></div>
 
+                    {/* Badge de Entrega (quando a solicitação é entrega de pacote, não corrida) */}
+                    {ride.is_delivery && (
+                        <div className="flex items-center justify-center gap-1.5 bg-yellow-500/15 border border-yellow-500/30 text-yellow-400 py-1.5 rounded-xl">
+                            <span className="material-icons text-sm">inventory_2</span>
+                            <span className="text-[10px] font-black uppercase tracking-widest">Entrega de Pacote</span>
+                        </div>
+                    )}
+
                     {/* Taxímetro em Destaque - More Compact */}
                     <div className="bg-[#121212]/90 border border-white/10 rounded-[18px] p-3 flex items-center justify-between shadow-inner">
                         <div className="flex flex-col">
-                            <span className="text-gray-500 text-[8px] font-black uppercase tracking-widest">Valor da Corrida</span>
+                            <span className="text-gray-500 text-[8px] font-black uppercase tracking-widest">{ride.is_delivery ? 'Valor da Entrega' : 'Valor da Corrida'}</span>
                             <div className="flex items-baseline gap-1">
                                 <span className="text-whatsapp-green text-xl font-black">R$</span>
                                 <span className="text-white text-3xl font-black tracking-tighter">
@@ -240,7 +248,7 @@ export const DriverRideScreen: React.FC<DriverRideScreenProps> = ({ ride, driver
                             </div>
                             <div>
                                 <h4 className="text-white font-bold text-xs leading-none mb-0.5">{ride.client?.username}</h4>
-                                <span className="text-gray-500 text-[8px] font-medium uppercase tracking-wider">Passageiro</span>
+                                <span className="text-gray-500 text-[8px] font-medium uppercase tracking-wider">{ride.is_delivery ? 'Remetente' : 'Passageiro'}</span>
                             </div>
                         </div>
                         <div className="flex gap-2">

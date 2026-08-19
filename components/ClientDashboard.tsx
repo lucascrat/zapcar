@@ -3,9 +3,9 @@ import React, { useState, useEffect, useRef } from 'react';
 import { UserProfile, UserRole, Ride, DriverStatus, AppSettings, Coupon } from '../types';
 import { fetchOnlineDrivers, createRideRequest, fetchActiveRide, fetchRideById, subscribeToRides, fetchAppSettings, cancelRide, subscribeToProfiles, fetchAvailableCoupons, useCoupon, updateUserProfile, supabase, fetchUserProfile } from '../services/supabaseClient';
 import { notifyNextDriver } from '../services/sequentialNotifications';
-// AdMob e banners removidos da tela do cliente para experiência limpa
+// AdMob removido da tela do cliente para experiência limpa
 // import { AdMobService } from '../services/adMobService';
-// import { AdBanner } from './AdBanner';
+import { AdBanner } from './AdBanner';
 import { DriverStories } from './DriverStories';
 import { AppMap } from './AppMap';
 import { RideStatusOverlay } from './RideStatusOverlay';
@@ -47,7 +47,9 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
         currentUser.lat && currentUser.lng ? { lat: currentUser.lat, lng: currentUser.lng } : undefined
     );
     const gpsWatchIdRef = useRef<number | null>(null);
-    const [activeTab, setActiveTab] = useState<'home' | 'drivers' | 'rewards' | 'wallet' | 'profile'>('home');
+    const [activeTab, setActiveTab] = useState<'home' | 'delivery' | 'pay' | 'drivers' | 'rewards' | 'wallet' | 'profile'>('home');
+    // 'ride' = corrida de passageiro | 'delivery' = entrega de pacote (99 Entrega style)
+    const [serviceMode, setServiceMode] = useState<'ride' | 'delivery'>('ride');
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     const [isRefreshingWallet, setIsRefreshingWallet] = useState(false);
     const [sidebarCoins, setSidebarCoins] = useState<number>(currentUser.wallet_coins || 0);
@@ -504,7 +506,8 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
                 status: 'searching',
                 coupon_id: selectedCoupon?.id,
                 discount_amount: discountAmount,
-                is_direct: false
+                is_direct: false,
+                is_delivery: serviceMode === 'delivery'
             });
 
             if (newRide) {
@@ -624,26 +627,8 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
     return (
         <div className="flex-1 flex flex-col h-full bg-[#111b21] relative overflow-hidden font-sans">
 
-            {/* Top Header (Floating Menu Button + Balance) - Only show on Home or when Menu is open */}
-            {viewState === 'home' && !activeRide && (
-                <div className="absolute top-4 left-4 right-4 z-40 flex items-center justify-between pointer-events-none">
-                    <button
-                        onClick={() => setIsMenuOpen(true)}
-                        className="w-10 h-10 bg-[#1c272d]/90 backdrop-blur-md rounded-full flex items-center justify-center shadow-lg active:scale-95 transition-transform border border-white/10 pointer-events-auto"
-                    >
-                        <span className="material-icons text-white">menu</span>
-                    </button>
-
-                    {/* Balance Badge in Header */}
-                    <button
-                        onClick={() => setActiveTab('wallet')}
-                        className="bg-[#1c272d]/90 backdrop-blur-md px-3 py-1.5 rounded-full flex items-center gap-2 border border-white/10 shadow-lg active:scale-95 transition-transform pointer-events-auto"
-                    >
-                        <span className="material-icons text-yellow-500 text-sm">stars</span>
-                        <span className="text-yellow-500 font-bold text-sm tracking-tight">{currentUser.wallet_coins || 0}</span>
-                    </button>
-                </div>
-            )}
+            {/* Header antigo removido: a home no estilo 99 tem header amarelo próprio
+                (avatar + saudação + moedas), e as abas Entrega/Pay também. */}
 
             {/* Side Menu Drawer */}
             {isMenuOpen && (
@@ -719,45 +704,254 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
             )}
 
             {/* ---------------------------------------------------------------------------------- */}
-            {/* VIEW: HOME (Map + Search Bar) */}
+            {/* VIEW: HOME - Estilo 99 (header amarelo + mapa em card + busca + banners + atalhos) */}
             {viewState === 'home' && activeTab === 'home' && !activeRide && (
-                <div className="absolute inset-0 z-10 flex flex-col pointer-events-none">
-                    <div className="flex-1 relative pointer-events-auto">
-                        <AppMap drivers={drivers} userLocation={userLocation} onMarkerClick={onStartChat} settings={settings} />
-                        <div className="absolute top-0 left-0 right-0 h-32 bg-gradient-to-b from-white/80 to-transparent z-10 pointer-events-none"></div>
-
-                        {/* Banners removidos - tela limpa para o cliente */}
-
-                        {/* Home Bottom Sheet - Light Theme */}
-                        <div className="absolute bottom-0 left-0 right-0 bg-white rounded-t-[32px] shadow-[0_-8px_32px_rgba(0,0,0,0.15)] z-40 p-6 pb-20 flex flex-col gap-4 border-t border-gray-200 animate-slide-up pointer-events-auto">
-                            <div className="flex justify-between items-end mb-2">
-                                <div>
-                                    <h3 className="text-gray-500 text-xs font-bold uppercase tracking-wider mb-1">Bom dia, {currentUser.username.split(' ')[0]}!</h3>
-                                    <h1 className="text-gray-900 text-2xl font-black tracking-tight">Para onde vamos?</h1>
+                <div className="absolute inset-0 z-10 flex flex-col bg-gray-100">
+                    {/* Header Amarelo */}
+                    <div className="bg-yellow-400 px-5 pt-5 pb-16 shrink-0 relative">
+                        <div className="flex items-center justify-between">
+                            <button onClick={() => setIsMenuOpen(true)} className="flex items-center gap-3 active:scale-95 transition-transform">
+                                <div className="relative">
+                                    <img src={currentUser.avatar_url || "/logo.png"} className="w-11 h-11 rounded-full object-cover border-2 border-white shadow" />
                                 </div>
+                                <h1 className="text-gray-900 font-black text-2xl tracking-tight">Olá, {currentUser.username.split(' ')[0]}!</h1>
+                            </button>
+                            <button
+                                onClick={() => setActiveTab('pay')}
+                                className="bg-black/10 px-3 py-1.5 rounded-full flex items-center gap-1.5 active:scale-95 transition-transform"
+                            >
+                                <span className="material-icons text-gray-900 text-base">stars</span>
+                                <span className="text-gray-900 font-black text-sm">{sidebarCoins}</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Conteúdo rolável */}
+                    <div className="flex-1 overflow-y-auto relative -mt-12 pb-32">
+                        <div className="px-4 space-y-4">
+                            {/* Card do Mapa */}
+                            <div className="rounded-3xl overflow-hidden shadow-lg h-52 relative bg-gray-200">
+                                <AppMap drivers={drivers} userLocation={userLocation} onMarkerClick={onStartChat} settings={settings} />
                             </div>
 
-                            {/* Main Search Input Trigger */}
+                            {/* Barra de Busca "Para onde vamos?" */}
                             <button
-                                onClick={startSearch}
+                                onClick={() => { setServiceMode('ride'); startSearch(); }}
                                 type="button"
-                                className="w-full bg-gray-100 rounded-2xl p-4 flex items-center gap-3 active:scale-[0.98] transition-all border border-gray-200 shadow-sm cursor-pointer hover:bg-gray-200"
+                                className="w-full bg-white rounded-full py-4 px-6 flex items-center gap-3 shadow-lg active:scale-[0.98] transition-all"
                             >
-                                <span className="material-icons text-accent-600">search</span>
-                                <p className="text-gray-600 text-sm font-medium w-full text-left">Escolher destino</p>
+                                <span className="material-icons text-gray-900 text-2xl">search</span>
+                                <span className="text-gray-900 text-xl font-black tracking-tight">Para onde vamos?</span>
                             </button>
 
-                            {/* Recent/History Placeholder */}
-                            <div className="space-y-2 mt-2">
-                                <div className="flex items-center gap-3 p-2 opacity-50">
-                                    <span className="material-icons text-gray-500 text-sm">history</span>
-                                    <p className="text-gray-500 text-xs">Seus destinos recentes aparecerão aqui.</p>
+                            {/* Banners promocionais em carrossel (cadastrados pelo admin) */}
+                            <AdBanner />
+
+                            {/* Card destaque: Entregas */}
+                            <button
+                                onClick={() => setActiveTab('delivery')}
+                                className="w-full bg-white rounded-2xl p-4 flex items-center justify-between shadow-sm active:scale-[0.98] transition-all"
+                            >
+                                <div className="flex items-center gap-3 text-left">
+                                    <div className="w-11 h-11 rounded-xl bg-yellow-100 flex items-center justify-center">
+                                        <span className="material-icons text-yellow-600">inventory_2</span>
+                                    </div>
+                                    <div>
+                                        <p className="text-gray-900 font-black text-sm">Precisa enviar algo?</p>
+                                        <p className="text-gray-500 text-xs">Peça uma entrega de moto ou carro</p>
+                                    </div>
+                                </div>
+                                <span className="material-icons text-gray-400">chevron_right</span>
+                            </button>
+
+                            {/* Praticidade / Atalhos */}
+                            <div>
+                                <h3 className="text-gray-900 font-black text-lg mb-3 px-1">Praticidade no dia a dia</h3>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <button
+                                        onClick={() => setActiveTab('rewards')}
+                                        className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-2xl p-4 text-left active:scale-[0.98] transition-all shadow-sm"
+                                    >
+                                        <div className="h-1 w-8 bg-blue-500 rounded-full mb-2"></div>
+                                        <p className="text-gray-900 font-black text-sm uppercase leading-tight">Cupons de Desconto</p>
+                                        <p className="text-gray-600 text-xs mt-1">Economize nas corridas!</p>
+                                        <span className="material-icons text-blue-500 text-3xl mt-2">local_offer</span>
+                                    </button>
+                                    <button
+                                        onClick={onOpenBingo}
+                                        className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-2xl p-4 text-left active:scale-[0.98] transition-all shadow-sm"
+                                    >
+                                        <div className="h-1 w-8 bg-orange-500 rounded-full mb-2"></div>
+                                        <p className="text-gray-900 font-black text-sm uppercase leading-tight">Sorteio Ativo</p>
+                                        <p className="text-gray-600 text-xs mt-1">Veja sua cartela do Bingo</p>
+                                        <span className="material-icons text-orange-500 text-3xl mt-2">emoji_events</span>
+                                    </button>
                                 </div>
                             </div>
                         </div>
                     </div>
-                    {/* Bottom Navigation Only on Home */}
-                    {/* Included at the end of component but we can hide it in other states */}
+                </div>
+            )}
+
+            {/* ---------------------------------------------------------------------------------- */}
+            {/* VIEW: ENTREGA - Estilo 99 Entrega */}
+            {viewState === 'home' && activeTab === 'delivery' && !activeRide && (
+                <div className="absolute inset-0 z-10 flex flex-col bg-white">
+                    {/* Header Amarelo */}
+                    <div className="bg-yellow-400 px-5 pt-5 pb-6 shrink-0">
+                        <button onClick={() => setIsMenuOpen(true)} className="flex items-center gap-3 active:scale-95 transition-transform">
+                            <img src={currentUser.avatar_url || "/logo.png"} className="w-11 h-11 rounded-full object-cover border-2 border-white shadow" />
+                            <h1 className="text-gray-900 font-black text-2xl tracking-tight">Olá, {currentUser.username.split(' ')[0]}!</h1>
+                        </button>
+                    </div>
+
+                    <div className="flex-1 overflow-y-auto pb-32">
+                        {/* Hero */}
+                        <div className="text-center pt-8 pb-6 px-6">
+                            <p className="text-gray-700 font-bold text-xl tracking-wide uppercase">Você precisa,</p>
+                            <div className="flex items-center justify-center gap-2 mt-1">
+                                <span className="material-icons text-yellow-500 text-3xl bg-yellow-100 rounded-lg p-1">arrow_forward</span>
+                                <h2 className="text-gray-900 font-black text-4xl tracking-tight">ChegoJá <span className="font-medium">Entrega</span></h2>
+                            </div>
+                            <div className="flex items-center justify-center gap-8 mt-6">
+                                <img
+                                    src={settings?.moto_icon_url || "/images/moto_icon_3d.png"}
+                                    className="w-28 h-28 object-contain drop-shadow-xl"
+                                    onError={(e) => (e.currentTarget.src = 'https://cdn-icons-png.flaticon.com/512/3233/3233315.png')}
+                                    alt="Entrega de moto"
+                                />
+                                <img
+                                    src={settings?.car_icon_url || "/images/car_icon_3d.png"}
+                                    className="w-28 h-28 object-contain drop-shadow-xl"
+                                    onError={(e) => (e.currentTarget.src = 'https://cdn-icons-png.flaticon.com/512/3097/3097180.png')}
+                                    alt="Entrega de carro"
+                                />
+                            </div>
+                        </div>
+
+                        {/* Card de Origem/Destino */}
+                        <div className="mx-4 bg-gray-50 rounded-3xl p-5 shadow-sm border border-gray-100">
+                            <p className="text-gray-900 font-black text-lg mb-4">Enviar encomenda</p>
+
+                            {/* Origem */}
+                            <button
+                                onClick={() => { setServiceMode('delivery'); startSearch('origin'); }}
+                                className="w-full bg-white rounded-2xl p-4 flex items-center gap-3 shadow-sm mb-3 active:scale-[0.98] transition-all text-left"
+                            >
+                                <div className="w-3 h-3 rounded-full border-[3px] border-teal-500 shrink-0"></div>
+                                <div className="flex-1 min-w-0">
+                                    <p className="text-gray-500 text-[10px] font-bold uppercase">Enviar de</p>
+                                    <p className="text-gray-900 font-bold text-sm truncate">{currentAddress || 'Sua localização atual'}</p>
+                                </div>
+                                <span className="material-icons text-gray-400 text-sm">edit</span>
+                            </button>
+
+                            {/* Destino */}
+                            <button
+                                onClick={() => { setServiceMode('delivery'); startSearch('destination'); }}
+                                className="w-full bg-white rounded-2xl p-4 flex items-center gap-3 shadow-sm active:scale-[0.98] transition-all text-left border-2 border-yellow-400"
+                            >
+                                <div className="w-3 h-3 rounded-full border-[3px] border-orange-500 shrink-0"></div>
+                                <div className="flex-1 min-w-0">
+                                    <p className="text-gray-500 text-[10px] font-bold uppercase">Entregar em</p>
+                                    <p className="text-gray-900 font-black text-base truncate">{destination?.address || 'Escolher endereço de entrega'}</p>
+                                </div>
+                                <span className="material-icons text-gray-400">chevron_right</span>
+                            </button>
+
+                            <p className="text-gray-400 text-[11px] mt-4 flex items-center gap-1.5 px-1">
+                                <span className="material-icons text-sm">info</span>
+                                Após escolher o endereço, selecione moto ou carro e confirme a entrega.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ---------------------------------------------------------------------------------- */}
+            {/* VIEW: PAY (Carteira) - Estilo 99Pay */}
+            {viewState === 'home' && activeTab === 'pay' && !activeRide && (
+                <div className="absolute inset-0 z-10 flex flex-col bg-gray-100">
+                    {/* Header Amarelo */}
+                    <div className="bg-yellow-400 px-5 pt-5 pb-24 shrink-0">
+                        <div className="flex items-center justify-between">
+                            <button onClick={() => setIsMenuOpen(true)} className="flex items-center gap-3 active:scale-95 transition-transform">
+                                <img src={currentUser.avatar_url || "/logo.png"} className="w-11 h-11 rounded-full object-cover border-2 border-white shadow" />
+                                <h1 className="text-gray-900 font-black text-2xl tracking-tight">Olá, {currentUser.username.split(' ')[0]}</h1>
+                            </button>
+                            <button onClick={() => setActiveTab('profile')} className="w-10 h-10 rounded-full bg-black/10 flex items-center justify-center active:scale-95">
+                                <span className="material-icons text-gray-900">person</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div className="flex-1 overflow-y-auto -mt-16 pb-32">
+                        <div className="px-4 space-y-4">
+                            {/* Card de Saldo */}
+                            <div className="bg-white rounded-3xl p-6 shadow-lg">
+                                <p className="text-gray-500 font-bold text-sm mb-1">Saldo na Carteira (R$)</p>
+                                <div className="flex items-center justify-between">
+                                    <p className="text-gray-900 font-black text-4xl tracking-tight">
+                                        {((currentUser.financial_balance || 0) + (sidebarCoins * (settings?.coin_value_brl || 0))).toFixed(2).replace('.', ',')}
+                                    </p>
+                                    <button
+                                        onClick={onOpenWallet}
+                                        className="bg-yellow-400 text-gray-900 px-6 py-3 rounded-full font-black text-sm active:scale-95 transition-all shadow"
+                                    >
+                                        Sacar
+                                    </button>
+                                </div>
+                                <div className="flex items-center gap-2 mt-2">
+                                    <span className="material-icons text-yellow-500 text-sm">stars</span>
+                                    <span className="text-gray-600 text-sm font-bold">{sidebarCoins} moedas acumuladas</span>
+                                </div>
+
+                                {/* Atalhos dentro do card */}
+                                <div className="grid grid-cols-3 gap-2 mt-6 pt-5 border-t border-gray-100">
+                                    <button onClick={onOpenWallet} className="flex flex-col items-center gap-2 active:scale-95 transition-all">
+                                        <span className="material-icons text-gray-900 text-2xl">pix</span>
+                                        <span className="text-gray-700 text-xs font-bold">Saque PIX</span>
+                                    </button>
+                                    <button onClick={onOpenWallet} className="flex flex-col items-center gap-2 active:scale-95 transition-all">
+                                        <span className="material-icons text-gray-900 text-2xl">receipt_long</span>
+                                        <span className="text-gray-700 text-xs font-bold">Extrato</span>
+                                    </button>
+                                    <button onClick={() => setActiveTab('rewards')} className="flex flex-col items-center gap-2 active:scale-95 transition-all">
+                                        <span className="material-icons text-gray-900 text-2xl">local_offer</span>
+                                        <span className="text-gray-700 text-xs font-bold">Cupons</span>
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Serviços */}
+                            <div>
+                                <div className="flex items-center justify-between px-1 mb-3">
+                                    <h3 className="text-gray-900 font-black text-lg">Serviços</h3>
+                                </div>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <button onClick={() => setActiveTab('rewards')} className="bg-white rounded-2xl p-4 text-left shadow-sm active:scale-[0.98] transition-all relative overflow-hidden">
+                                        <span className="absolute top-3 right-3 bg-teal-100 text-teal-700 text-[9px] font-black px-2 py-0.5 rounded-md uppercase">Grátis</span>
+                                        <div className="w-10 h-10 rounded-xl bg-teal-50 flex items-center justify-center mb-2">
+                                            <span className="material-icons text-teal-600">card_giftcard</span>
+                                        </div>
+                                        <p className="text-gray-900 font-black text-sm">Prêmios</p>
+                                        <p className="text-gray-500 text-xs">Recompensas e cupons</p>
+                                    </button>
+                                    <button onClick={onOpenBingo} className="bg-white rounded-2xl p-4 text-left shadow-sm active:scale-[0.98] transition-all relative overflow-hidden">
+                                        <span className="absolute top-3 right-3 bg-orange-100 text-orange-700 text-[9px] font-black px-2 py-0.5 rounded-md uppercase">Ativo</span>
+                                        <div className="w-10 h-10 rounded-xl bg-orange-50 flex items-center justify-center mb-2">
+                                            <span className="material-icons text-orange-500">casino</span>
+                                        </div>
+                                        <p className="text-gray-900 font-black text-sm">Bingo</p>
+                                        <p className="text-gray-500 text-xs">Sorteio de prêmios</p>
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Banners também aparecem na área Pay */}
+                            <AdBanner />
+                        </div>
+                    </div>
                 </div>
             )}
 
@@ -998,8 +1192,12 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
                         {viewState === 'vehicle_select' && (
                             <div className="absolute bottom-0 left-0 right-0 bg-white rounded-t-[32px] shadow-[0_-8px_32px_rgba(0,0,0,0.15)] z-30 overflow-hidden flex flex-col max-h-[60%] animate-slide-up border-t border-gray-200 pb-16">
                                 <div className="p-4 border-b border-gray-200 flex items-center justify-between bg-gray-50">
-                                    <h3 className="text-gray-900 font-bold text-sm pl-2">Escolha como viajar</h3>
-                                    <span className="text-[10px] bg-accent-100 text-accent-700 px-2 py-1 rounded-lg font-bold">Opcionais</span>
+                                    <h3 className="text-gray-900 font-bold text-sm pl-2">
+                                        {serviceMode === 'delivery' ? '📦 Escolha o veículo da entrega' : 'Escolha como viajar'}
+                                    </h3>
+                                    <span className="text-[10px] bg-accent-100 text-accent-700 px-2 py-1 rounded-lg font-bold">
+                                        {serviceMode === 'delivery' ? 'Entrega' : 'Opcionais'}
+                                    </span>
                                 </div>
 
                                 <div className="overflow-y-auto p-4 space-y-3 pb-32">
@@ -1222,7 +1420,9 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
                                         onClick={() => handleRequestRide(selectedVehicleType)}
                                         className={`w-full ${selectedVehicleType === 'car' ? 'bg-accent-500 hover:bg-accent-600 text-accent-ink' : 'bg-orange-500 hover:bg-orange-600 text-white'} py-5 rounded-2xl font-black text-base shadow-xl active:scale-[0.98] transition-all mb-24`}
                                     >
-                                        Confirmar {selectedVehicleType === 'car' ? (settings?.car_name || 'CARRO') : (settings?.moto_name || 'MOTO')}
+                                        {serviceMode === 'delivery'
+                                            ? `Pedir Entrega de ${selectedVehicleType === 'car' ? (settings?.car_name || 'CARRO') : (settings?.moto_name || 'MOTO')}`
+                                            : `Confirmar ${selectedVehicleType === 'car' ? (settings?.car_name || 'CARRO') : (settings?.moto_name || 'MOTO')}`}
                                     </button>
                                 </div>
                             </div>
@@ -1522,36 +1722,29 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
                 </div>
             </div>
 
-            {/* Premium Bottom Navigation - HIDDEN for cleaner home design */}
-            {/* The menu is now accessible via the hamburger menu button */}
-            {false && viewState === 'home' && !activeRide && (
-                <div className="fixed bottom-4 left-3 right-3 z-[40] pb-safe-area animate-slide-up">
-                    <div className="bg-[#121b22]/95 backdrop-blur-xl border border-white/10 rounded-[32px] h-[74px] grid grid-cols-5 items-center justify-items-center shadow-[0_8px_32px_rgba(0,0,0,0.6)] relative">
-                        <button onClick={() => setActiveTab('home')} className={`w-full h-full flex flex-col items-center justify-center gap-1.5 transition-all active:scale-90 ${activeTab === 'home' ? 'text-whatsapp-green' : 'text-gray-500 opacity-60'}`}>
-                            <span className="material-icons text-[26px]">{activeTab === 'home' ? 'home' : 'home'}</span>
-                            <span className="text-[9px] font-bold uppercase tracking-tight">Início</span>
-                            {activeTab === 'home' && <div className="absolute bottom-2 w-1 h-1 bg-whatsapp-green rounded-full shadow-[0_0_8px_currentColor]"></div>}
-                        </button>
-                        <button onClick={() => setActiveTab('drivers')} className={`w-full h-full flex flex-col items-center justify-center gap-1.5 transition-all active:scale-90 ${activeTab === 'drivers' ? 'text-whatsapp-green' : 'text-gray-500 opacity-60'}`}>
-                            <span className="material-icons text-[26px]">{activeTab === 'drivers' ? 'people' : 'people_outline'}</span>
-                            <span className="text-[9px] font-bold uppercase tracking-tight">Drivers</span>
-                            {activeTab === 'drivers' && <div className="absolute bottom-2 w-1 h-1 bg-whatsapp-green rounded-full shadow-[0_0_8px_currentColor]"></div>}
-                        </button>
-                        <div className="relative w-full h-full flex items-center justify-center">
-                            <div className="absolute -top-[34px] left-1/2 -translate-x-1/2 w-[72px] h-[72px] rounded-full p-[4px] bg-[#121b22] shadow-[0_-4px_16px_rgba(0,0,0,0.3)] rounded-full clip-circle">
-                                <button onClick={() => onOpenWallet && onOpenWallet()} className="w-full h-full rounded-full bg-gradient-to-br from-yellow-400 via-orange-500 to-yellow-600 flex items-center justify-center shadow-lg active:scale-95 transition-transform"><span className="material-icons text-white text-[32px] drop-shadow-md animate-pulse">casino</span></button>
-                            </div>
-                            <span className={`absolute bottom-2 text-[9px] font-black uppercase tracking-widest transition-all ${activeTab === 'rewards' ? 'text-yellow-400' : 'text-gray-500/80'}`}>Prêmios</span>
-                        </div>
-                        <button onClick={() => setActiveTab('wallet')} className={`w-full h-full flex flex-col items-center justify-center gap-1.5 transition-all active:scale-90 ${activeTab === 'wallet' ? 'text-whatsapp-green' : 'text-gray-500 opacity-60'}`}>
-                            <span className="material-icons text-[26px]">{activeTab === 'wallet' ? 'account_balance_wallet' : 'account_balance_wallet'}</span>
-                            <span className="text-[9px] font-bold uppercase tracking-tight">Carteira</span>
-                            {activeTab === 'wallet' && <div className="absolute bottom-2 w-1 h-1 bg-whatsapp-green rounded-full shadow-[0_0_8px_currentColor]"></div>}
-                        </button>
-                        <button onClick={onOpenBingo} className="w-full h-full flex flex-col items-center justify-center gap-1.5 transition-all active:scale-90 text-gray-500 opacity-60 hover:opacity-100">
-                            <span className="material-icons text-[26px]">style</span>
-                            <span className="text-[9px] font-bold uppercase tracking-tight">Bingo</span>
-                        </button>
+            {/* Bottom Navigation - Estilo 99 (pílula flutuante: Corrida | Entrega | Pay) */}
+            {viewState === 'home' && !activeRide && (activeTab === 'home' || activeTab === 'delivery' || activeTab === 'pay') && (
+                <div className="absolute bottom-5 left-1/2 -translate-x-1/2 z-[45] pb-safe-area">
+                    <div className="bg-white rounded-full shadow-[0_8px_30px_rgba(0,0,0,0.2)] px-4 py-2 flex items-center gap-2">
+                        {([
+                            { tab: 'home', icon: 'directions_car', label: 'Corrida' },
+                            { tab: 'delivery', icon: 'inventory_2', label: 'Entrega' },
+                            { tab: 'pay', icon: 'attach_money', label: 'Pay' },
+                        ] as const).map(({ tab, icon, label }) => {
+                            const isActive = activeTab === tab;
+                            return (
+                                <button
+                                    key={tab}
+                                    onClick={() => setActiveTab(tab)}
+                                    className="flex flex-col items-center justify-center transition-all active:scale-90 px-3"
+                                >
+                                    <div className={`flex items-center justify-center rounded-full transition-all ${isActive ? 'bg-yellow-400 w-14 h-14 -my-4 shadow-lg' : 'w-10 h-8'}`}>
+                                        <span className={`material-icons ${isActive ? 'text-gray-900 text-2xl' : 'text-gray-700 text-xl'}`}>{icon}</span>
+                                    </div>
+                                    {!isActive && <span className="text-gray-600 text-[11px] font-bold mt-0.5">{label}</span>}
+                                </button>
+                            );
+                        })}
                     </div>
                 </div>
             )}

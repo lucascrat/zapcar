@@ -1,12 +1,20 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../services/supabaseClient';
 import { Banner } from '../types';
 
+/**
+ * Carrossel de banners promocionais (estilo 99Pay).
+ * Rolagem horizontal com snap, avanço automático a cada 5s e indicadores (dots).
+ * Os banners são cadastrados pelo admin (proporção recomendada 3:1, ex: 1200x400).
+ */
 export const AdBanner: React.FC = () => {
     const [banners, setBanners] = useState<Banner[]>([]);
     const [currentIndex, setCurrentIndex] = useState(0);
     const [isLoading, setIsLoading] = useState(true);
+    const scrollRef = useRef<HTMLDivElement>(null);
+    const isUserScrolling = useRef(false);
+    const userScrollTimeout = useRef<any>(null);
 
     useEffect(() => {
         const fetchBanners = async () => {
@@ -22,7 +30,6 @@ export const AdBanner: React.FC = () => {
             }
 
             if (data) {
-                console.log('Banners carregados:', data);
                 setBanners(data);
             }
             setIsLoading(false);
@@ -40,39 +47,84 @@ export const AdBanner: React.FC = () => {
         };
     }, []);
 
+    // Auto-advance a cada 5s (pausa enquanto o usuário arrasta manualmente)
     useEffect(() => {
         if (banners.length <= 1) return;
 
         const interval = setInterval(() => {
-            setCurrentIndex((prev) => (prev + 1) % banners.length);
+            if (isUserScrolling.current) return;
+            setCurrentIndex((prev) => {
+                const next = (prev + 1) % banners.length;
+                scrollToIndex(next);
+                return next;
+            });
         }, 5000);
 
         return () => clearInterval(interval);
     }, [banners]);
 
-    // Don't render anything if no banners or still loading
+    const scrollToIndex = (idx: number) => {
+        const el = scrollRef.current;
+        if (!el) return;
+        const child = el.children[idx] as HTMLElement | undefined;
+        if (child) {
+            el.scrollTo({ left: child.offsetLeft - el.offsetLeft, behavior: 'smooth' });
+        }
+    };
+
+    // Sincroniza o dot ativo quando o usuário arrasta manualmente
+    const handleScroll = () => {
+        const el = scrollRef.current;
+        if (!el || banners.length === 0) return;
+
+        isUserScrolling.current = true;
+        if (userScrollTimeout.current) clearTimeout(userScrollTimeout.current);
+        userScrollTimeout.current = setTimeout(() => { isUserScrolling.current = false; }, 2500);
+
+        const cardWidth = el.scrollWidth / banners.length;
+        const idx = Math.round(el.scrollLeft / cardWidth);
+        if (idx !== currentIndex && idx >= 0 && idx < banners.length) {
+            setCurrentIndex(idx);
+        }
+    };
+
     if (isLoading || banners.length === 0) return null;
 
-    const banner = banners[currentIndex];
-
     return (
-        <div className="w-full h-32 sm:h-40 rounded-xl overflow-hidden shadow-lg mb-4 relative group cursor-pointer"
-            onClick={() => banner.link_url && window.open(banner.link_url, '_blank')}>
-            <img
-                src={banner.image_url}
-                alt="Banner Promocional"
-                className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
-                onError={(e) => {
-                    console.error('Erro ao carregar imagem do banner:', banner.image_url);
-                    (e.target as HTMLImageElement).style.display = 'none';
-                }}
-            />
+        <div className="w-full">
+            <div
+                ref={scrollRef}
+                onScroll={handleScroll}
+                className="flex overflow-x-auto snap-x snap-mandatory scrollbar-hide gap-3 -mx-1 px-1"
+                style={{ scrollbarWidth: 'none' }}
+            >
+                {banners.map((banner) => (
+                    <div
+                        key={banner.id}
+                        onClick={() => banner.link_url && window.open(banner.link_url, '_blank')}
+                        className="snap-center shrink-0 w-full rounded-2xl overflow-hidden shadow-md bg-white cursor-pointer active:scale-[0.99] transition-transform"
+                        style={{ aspectRatio: '3 / 1' }}
+                    >
+                        <img
+                            src={banner.image_url}
+                            alt="Banner Promocional"
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                                (e.target as HTMLImageElement).parentElement!.style.display = 'none';
+                            }}
+                        />
+                    </div>
+                ))}
+            </div>
+
             {banners.length > 1 && (
-                <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1">
+                <div className="flex justify-center gap-1.5 mt-2">
                     {banners.map((_, idx) => (
-                        <div
+                        <button
                             key={idx}
-                            className={`w-1.5 h-1.5 rounded-full transition-all ${idx === currentIndex ? 'bg-white w-4' : 'bg-white/50'}`}
+                            onClick={() => { setCurrentIndex(idx); scrollToIndex(idx); }}
+                            className={`h-1.5 rounded-full transition-all ${idx === currentIndex ? 'bg-gray-800 w-5' : 'bg-gray-300 w-1.5'}`}
+                            aria-label={`Banner ${idx + 1}`}
                         />
                     ))}
                 </div>

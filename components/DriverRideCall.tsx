@@ -92,7 +92,15 @@ export const DriverRideCall: React.FC<DriverRideCallProps> = ({ ride, onAccept, 
 
                     {/* Meta Data */}
                     <div className="mb-6">
-                        <h2 className="text-[10px] font-black text-[#00a884] mb-1 uppercase tracking-[0.2em]">Solicitação de Viagem</h2>
+                        {ride.is_delivery && (
+                            <div className="inline-flex items-center gap-1.5 bg-yellow-500/20 border border-yellow-500/40 text-yellow-400 px-3 py-1 rounded-full mb-2">
+                                <span className="material-icons text-sm">inventory_2</span>
+                                <span className="text-[11px] font-black uppercase tracking-widest">Entrega de Pacote</span>
+                            </div>
+                        )}
+                        <h2 className="text-[10px] font-black text-[#00a884] mb-1 uppercase tracking-[0.2em]">
+                            {ride.is_delivery ? 'Solicitação de Entrega' : 'Solicitação de Viagem'}
+                        </h2>
                         <div className="flex justify-center items-center gap-2">
                             <span className="text-4xl font-extrabold text-white tracking-tighter drop-shadow-sm">
                                 {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 2 }).format(ride.estimated_price || 0)}

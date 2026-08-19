@@ -105,6 +105,22 @@ export const AdminBannersView: React.FC = () => {
                     <h3 className="admin-card-title">Adicionar Novo Banner</h3>
                 </div>
                 <div className="admin-card-body space-y-4">
+                    {/* Guia de proporção recomendada - a tela do app exibe o banner numa
+                        faixa larga e baixa (w-full h-32/h-40 com object-cover), então uma
+                        imagem fora dessa proporção fica cortada nas laterais ou no topo/base. */}
+                    <div className="rounded-lg border border-blue-500/30 bg-blue-500/10 p-4 flex gap-3">
+                        <span className="material-icons text-blue-400" style={{ fontSize: '20px' }}>aspect_ratio</span>
+                        <div className="text-sm text-gray-300 space-y-1">
+                            <p className="font-semibold text-blue-300">Tamanho ideal: 1200 x 400 px (proporção 3:1)</p>
+                            <p>O banner aparece como uma faixa larga e baixa no app — imagens fora dessa proporção são cortadas automaticamente (corte central) para preencher o espaço.</p>
+                            <ul className="list-disc list-inside text-gray-400 space-y-0.5 mt-1">
+                                <li>Formato: JPG, PNG ou WEBP</li>
+                                <li>Tamanho do arquivo: até 500 KB (carrega mais rápido)</li>
+                                <li>Mantenha texto e logo centralizados — as bordas podem ser cortadas em telas menores</li>
+                            </ul>
+                        </div>
+                    </div>
+
                     <div className="admin-form-group">
                         <label className="admin-form-label">Upload de Imagem</label>
                         <input

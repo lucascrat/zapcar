@@ -252,6 +252,7 @@ export interface Ride {
   ignored_drivers?: string[]; // IDs do Supabase
   is_broadcast?: boolean;
   is_direct?: boolean; // Novo campo
+  is_delivery?: boolean; // Entrega de pacote (99 Entrega style) em vez de corrida de passageiro
   last_driver_offered_at?: string;
 
   // Sistema de Notificação Sequencial (ver services/sequentialNotifications.ts)
