@@ -93,7 +93,7 @@ export const DriverRideCall: React.FC<DriverRideCallProps> = ({ ride, onAccept, 
                     {/* Meta Data */}
                     <div className="mb-6">
                         {ride.is_delivery && (
-                            <div className="inline-flex items-center gap-1.5 bg-yellow-500/20 border border-yellow-500/40 text-yellow-400 px-3 py-1 rounded-full mb-2">
+                            <div className="inline-flex items-center gap-1.5 bg-brand-500/20 border border-brand-500/40 text-brand-400 px-3 py-1 rounded-full mb-2">
                                 <span className="material-icons text-sm">inventory_2</span>
                                 <span className="text-[11px] font-black uppercase tracking-widest">Entrega de Pacote</span>
                             </div>

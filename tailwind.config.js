@@ -34,6 +34,23 @@ export default {
                     DEFAULT: '#E8A23D',
                     ink: '#241A05',
                 },
+                // Cor da marca - verde limão (combina com a logo). Substitui o
+                // amarelo que vinha do layout inspirado no 99. Tom claro o bastante
+                // para texto escuro (gray-900) permanecer legível sobre brand-400.
+                brand: {
+                    50: '#f3faea',
+                    100: '#e2f3c7',
+                    200: '#cbe89b',
+                    300: '#b0db6b',
+                    400: '#95cc3f',
+                    500: '#7fb62f',
+                    600: '#639122',
+                    700: '#4d6f1c',
+                    800: '#3a5417',
+                    900: '#2b3f12',
+                    DEFAULT: '#95cc3f',
+                    ink: '#18240a',
+                },
             },
             gridTemplateColumns: {
                 '15': 'repeat(15, minmax(0, 1fr))',

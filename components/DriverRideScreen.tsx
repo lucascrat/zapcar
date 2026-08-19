@@ -207,7 +207,7 @@ export const DriverRideScreen: React.FC<DriverRideScreenProps> = ({ ride, driver
 
                     {/* Badge de Entrega (quando a solicitação é entrega de pacote, não corrida) */}
                     {ride.is_delivery && (
-                        <div className="flex items-center justify-center gap-1.5 bg-yellow-500/15 border border-yellow-500/30 text-yellow-400 py-1.5 rounded-xl">
+                        <div className="flex items-center justify-center gap-1.5 bg-brand-500/15 border border-brand-500/30 text-brand-400 py-1.5 rounded-xl">
                             <span className="material-icons text-sm">inventory_2</span>
                             <span className="text-[10px] font-black uppercase tracking-widest">Entrega de Pacote</span>
                         </div>

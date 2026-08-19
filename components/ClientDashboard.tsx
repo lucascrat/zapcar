@@ -644,7 +644,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
                                     <img src={currentUser.avatar_url || "/logo.png"} className="w-14 h-14 rounded-full border-2 border-whatsapp-green object-cover" />
                                     <div>
                                         <h2 className="text-white font-bold text-lg leading-tight">{currentUser.username.split(' ')[0]}</h2>
-                                        <p className="text-gray-400 text-xs text-yellow-500 flex items-center gap-1 font-bold mt-1">
+                                        <p className="text-gray-400 text-xs text-brand-600 flex items-center gap-1 font-bold mt-1">
                                             <span className="material-icons text-[12px]">star</span> 5.0
                                         </p>
                                     </div>
@@ -652,7 +652,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
                             </div>
 
                             {/* Wallet Balance in Sidebar */}
-                            <div className="bg-gradient-to-r from-yellow-500 to-orange-600 p-4 rounded-2xl shadow-lg shadow-orange-950/20 active:scale-95 transition-transform" onClick={() => { setActiveTab('wallet'); setIsMenuOpen(false); }}>
+                            <div className="bg-gradient-to-r from-brand-500 to-brand-600 p-4 rounded-2xl shadow-lg shadow-brand-900/20 active:scale-95 transition-transform" onClick={() => { setActiveTab('wallet'); setIsMenuOpen(false); }}>
                                 <div className="flex items-center justify-between">
                                     <div className="flex items-center gap-2">
                                         <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center">
@@ -708,7 +708,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
             {viewState === 'home' && activeTab === 'home' && !activeRide && (
                 <div className="absolute inset-0 z-10 flex flex-col bg-gray-100">
                     {/* Header Amarelo */}
-                    <div className="bg-yellow-400 px-5 pt-5 pb-16 shrink-0 relative">
+                    <div className="bg-brand-400 px-5 pt-5 pb-16 shrink-0 relative">
                         <div className="flex items-center justify-between">
                             <button onClick={() => setIsMenuOpen(true)} className="flex items-center gap-3 active:scale-95 transition-transform">
                                 <div className="relative">
@@ -753,8 +753,8 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
                                 className="w-full bg-white rounded-2xl p-4 flex items-center justify-between shadow-sm active:scale-[0.98] transition-all"
                             >
                                 <div className="flex items-center gap-3 text-left">
-                                    <div className="w-11 h-11 rounded-xl bg-yellow-100 flex items-center justify-center">
-                                        <span className="material-icons text-yellow-600">inventory_2</span>
+                                    <div className="w-11 h-11 rounded-xl bg-brand-100 flex items-center justify-center">
+                                        <span className="material-icons text-brand-700">inventory_2</span>
                                     </div>
                                     <div>
                                         <p className="text-gray-900 font-black text-sm">Precisa enviar algo?</p>
@@ -798,7 +798,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
             {viewState === 'home' && activeTab === 'delivery' && !activeRide && (
                 <div className="absolute inset-0 z-10 flex flex-col bg-white">
                     {/* Header Amarelo */}
-                    <div className="bg-yellow-400 px-5 pt-5 pb-6 shrink-0">
+                    <div className="bg-brand-400 px-5 pt-5 pb-6 shrink-0">
                         <button onClick={() => setIsMenuOpen(true)} className="flex items-center gap-3 active:scale-95 transition-transform">
                             <img src={currentUser.avatar_url || "/logo.png"} className="w-11 h-11 rounded-full object-cover border-2 border-white shadow" />
                             <h1 className="text-gray-900 font-black text-2xl tracking-tight">Olá, {currentUser.username.split(' ')[0]}!</h1>
@@ -810,7 +810,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
                         <div className="text-center pt-8 pb-6 px-6">
                             <p className="text-gray-700 font-bold text-xl tracking-wide uppercase">Você precisa,</p>
                             <div className="flex items-center justify-center gap-2 mt-1">
-                                <span className="material-icons text-yellow-500 text-3xl bg-yellow-100 rounded-lg p-1">arrow_forward</span>
+                                <span className="material-icons text-brand-600 text-3xl bg-brand-100 rounded-lg p-1">arrow_forward</span>
                                 <h2 className="text-gray-900 font-black text-4xl tracking-tight">ChegoJá <span className="font-medium">Entrega</span></h2>
                             </div>
                             <div className="flex items-center justify-center gap-8 mt-6">
@@ -849,7 +849,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
                             {/* Destino */}
                             <button
                                 onClick={() => { setServiceMode('delivery'); startSearch('destination'); }}
-                                className="w-full bg-white rounded-2xl p-4 flex items-center gap-3 shadow-sm active:scale-[0.98] transition-all text-left border-2 border-yellow-400"
+                                className="w-full bg-white rounded-2xl p-4 flex items-center gap-3 shadow-sm active:scale-[0.98] transition-all text-left border-2 border-brand-400"
                             >
                                 <div className="w-3 h-3 rounded-full border-[3px] border-orange-500 shrink-0"></div>
                                 <div className="flex-1 min-w-0">
@@ -873,7 +873,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
             {viewState === 'home' && activeTab === 'pay' && !activeRide && (
                 <div className="absolute inset-0 z-10 flex flex-col bg-gray-100">
                     {/* Header Amarelo */}
-                    <div className="bg-yellow-400 px-5 pt-5 pb-24 shrink-0">
+                    <div className="bg-brand-400 px-5 pt-5 pb-24 shrink-0">
                         <div className="flex items-center justify-between">
                             <button onClick={() => setIsMenuOpen(true)} className="flex items-center gap-3 active:scale-95 transition-transform">
                                 <img src={currentUser.avatar_url || "/logo.png"} className="w-11 h-11 rounded-full object-cover border-2 border-white shadow" />
@@ -896,13 +896,13 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
                                     </p>
                                     <button
                                         onClick={onOpenWallet}
-                                        className="bg-yellow-400 text-gray-900 px-6 py-3 rounded-full font-black text-sm active:scale-95 transition-all shadow"
+                                        className="bg-brand-400 text-gray-900 px-6 py-3 rounded-full font-black text-sm active:scale-95 transition-all shadow"
                                     >
                                         Sacar
                                     </button>
                                 </div>
                                 <div className="flex items-center gap-2 mt-2">
-                                    <span className="material-icons text-yellow-500 text-sm">stars</span>
+                                    <span className="material-icons text-brand-600 text-sm">stars</span>
                                     <span className="text-gray-600 text-sm font-bold">{sidebarCoins} moedas acumuladas</span>
                                 </div>
 
@@ -1055,13 +1055,13 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
                                         onClick={() => handleSelectAddress(item)}
                                         className="p-4 border-b border-gray-200 flex items-center gap-4 hover:bg-gray-50 active:bg-gray-100 transition-colors cursor-pointer"
                                     >
-                                        <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${item.isHistory ? 'bg-yellow-100 text-yellow-600' : 'bg-accent-100 text-accent-600'}`}>
+                                        <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${item.isHistory ? 'bg-brand-100 text-brand-700' : 'bg-accent-100 text-accent-600'}`}>
                                             <span className="material-icons text-sm">{item.isHistory ? 'history' : 'place'}</span>
                                         </div>
                                         <div className="flex-1 min-w-0">
                                             <p className="text-gray-900 text-sm font-bold truncate">{item.description.split(',')[0]}</p>
                                             <p className="text-gray-600 text-xs truncate">{item.description}</p>
-                                            {item.isHistory && <p className="text-[9px] text-yellow-700 uppercase mt-0.5">Sugerido pelo Histórico</p>}
+                                            {item.isHistory && <p className="text-[9px] text-brand-700 uppercase mt-0.5">Sugerido pelo Histórico</p>}
                                         </div>
                                         <span className="material-icons text-gray-400 text-lg">chevron_right</span>
                                     </div>
@@ -1079,7 +1079,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
                                                 onClick={() => handleSelectAddress(item)}
                                                 className="p-4 border-b border-white/5 flex items-center gap-4 hover:bg-white/5 active:bg-white/10 transition-colors cursor-pointer"
                                             >
-                                                <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 bg-yellow-500/10 text-yellow-500">
+                                                <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 bg-brand-500/10 text-brand-600">
                                                     <span className="material-icons text-sm">history</span>
                                                 </div>
                                                 <div className="flex-1 min-w-0">
@@ -1386,12 +1386,12 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
                                         <div className={`w-6 h-6 rounded flex items-center justify-center ${paymentMethod === 'cash' ? 'bg-green-100' :
                                             paymentMethod === 'pix' ? 'bg-teal-100' :
                                                 paymentMethod === 'card' ? 'bg-blue-100' :
-                                                    'bg-yellow-100'
+                                                    'bg-brand-100'
                                             }`}>
                                             <span className={`material-icons text-xs ${paymentMethod === 'cash' ? 'text-green-600' :
                                                 paymentMethod === 'pix' ? 'text-teal-600' :
                                                     paymentMethod === 'card' ? 'text-blue-600' :
-                                                        'text-yellow-600'
+                                                        'text-brand-700'
                                                 }`}>
                                                 {paymentMethod === 'cash' ? 'attach_money' :
                                                     paymentMethod === 'pix' ? 'pix' :
@@ -1537,7 +1537,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
                                     </div>
                                     <p className="mt-3 text-gray-900 font-bold text-lg">{currentUser.username}</p>
                                     <p className="text-gray-500 text-sm flex items-center gap-1">
-                                        <span className="material-icons text-xs text-yellow-500">star</span> 5.0
+                                        <span className="material-icons text-xs text-brand-600">star</span> 5.0
                                     </p>
                                 </div>
 
@@ -1738,7 +1738,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
                                     onClick={() => setActiveTab(tab)}
                                     className="flex flex-col items-center justify-center transition-all active:scale-90 px-3"
                                 >
-                                    <div className={`flex items-center justify-center rounded-full transition-all ${isActive ? 'bg-yellow-400 w-14 h-14 -my-4 shadow-lg' : 'w-10 h-8'}`}>
+                                    <div className={`flex items-center justify-center rounded-full transition-all ${isActive ? 'bg-brand-400 w-14 h-14 -my-4 shadow-lg' : 'w-10 h-8'}`}>
                                         <span className={`material-icons ${isActive ? 'text-gray-900 text-2xl' : 'text-gray-700 text-xl'}`}>{icon}</span>
                                     </div>
                                     {!isActive && <span className="text-gray-600 text-[11px] font-bold mt-0.5">{label}</span>}
