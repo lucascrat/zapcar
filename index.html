@@ -3,6 +3,16 @@
 
 <head>
   <meta charset="UTF-8" />
+  <!-- Redireciona /privacy para a pagina estatica de politica de privacidade.
+       Roda antes de tudo para o caso de o servidor (nginx antigo em cache no
+       Coolify) mandar /privacy pro SPA em vez de servir /privacy.html direto.
+       No Firebase o rewrite ja resolve isso e este script nem chega a rodar. -->
+  <script>
+    (function () {
+      var p = location.pathname.replace(/\/+$/, '');
+      if (p === '/privacy') { location.replace('/privacy.html'); }
+    })();
+  </script>
   <meta name="google-adsense-account" content="ca-pub-6105194579101073">
   <meta name="viewport"
     content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, interactive-widget=resizes-content" />
