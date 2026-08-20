@@ -697,7 +697,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
                         </div>
 
                         <div className="p-6 border-t border-white/5">
-                            <p className="text-center text-gray-600 text-[10px] font-bold uppercase tracking-widest">ChegoJá v4.5.1</p>
+                            <p className="text-center text-gray-600 text-[10px] font-bold uppercase tracking-widest">ChegoJá v6.2</p>
                         </div>
                     </div>
                 </>

@@ -11,7 +11,7 @@ import {
 } from '../services/supabaseClient';
 import { APP_NAME } from '../constants';
 
-const APP_VERSION = "6.1 (Stable)";
+const APP_VERSION = "6.2 (Stable)";
 
 interface LoginFlowProps {
     onLoginSuccess: (user: UserProfile) => void;
