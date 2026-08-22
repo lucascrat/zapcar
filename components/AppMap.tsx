@@ -90,6 +90,22 @@ export const AppMap: React.FC<AppMapProps> = ({
     const lastRouteKey = useRef<string>('');
     const lastPosKey = useRef<string>('');
     const [isFollowing, setIsFollowing] = useState(true);
+    // Rastreia a transição de isFollowing (borda de subida) fora do modo de
+    // navegação. Sem isso, a cada leitura de GPS (mesmo parado, o GPS "treme"
+    // alguns metros) o mapa forçava a câmera de volta pro motorista - dava a
+    // sensação de "não consigo arrastar o mapa, ele volta sozinho sempre".
+    // Em navigationMode isso não se aplica: ali o recentro contínuo é o
+    // comportamento certo (navegação turn-by-turn).
+    // Começa em `false` de propósito (não `isFollowing`): garante que a
+    // primeiríssima leitura de GPS real sempre centralize o mapa, mesmo que
+    // ele tenha aberto no fallback (Brasil inteiro) por falta de localização
+    // no momento da criação.
+    const prevIsFollowing = useRef(false);
+    // Última posição onde a câmera foi de fato recentralizada (fora do modo
+    // de navegação). Usado junto com prevIsFollowing: só recentraliza de novo
+    // por causa do GPS se o motorista realmente se moveu uma distância
+    // relevante - tremedeira do GPS parado não conta.
+    const lastCenteredPos = useRef<{ lat: number; lng: number } | null>(null);
     const routeSteps = useRef<DirectionsStep[]>([]);
     const [stepIndex, setStepIndex] = useState(0);
     const lastSpokenIndex = useRef<number>(-1);
@@ -133,9 +149,19 @@ export const AppMap: React.FC<AppMapProps> = ({
     // o mapa centralizado numa cidade errada pro usuário: o app precisa
     // reconhecer a cidade real de cada cliente/motorista em qualquer lugar
     // do Brasil, não só onde o app opera hoje.
+    // Dispara a criação do mapa apenas UMA VEZ, quando a localização inicial
+    // fica disponível (ou desistimos de esperar) - nunca de novo depois disso.
+    // Importante: a dependência é um booleano derivado (`hasLocation`), não o
+    // objeto `userLocation` em si. Cada leitura de GPS cria um objeto novo
+    // ({lat, lng}) mesmo com o mesmo valor; se o objeto fosse dependência
+    // direta, o efeito re-rodaria a cada atualização de GPS, e o cleanup
+    // abaixo destruiria e recriaria o mapa inteiro toda vez - era isso que
+    // causava o "piscar" contínuo do mapa. Atualizações de posição depois da
+    // criação já são tratadas à parte (marcador do usuário, mais abaixo).
+    const hasLocation = !!userLocation;
     useEffect(() => {
         if (!mapRef.current || mapInstance.current) return;
-        if (!userLocation && !locationTimedOut) return; // ainda aguardando GPS
+        if (!hasLocation && !locationTimedOut) return; // ainda aguardando GPS
         let cancelled = false;
 
         getMapProviderPromise().then((provider) => {
@@ -170,7 +196,7 @@ export const AppMap: React.FC<AppMapProps> = ({
             }
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [userLocation, locationTimedOut]);
+    }, [hasLocation, locationTimedOut]);
 
     // Driver markers with animated position + rotation
     useEffect(() => {
@@ -393,10 +419,24 @@ export const AppMap: React.FC<AppMapProps> = ({
         }
 
         if (isFollowing && navigationMode) {
+            // Navegação turn-by-turn: seguir a cada atualização é o correto.
             easeTo(handle, { lat: userLocation.lat, lng: userLocation.lng, pitch: 65, zoom: 19, bearing: heading, durationMs: 500 });
         } else if (isFollowing && !navigationMode) {
-            easeTo(handle, { lat: userLocation.lat, lng: userLocation.lng, durationMs: 500 });
+            // Tela normal (não navegando): recentraliza só quando "seguir"
+            // acaba de ser (re)ativado (toque em "Re-centralizar", ou a
+            // primeira localização real chegando) OU quando o motorista
+            // realmente se deslocou uma distância relevante (>40m) desde a
+            // última centralização. Tremedeira de GPS parado (poucos metros)
+            // nunca recentraliza sozinha - senão o motorista não consegue
+            // arrastar o mapa, ele volta puxado a cada leitura.
+            const justStartedFollowing = !prevIsFollowing.current;
+            const movedFar = !lastCenteredPos.current || distMeters(lastCenteredPos.current, userLocation) > 40;
+            if (justStartedFollowing || movedFar) {
+                easeTo(handle, { lat: userLocation.lat, lng: userLocation.lng, durationMs: 500 });
+                lastCenteredPos.current = { lat: userLocation.lat, lng: userLocation.lng };
+            }
         }
+        prevIsFollowing.current = isFollowing;
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [userLocation, navigationMode, heading, isFollowing, mapReadyTick]);
 
