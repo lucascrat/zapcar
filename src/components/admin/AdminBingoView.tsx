@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { BingoSettings, BingoRankingUser } from '../../../types';
 import {
     fetchBingoSettings,
@@ -7,11 +7,14 @@ import {
     drawSpecificBingoNumber,
     resetBingo,
     fetchBingoRanking,
-    subscribeToBingo
+    subscribeToBingo,
+    uploadImageToStorage
 } from '../../../services/supabaseClient';
 import { Card, Button, Badge, Input, Avatar, AnimatedNumber } from '../../components/shared';
+import { useToast } from '../../components/shared/Toast';
 
 export const AdminBingoView: React.FC = () => {
+    const { success, error: toastError } = useToast();
     const [settings, setSettings] = useState<BingoSettings | null>(null);
     const [ranking, setRanking] = useState<BingoRankingUser[]>([]);
     const [loading, setLoading] = useState(true);
@@ -19,6 +22,8 @@ export const AdminBingoView: React.FC = () => {
     const [lastDrawn, setLastDrawn] = useState<number | null>(null);
     const [drawMode, setDrawMode] = useState<'random' | 'manual'>('random');
     const [manualNumber, setManualNumber] = useState('');
+    const [isUploadingPrize, setIsUploadingPrize] = useState(false);
+    const prizeFileInputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
         loadData();
@@ -53,14 +58,33 @@ export const AdminBingoView: React.FC = () => {
         if (!settings) return;
         setIsSaving(true);
         try {
-            const success = await updateBingoSettings(settings);
-            if (success) {
-                // Notificação de sucesso poderia ser implementada aqui
+            const ok = await updateBingoSettings(settings);
+            if (ok) {
+                success('Configurações do Bingo salvas!');
+            } else {
+                toastError('Erro ao salvar configurações — verifique o console (F12).');
             }
         } catch (error) {
             console.error("Erro ao salvar bingo:", error);
+            toastError('Erro inesperado ao salvar.');
         }
         setIsSaving(false);
+    };
+
+    const handlePrizeImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file || !settings) return;
+        setIsUploadingPrize(true);
+        const url = await uploadImageToStorage(file, 'bingo');
+        if (url) {
+            setSettings({ ...settings, prize_image: url });
+            success('Imagem do prêmio enviada!');
+        } else {
+            toastError('Erro ao enviar imagem — verifique o console (F12).');
+        }
+        // limpa o input para permitir reenvio do mesmo arquivo
+        if (prizeFileInputRef.current) prizeFileInputRef.current.value = '';
+        setIsUploadingPrize(false);
     };
 
     const handleDraw = async () => {
@@ -148,13 +172,59 @@ export const AdminBingoView: React.FC = () => {
                                 />
                             </div>
 
-                            <Input
-                                label="Imagem do Prêmio"
-                                placeholder="https://..."
-                                value={settings.prize_image}
-                                onChange={e => setSettings({ ...settings, prize_image: e.target.value })}
-                                icon="image"
-                            />
+                            {/* Imagem do Prêmio — upload de arquivo ou URL */}
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest pl-1">
+                                    Imagem do Prêmio
+                                </label>
+
+                                {/* Preview */}
+                                {settings.prize_image ? (
+                                    <div className="relative group rounded-xl overflow-hidden border border-white/10">
+                                        <img
+                                            src={settings.prize_image}
+                                            alt="Prêmio"
+                                            className="w-full h-32 object-cover"
+                                            onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                                        />
+                                        <button
+                                            className="absolute top-2 right-2 w-7 h-7 bg-red-500/80 hover:bg-red-500 rounded-lg flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                                            onClick={() => setSettings({ ...settings, prize_image: '' })}
+                                            title="Remover imagem"
+                                        >
+                                            <span className="material-icons text-white" style={{ fontSize: 14 }}>close</span>
+                                        </button>
+                                    </div>
+                                ) : null}
+
+                                {/* Upload de arquivo */}
+                                <label
+                                    className={`flex items-center gap-3 p-3 rounded-xl border border-dashed border-white/20 hover:border-primary/50 bg-white/5 hover:bg-white/10 transition-all cursor-pointer ${isUploadingPrize ? 'opacity-50 pointer-events-none' : ''}`}
+                                >
+                                    <span className="material-icons text-gray-400" style={{ fontSize: 20 }}>
+                                        {isUploadingPrize ? 'hourglass_empty' : 'upload'}
+                                    </span>
+                                    <span className="text-sm text-gray-400">
+                                        {isUploadingPrize ? 'Enviando...' : 'Clique para enviar uma imagem'}
+                                    </span>
+                                    <input
+                                        ref={prizeFileInputRef}
+                                        type="file"
+                                        accept="image/*"
+                                        className="hidden"
+                                        onChange={handlePrizeImageUpload}
+                                        disabled={isUploadingPrize}
+                                    />
+                                </label>
+
+                                {/* OU: URL manual */}
+                                <Input
+                                    placeholder="Ou cole uma URL: https://..."
+                                    value={settings.prize_image}
+                                    onChange={e => setSettings({ ...settings, prize_image: e.target.value })}
+                                    icon="link"
+                                />
+                            </div>
 
                             <Input
                                 label="Live Stream URL"

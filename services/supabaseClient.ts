@@ -616,6 +616,37 @@ export const updateBannerOrder = async (bannerId: string, order: number): Promis
   return true;
 };
 
+// Upload genérico para o bucket chat-media em qualquer pasta
+export const uploadImageToStorage = async (file: File, folder: string): Promise<string | null> => {
+  try {
+    const fileExt = file.name.split('.').pop()?.toLowerCase() || 'jpg';
+    const fileName = `${folder}/${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
+
+    const { error } = await supabase.storage
+      .from('chat-media')
+      .upload(fileName, file, {
+        cacheControl: '3600',
+        upsert: false,
+        contentType: file.type
+      });
+
+    if (error) {
+      console.error(`[uploadImageToStorage] Erro ao enviar para ${folder}:`, error);
+      handleDbError(error, `uploadImageToStorage(${folder})`);
+      return null;
+    }
+
+    const { data: { publicUrl } } = supabase.storage
+      .from('chat-media')
+      .getPublicUrl(fileName);
+
+    return publicUrl;
+  } catch (e) {
+    handleDbError(e, `uploadImageToStorage(${folder})_EXCEPTION`);
+    return null;
+  }
+};
+
 // Upload Banner Image to Supabase Storage
 export const uploadBannerImage = async (file: File): Promise<string | null> => {
   try {
