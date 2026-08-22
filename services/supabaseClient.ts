@@ -580,9 +580,10 @@ export const fetchBanners = async (): Promise<Banner[]> => {
 export const addBanner = async (imageUrl: string, linkUrl?: string, order: number = 0): Promise<boolean> => {
   const { error } = await supabase
     .from('banners')
-    .insert([{ image_url: imageUrl, link_url: linkUrl, order, active: true }]);
+    .insert([{ image_url: imageUrl, link_url: linkUrl || null, order, active: true }]);
 
   if (error) {
+    console.error('[addBanner] Falha ao inserir banner:', error);
     handleDbError(error, "addBanner");
     return false;
   }

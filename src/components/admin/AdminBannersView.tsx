@@ -4,18 +4,20 @@
 
 import React, { useState, useEffect } from 'react';
 import { Card, Button } from '../../components/shared';
+import { useToast } from '../../components/shared/Toast';
 import { fetchBanners, addBanner, deleteBanner, uploadBannerImage } from '../../../services/supabaseClient';
 
 interface Banner {
     id: string;
     image_url: string;
-    link_url: string;
-    order_index: number;
-    is_active: boolean;
+    link_url?: string;
+    order: number;
+    active: boolean;
     created_at: string;
 }
 
 export const AdminBannersView: React.FC = () => {
+    const { success, error: toastError } = useToast();
     const [banners, setBanners] = useState<Banner[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [newBannerUrl, setNewBannerUrl] = useState('');
@@ -33,8 +35,8 @@ export const AdminBannersView: React.FC = () => {
         // Ensure all properties exist
         const mapped = data.map((b: any) => ({
             ...b,
-            order_index: b.order_index || 0,
-            is_active: b.is_active !== undefined ? b.is_active : true
+            order: b.order ?? 0,
+            active: b.active !== undefined ? b.active : true
         }));
         setBanners(mapped);
         setIsLoading(false);
@@ -42,7 +44,7 @@ export const AdminBannersView: React.FC = () => {
 
     const handleAddBanner = async () => {
         if (!newBannerUrl.trim() && !bannerFile) {
-            alert('Selecione um arquivo ou informe uma URL da imagem.');
+            toastError('Selecione um arquivo ou informe uma URL da imagem.');
             return;
         }
 
@@ -53,21 +55,24 @@ export const AdminBannersView: React.FC = () => {
         if (bannerFile) {
             const uploadedUrl = await uploadBannerImage(bannerFile);
             if (!uploadedUrl) {
-                alert('Erro ao fazer upload da imagem. Tente novamente.');
+                toastError('Erro ao enviar imagem — verifique o console (F12) e tente novamente.');
                 setIsUploading(false);
                 return;
             }
             imageUrl = uploadedUrl;
         }
 
-        const ok = await addBanner(imageUrl, newBannerLink, banners.length);
+        const ok = await addBanner(imageUrl, newBannerLink || undefined, banners.length);
         if (ok) {
+            success('Banner adicionado com sucesso!');
             setNewBannerUrl('');
             setNewBannerLink('');
             setBannerFile(null);
             const fileInput = document.getElementById('banner-file-input') as HTMLInputElement;
             if (fileInput) fileInput.value = '';
             loadBanners();
+        } else {
+            toastError('Erro ao salvar banner — verifique o console (F12). Pode ser sessão expirada ou permissão negada.');
         }
         setIsUploading(false);
     };
@@ -75,7 +80,12 @@ export const AdminBannersView: React.FC = () => {
     const handleDeleteBanner = async (id: string) => {
         if (confirm('Deletar este banner?')) {
             const ok = await deleteBanner(id);
-            if (ok) loadBanners();
+            if (ok) {
+                success('Banner removido.');
+                loadBanners();
+            } else {
+                toastError('Erro ao remover banner — verifique o console (F12).');
+            }
         }
     };
 
