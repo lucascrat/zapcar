@@ -14,8 +14,7 @@ import {
 const BANNER_ID       = (import.meta as any).env?.VITE_ADMOB_BANNER_ID       || 'ca-app-pub-6105194579101073/1959488464';
 const INTERSTITIAL_ID = (import.meta as any).env?.VITE_ADMOB_INTERSTITIAL_ID || 'ca-app-pub-6105194579101073/5910094348';
 const NATIVE_ID       = (import.meta as any).env?.VITE_ADMOB_NATIVE_ID       || 'ca-app-pub-6105194579101073/9815224922';
-// Rewarded: defina VITE_ADMOB_REWARDED_ID com seu ID real de Rewarded Video.
-const REWARDED_ID     = (import.meta as any).env?.VITE_ADMOB_REWARDED_ID;
+const REWARDED_ID     = (import.meta as any).env?.VITE_ADMOB_REWARDED_ID       || 'ca-app-pub-6105194579101073/2099199008';
 
 let bannerVisible = false;
 
@@ -131,10 +130,6 @@ export const AdMobService = {
             }
 
             const adId = REWARDED_ID;
-            if (!adId) {
-                console.warn('[AdMob] VITE_ADMOB_REWARDED_ID não configurado — Rewarded Video desativado.');
-                return false;
-            }
 
             const options: RewardAdOptions = {
                 adId,
