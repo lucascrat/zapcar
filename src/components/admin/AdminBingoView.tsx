@@ -165,7 +165,8 @@ export const AdminBingoView: React.FC = () => {
                             <div className="space-y-2">
                                 <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest pl-1">Descrição do Prêmio</label>
                                 <textarea
-                                    className="w-full bg-bg-tertiary border border-white/5 rounded-xl p-3 text-sm text-white focus:border-primary/50 focus:ring-2 focus:ring-primary/20 outline-none transition-all min-h-[100px] resize-none"
+                                    className="w-full bg-bg-tertiary border border-white/5 rounded-xl p-3 text-sm focus:border-primary/50 focus:ring-2 focus:ring-primary/20 outline-none transition-all min-h-[100px] resize-none"
+                                    style={{ color: '#000000' }}
                                     placeholder="Ex: 1 Ano de Assinatura Grátis + Kit ChegoJá"
                                     value={settings.prize_description}
                                     onChange={e => setSettings({ ...settings, prize_description: e.target.value })}
