@@ -69,7 +69,7 @@ export const AdminDriversView: React.FC<AdminDriversViewProps> = ({
         console.error('[AdminDriversView] onFilterChange prop is undefined');
     }
 
-    const [activeDetailTab, setActiveDetailTab] = useState<'info' | 'vehicle' | 'subscription'>('info');
+    const [activeDetailTab, setActiveDetailTab] = useState<'info' | 'vehicle' | 'subscription' | 'documents'>('info');
     const { isMobile } = useBreakpoint();
     const toast = useToast();
 
@@ -657,6 +657,16 @@ export const AdminDriversView: React.FC<AdminDriversViewProps> = ({
                         >
                             Assinatura
                         </button>
+                        <button
+                            type="button"
+                            className={`admin-tab ${activeDetailTab === 'documents' ? 'active' : ''}`}
+                            onClick={() => setActiveDetailTab('documents')}
+                        >
+                            Documentos
+                            {!selectedDriver.is_approved && (
+                                <span className="ml-1.5 inline-block w-1.5 h-1.5 rounded-full bg-yellow-400 align-middle" />
+                            )}
+                        </button>
                     </div>
 
                     <div className="admin-detail-content">
@@ -715,6 +725,60 @@ export const AdminDriversView: React.FC<AdminDriversViewProps> = ({
                                     <div className="admin-detail-row">
                                         <span className="admin-detail-row-label">Cor</span>
                                         <span className="admin-detail-row-value">{selectedDriver.vehicle_color || '-'}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {activeDetailTab === 'documents' && (
+                            <div className="admin-detail-section">
+                                <h4 className="admin-detail-section-title">Documentos para Análise</h4>
+                                <div className="admin-detail-row">
+                                    <span className="admin-detail-row-label">Cidade que quer trabalhar</span>
+                                    <span className="admin-detail-row-value">{selectedDriver.work_city || '-'}</span>
+                                </div>
+
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
+                                    <div>
+                                        <p className="text-xs font-bold text-gray-400 mb-2 uppercase tracking-wide">Foto do Rosto</p>
+                                        {selectedDriver.avatar_url && !selectedDriver.avatar_url.includes('ui-avatars.com') ? (
+                                            <a href={selectedDriver.avatar_url} target="_blank" rel="noopener noreferrer">
+                                                <img src={selectedDriver.avatar_url} alt="Foto do rosto" className="w-full h-48 object-cover rounded-xl border border-white/10 hover:opacity-80 transition" />
+                                            </a>
+                                        ) : (
+                                            <div className="w-full h-48 rounded-xl border border-dashed border-red-500/40 bg-red-500/5 flex flex-col items-center justify-center text-red-400 gap-2">
+                                                <span className="material-icons">no_photography</span>
+                                                <span className="text-xs font-bold">Não enviada</span>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    <div>
+                                        <p className="text-xs font-bold text-gray-400 mb-2 uppercase tracking-wide">CNH</p>
+                                        {selectedDriver.doc_cnh_url ? (
+                                            <a href={selectedDriver.doc_cnh_url} target="_blank" rel="noopener noreferrer">
+                                                <img src={selectedDriver.doc_cnh_url} alt="CNH" className="w-full h-48 object-cover rounded-xl border border-white/10 hover:opacity-80 transition" />
+                                            </a>
+                                        ) : (
+                                            <div className="w-full h-48 rounded-xl border border-dashed border-red-500/40 bg-red-500/5 flex flex-col items-center justify-center text-red-400 gap-2">
+                                                <span className="material-icons">badge</span>
+                                                <span className="text-xs font-bold">Não enviada</span>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    <div className="sm:col-span-2">
+                                        <p className="text-xs font-bold text-gray-400 mb-2 uppercase tracking-wide">Comprovante de Endereço</p>
+                                        {selectedDriver.doc_address_proof_url ? (
+                                            <a href={selectedDriver.doc_address_proof_url} target="_blank" rel="noopener noreferrer">
+                                                <img src={selectedDriver.doc_address_proof_url} alt="Comprovante de Endereço" className="w-full max-h-64 object-contain bg-black/20 rounded-xl border border-white/10 hover:opacity-80 transition" />
+                                            </a>
+                                        ) : (
+                                            <div className="w-full h-32 rounded-xl border border-dashed border-red-500/40 bg-red-500/5 flex flex-col items-center justify-center text-red-400 gap-2">
+                                                <span className="material-icons">home</span>
+                                                <span className="text-xs font-bold">Não enviado</span>
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
                             </div>

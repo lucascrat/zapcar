@@ -10,7 +10,7 @@ import { hashPassword } from '../utils/passwordHash';
 // INSERT/UPDATE no PostgREST) e falha com "permission denied" se password entrar
 // nessa lista - por isso todo insert/update em `profiles` que precisa da linha de
 // volta usa esta constante em vez de `.select()`.
-export const PROFILE_SAFE_COLUMNS = 'id, username, phone, role, status, is_approved, subscription_expires_at, avatar_url, vehicle_model, vehicle_plate, vehicle_color, vehicle_type, lat, lng, wallet_coins, financial_balance, pix_key, whatsapp, cpf, address_street, address_number, address_neighborhood, address_city, address_zip, email, is_pip_active, unread_count, created_at, updated_at';
+export const PROFILE_SAFE_COLUMNS = 'id, username, phone, role, status, is_approved, subscription_expires_at, avatar_url, vehicle_model, vehicle_plate, vehicle_color, vehicle_type, lat, lng, wallet_coins, financial_balance, pix_key, whatsapp, cpf, address_street, address_number, address_neighborhood, address_city, address_zip, email, is_pip_active, unread_count, created_at, updated_at, doc_cnh_url, doc_address_proof_url, work_city';
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   db: {
@@ -1091,7 +1091,12 @@ export const registerDriver = async (
   vehiclePlate?: string,
   vehicleColor?: string,
   avatarFile?: File,
-  phone?: string
+  phone?: string,
+  docs?: {
+    cnhFile?: File;
+    addressProofFile?: File;
+    workCity?: string;
+  }
 ): Promise<UserProfile | null> => {
   try {
     const cleanPhone = phone ? phone.replace(/\D/g, '') : undefined;
@@ -1103,6 +1108,24 @@ export const registerDriver = async (
       throw new Error("Senha muito curta.");
     }
     const hashedPassword = await hashPassword(password);
+
+    // Sobe a foto de rosto e os documentos ANTES de chamar a RPC - antes disso,
+    // o upload só acontecia no fallback (quando a RPC falhava), então no
+    // caminho normal de cadastro a foto escolhida nunca era salva e o
+    // motorista ficava sem foto de perfil no app.
+    let avatar_url: string | null = null;
+    if (avatarFile) {
+      avatar_url = await uploadFile(avatarFile, 'images');
+    }
+    let doc_cnh_url: string | null = null;
+    if (docs?.cnhFile) {
+      doc_cnh_url = await uploadFile(docs.cnhFile, 'attachments');
+    }
+    let doc_address_proof_url: string | null = null;
+    if (docs?.addressProofFile) {
+      doc_address_proof_url = await uploadFile(docs.addressProofFile, 'attachments');
+    }
+
     const { data: rpcData, error: rpcError } = await supabase
       .rpc('register_driver', {
         p_username: finalUsername,
@@ -1111,7 +1134,11 @@ export const registerDriver = async (
         p_vehicle_model: vehicleModel,
         p_vehicle_plate: vehiclePlate,
         p_vehicle_color: vehicleColor,
-        p_phone: cleanPhone
+        p_phone: cleanPhone,
+        p_avatar_url: avatar_url,
+        p_doc_cnh_url: doc_cnh_url,
+        p_doc_address_proof_url: doc_address_proof_url,
+        p_work_city: docs?.workCity || null
       });
     if (rpcData && !rpcError) {
       return rpcData as unknown as UserProfile;
@@ -1131,11 +1158,6 @@ export const registerDriver = async (
       }
     }
 
-    let avatar_url = null;
-    if (avatarFile) {
-      avatar_url = await uploadFile(avatarFile, 'images');
-    }
-
     const { data, error } = await supabase
       .from('profiles')
       .insert([{
@@ -1149,7 +1171,10 @@ export const registerDriver = async (
         vehicle_model: vehicleModel,
         vehicle_plate: vehiclePlate,
         vehicle_color: vehicleColor,
-        avatar_url: avatar_url || `https://ui-avatars.com/api/?name=${username}`
+        avatar_url: avatar_url || `https://ui-avatars.com/api/?name=${username}`,
+        doc_cnh_url,
+        doc_address_proof_url,
+        work_city: docs?.workCity || null
       }])
       .select(PROFILE_SAFE_COLUMNS)
       .single();

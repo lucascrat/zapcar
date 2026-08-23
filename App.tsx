@@ -89,6 +89,7 @@ export default function App() {
   const [showDriverMenu, setShowDriverMenu] = useState(false);
   const [showPlans, setShowPlans] = useState(false);
   const [showDriverProfile, setShowDriverProfile] = useState(false);
+  const [driverProfileInitialTab, setDriverProfileInitialTab] = useState<'profile' | 'pix' | 'withdraw'>('profile');
   const [incomingRide, setIncomingRide] = useState<Ride | null>(null);
   const [activeRide, setActiveRide] = useState<Ride | null>(null);
   const [isRideMapMinimized, setIsRideMapMinimized] = useState(false); // Controla se a tela de mapa está minimizada
@@ -1517,6 +1518,7 @@ export default function App() {
         {showDriverProfile && currentUser && currentUser.role === UserRole.DRIVER && (
           <DriverProfileEditor
             currentUser={currentUser}
+            initialTab={driverProfileInitialTab}
             onClose={() => setShowDriverProfile(false)}
             onUpdate={(updated) => {
               setCurrentUser(updated);
@@ -1546,7 +1548,7 @@ export default function App() {
         ) : currentUser?.role === UserRole.DRIVER && !activeContact && !showBingo && !showPlans && !showCalculator ? (
           <DriverDashboard
             currentUser={currentUser}
-            onOpenProfile={() => setShowDriverProfile(true)}
+            onOpenProfile={(tab) => { setDriverProfileInitialTab(tab || 'profile'); setShowDriverProfile(true); }}
             onOpenPlans={() => setShowPlans(true)}
             onOpenBingo={() => setShowBingo(true)}
             onOpenCalculator={() => setShowCalculator(true)}

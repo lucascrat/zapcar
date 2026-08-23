@@ -7,13 +7,14 @@ interface DriverProfileEditorProps {
     currentUser: UserProfile;
     onClose: () => void;
     onUpdate: (updated: UserProfile) => void;
+    initialTab?: 'profile' | 'pix' | 'withdraw';
 }
 
-export const DriverProfileEditor: React.FC<DriverProfileEditorProps> = ({ currentUser, onClose, onUpdate }) => {
+export const DriverProfileEditor: React.FC<DriverProfileEditorProps> = ({ currentUser, onClose, onUpdate, initialTab }) => {
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
     const [uploadingImage, setUploadingImage] = useState(false);
-    const [activeTab, setActiveTab] = useState<'profile' | 'pix' | 'withdraw'>('profile');
+    const [activeTab, setActiveTab] = useState<'profile' | 'pix' | 'withdraw'>(initialTab || 'profile');
 
     // Profile Fields
     const [phone, setPhone] = useState(currentUser.phone || '');

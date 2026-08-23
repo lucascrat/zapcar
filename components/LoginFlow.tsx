@@ -30,6 +30,15 @@ export const LoginFlow: React.FC<LoginFlowProps> = ({ onLoginSuccess }) => {
     const [entryVehiclePlate, setEntryVehiclePlate] = useState('');
     const [entryVehicleColor, setEntryVehicleColor] = useState('');
 
+    // Documentos para análise (cadastro de motorista)
+    const [entryWorkCity, setEntryWorkCity] = useState('');
+    const [entryCnhFile, setEntryCnhFile] = useState<File | null>(null);
+    const [cnhPreview, setCnhPreview] = useState<string | null>(null);
+    const [entryAddressProofFile, setEntryAddressProofFile] = useState<File | null>(null);
+    const [addressProofPreview, setAddressProofPreview] = useState<string | null>(null);
+    const cnhInputRef = useRef<HTMLInputElement>(null);
+    const addressProofInputRef = useRef<HTMLInputElement>(null);
+
     const [entryPassword, setEntryPassword] = useState('');
     const [showEntryPassword, setShowEntryPassword] = useState(false);
     const [authPassword, setAuthPassword] = useState('');
@@ -48,6 +57,11 @@ export const LoginFlow: React.FC<LoginFlowProps> = ({ onLoginSuccess }) => {
         setEntryVehicleModel('');
         setEntryVehiclePlate('');
         setEntryVehicleColor('');
+        setEntryWorkCity('');
+        setEntryCnhFile(null);
+        setCnhPreview(null);
+        setEntryAddressProofFile(null);
+        setAddressProofPreview(null);
     };
 
     const formatPhoneNumber = (value: string) => {
@@ -78,6 +92,24 @@ export const LoginFlow: React.FC<LoginFlowProps> = ({ onLoginSuccess }) => {
             }
             setEntryAvatarFile(file);
             setAvatarPreview(URL.createObjectURL(file));
+        }
+    };
+
+    const handleCnhChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (file) {
+            if (cnhPreview) URL.revokeObjectURL(cnhPreview);
+            setEntryCnhFile(file);
+            setCnhPreview(URL.createObjectURL(file));
+        }
+    };
+
+    const handleAddressProofChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (file) {
+            if (addressProofPreview) URL.revokeObjectURL(addressProofPreview);
+            setEntryAddressProofFile(file);
+            setAddressProofPreview(URL.createObjectURL(file));
         }
     };
 
@@ -146,6 +178,21 @@ export const LoginFlow: React.FC<LoginFlowProps> = ({ onLoginSuccess }) => {
                         setIsLoading(false);
                         return;
                     }
+                    if (!entryAvatarFile) {
+                        alert("A foto do seu rosto é obrigatória para o cadastro. Toque no círculo no topo da tela e escolha uma foto sua, bem visível, para continuar.");
+                        setIsLoading(false);
+                        return;
+                    }
+                    if (!entryCnhFile || !entryAddressProofFile) {
+                        alert("Envie a foto da sua CNH e do comprovante de endereço para que sua conta possa ser analisada e liberada.");
+                        setIsLoading(false);
+                        return;
+                    }
+                    if (!entryWorkCity.trim()) {
+                        alert("Informe a cidade em que você quer trabalhar.");
+                        setIsLoading(false);
+                        return;
+                    }
                     const registerTask = registerDriver(
                         entryName,
                         entryPassword,
@@ -154,7 +201,12 @@ export const LoginFlow: React.FC<LoginFlowProps> = ({ onLoginSuccess }) => {
                         entryVehiclePlate,
                         entryVehicleColor,
                         entryAvatarFile || undefined,
-                        entryPhone
+                        entryPhone,
+                        {
+                            cnhFile: entryCnhFile,
+                            addressProofFile: entryAddressProofFile,
+                            workCity: entryWorkCity.trim()
+                        }
                     );
                     const newUser = await Promise.race([
                         registerTask,
@@ -266,6 +318,13 @@ export const LoginFlow: React.FC<LoginFlowProps> = ({ onLoginSuccess }) => {
                     <input type="file" ref={avatarInputRef} title="Foto de Perfil" className="hidden" accept="image/*" onChange={handleAvatarChange} />
                 </div>
 
+                {loginMode === 'driver' && isRegisteringDriver && (
+                    <p className={`text-xs font-bold mb-2 -mt-2 flex items-center gap-1 ${entryAvatarFile ? 'text-whatsapp-green' : 'text-red-500'}`}>
+                        <span className="material-icons text-sm">{entryAvatarFile ? 'check_circle' : 'error'}</span>
+                        {entryAvatarFile ? 'Foto do rosto adicionada' : 'Foto do rosto obrigatória - toque acima'}
+                    </p>
+                )}
+
                 <h2 className="text-2xl font-bold text-gray-900 mb-1 text-center w-full">
                     {loginMode === 'client' ? 'Bem-vindo(a)' : loginMode === 'driver' ? (isRegisteringDriver ? 'Novo Motorista' : 'Motorista') : 'Administrativo'}
                 </h2>
@@ -369,6 +428,74 @@ export const LoginFlow: React.FC<LoginFlowProps> = ({ onLoginSuccess }) => {
                                     onChange={e => setEntryVehicleColor(e.target.value)}
                                     className="h-14 pl-4 rounded-xl border border-gray-200 bg-gray-50 focus:bg-white focus:border-whatsapp-green focus:ring-2 focus:ring-whatsapp-green/20 transition-all outline-none text-base font-medium"
                                 />
+                            </div>
+
+                            {/* Cidade que quer trabalhar */}
+                            <div className="relative w-full">
+                                <input
+                                    type="text"
+                                    placeholder="Cidade em que quer trabalhar"
+                                    value={entryWorkCity}
+                                    onChange={e => setEntryWorkCity(e.target.value)}
+                                    className="w-full h-14 pl-4 pr-12 rounded-xl border border-gray-200 bg-gray-50 focus:bg-white focus:border-whatsapp-green focus:ring-2 focus:ring-whatsapp-green/20 transition-all outline-none text-base text-gray-900 placeholder-gray-400 font-medium"
+                                />
+                                <div className="absolute right-4 top-0 h-full flex items-center justify-center pointer-events-none text-gray-400">
+                                    <span className="material-icons">location_city</span>
+                                </div>
+                            </div>
+
+                            {/* Documentos para análise */}
+                            <div className="w-full bg-amber-50 border border-amber-200 rounded-xl p-4">
+                                <p className="text-xs font-bold text-amber-800 mb-3 flex items-center gap-1">
+                                    <span className="material-icons text-sm">description</span>
+                                    Documentos para análise (obrigatório)
+                                </p>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <button
+                                        type="button"
+                                        onClick={() => cnhInputRef.current?.click()}
+                                        className={`h-24 rounded-xl border-2 border-dashed flex flex-col items-center justify-center gap-1 transition-all overflow-hidden relative ${entryCnhFile ? 'border-whatsapp-green bg-white' : 'border-amber-300 bg-white/60 hover:bg-white'}`}
+                                    >
+                                        {cnhPreview ? (
+                                            <img src={cnhPreview} alt="CNH" className="absolute inset-0 w-full h-full object-cover" />
+                                        ) : (
+                                            <>
+                                                <span className="material-icons text-amber-500">badge</span>
+                                                <span className="text-[11px] font-bold text-gray-600">Foto da CNH</span>
+                                            </>
+                                        )}
+                                        {entryCnhFile && (
+                                            <span className="absolute top-1 right-1 bg-whatsapp-green text-white rounded-full p-0.5">
+                                                <span className="material-icons text-xs block">check</span>
+                                            </span>
+                                        )}
+                                    </button>
+                                    <input type="file" ref={cnhInputRef} className="hidden" accept="image/*" onChange={handleCnhChange} />
+
+                                    <button
+                                        type="button"
+                                        onClick={() => addressProofInputRef.current?.click()}
+                                        className={`h-24 rounded-xl border-2 border-dashed flex flex-col items-center justify-center gap-1 transition-all overflow-hidden relative ${entryAddressProofFile ? 'border-whatsapp-green bg-white' : 'border-amber-300 bg-white/60 hover:bg-white'}`}
+                                    >
+                                        {addressProofPreview ? (
+                                            <img src={addressProofPreview} alt="Comprovante de Endereço" className="absolute inset-0 w-full h-full object-cover" />
+                                        ) : (
+                                            <>
+                                                <span className="material-icons text-amber-500">home</span>
+                                                <span className="text-[11px] font-bold text-gray-600 text-center px-1">Comprovante de Endereço</span>
+                                            </>
+                                        )}
+                                        {entryAddressProofFile && (
+                                            <span className="absolute top-1 right-1 bg-whatsapp-green text-white rounded-full p-0.5">
+                                                <span className="material-icons text-xs block">check</span>
+                                            </span>
+                                        )}
+                                    </button>
+                                    <input type="file" ref={addressProofInputRef} className="hidden" accept="image/*" onChange={handleAddressProofChange} />
+                                </div>
+                                <p className="text-[11px] text-amber-700 mt-3">
+                                    Sua conta só será liberada depois que o admin analisar seus documentos.
+                                </p>
                             </div>
                         </>
                     )}

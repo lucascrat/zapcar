@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { UserProfile, AppSettings, DriverStatus, Message } from '../types';
-import { fetchAppSettings, updateDriverStatus, fetchAdminContact, fetchMessages, subscribeToMessages, markMessagesAsRead, fetchOnlineDrivers } from '../services/supabaseClient';
+import { fetchAppSettings, updateDriverStatus, fetchAdminContact, fetchMessages, subscribeToMessages, markMessagesAsRead, fetchOnlineDrivers, uploadFile, updateUserProfile } from '../services/supabaseClient';
 import { acceptRideSequential, rejectRideSequential } from '../services/sequentialNotifications';
 import { AdMobService } from '../services/adMobService';
 import { AppMap } from './AppMap';
@@ -12,7 +12,7 @@ import { soundService } from '../services/soundService';
 
 interface DriverDashboardProps {
     currentUser: UserProfile;
-    onOpenProfile: () => void;
+    onOpenProfile: (tab?: 'profile' | 'pix' | 'withdraw') => void;
     onOpenPlans: () => void;
     onOpenBingo: () => void;
     onOpenCalculator: () => void;
@@ -39,6 +39,44 @@ export const DriverDashboard: React.FC<DriverDashboardProps> = ({
     const [unreadChatCount, setUnreadChatCount] = useState(0);
     const showChatRef = useRef(false);
     useEffect(() => { showChatRef.current = showChat; }, [showChat]);
+
+    // Bloqueio por falta de foto de perfil: perfil sem foto não pode usar o app.
+    const [uploadingRequiredPhoto, setUploadingRequiredPhoto] = useState(false);
+    const requiredPhotoInputRef = useRef<HTMLInputElement>(null);
+    const missingProfilePhoto = !currentUser.avatar_url || currentUser.avatar_url.includes('ui-avatars.com');
+
+    // Aviso de PIX não cadastrado (não bloqueia o app, só lembra 1x por sessão)
+    const [showPixReminder, setShowPixReminder] = useState(false);
+    useEffect(() => {
+        if (!currentUser.pix_key && !missingProfilePhoto) {
+            setShowPixReminder(true);
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    const handleRequiredPhotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        setUploadingRequiredPhoto(true);
+        try {
+            const url = await uploadFile(file, 'images');
+            if (!url) {
+                alert('Erro ao enviar a foto. Tente novamente.');
+                return;
+            }
+            const success = await updateUserProfile(currentUser.id, { avatar_url: url });
+            if (success) {
+                onUpdateUser({ ...currentUser, avatar_url: url });
+            } else {
+                alert('Erro ao salvar a foto. Tente novamente.');
+            }
+        } catch (err) {
+            console.error('[RequiredPhoto] Erro:', err);
+            alert('Erro ao enviar a foto. Tente novamente.');
+        } finally {
+            setUploadingRequiredPhoto(false);
+        }
+    };
 
     // Taximeter States
     const [taximeterActive, setTaximeterActive] = useState(false);
@@ -371,6 +409,70 @@ export const DriverDashboard: React.FC<DriverDashboardProps> = ({
 
     return (
         <div className="h-[100dvh] w-full flex flex-col bg-[#0a0f14] relative overflow-hidden">
+            {/* BLOQUEIO: perfil sem foto de rosto não pode usar o app */}
+            {missingProfilePhoto && (
+                <div className="fixed inset-0 z-[500] bg-[#0a0f14] flex flex-col items-center justify-center px-6 text-center">
+                    <input
+                        type="file"
+                        ref={requiredPhotoInputRef}
+                        className="hidden"
+                        accept="image/*"
+                        onChange={handleRequiredPhotoChange}
+                    />
+                    <div className="w-24 h-24 rounded-full bg-red-500/10 border-2 border-red-500/40 flex items-center justify-center mb-6">
+                        <span className="material-icons text-red-400 text-5xl">no_accounts</span>
+                    </div>
+                    <h2 className="text-white text-xl font-black mb-2">Foto de perfil obrigatória</h2>
+                    <p className="text-gray-400 text-sm max-w-xs mb-1">
+                        Por favor, coloque sua foto do rosto. Perfis sem foto ficam bloqueados e não podem ficar online nem receber corridas.
+                    </p>
+                    <p className="text-gray-500 text-xs max-w-xs mb-8">
+                        Escolha uma foto sua recente, com o rosto bem visível.
+                    </p>
+                    <button
+                        onClick={() => requiredPhotoInputRef.current?.click()}
+                        disabled={uploadingRequiredPhoto}
+                        className="w-full max-w-xs h-14 bg-whatsapp-green text-black font-black uppercase tracking-wide rounded-2xl shadow-lg flex items-center justify-center gap-2 active:scale-95 transition disabled:opacity-60"
+                    >
+                        {uploadingRequiredPhoto ? (
+                            <span className="w-5 h-5 border-2 border-black/30 border-t-black rounded-full animate-spin" />
+                        ) : (
+                            <>
+                                <span className="material-icons">add_a_photo</span>
+                                Enviar minha foto
+                            </>
+                        )}
+                    </button>
+                </div>
+            )}
+
+            {/* AVISO: PIX não cadastrado (não bloqueia, só lembra) */}
+            {!missingProfilePhoto && showPixReminder && (
+                <div className="fixed inset-0 z-[490] bg-black/80 flex items-center justify-center px-6">
+                    <div className="w-full max-w-xs bg-[#152232] border border-white/10 rounded-2xl p-6 text-center shadow-2xl">
+                        <div className="w-16 h-16 rounded-full bg-teal-500/10 border-2 border-teal-500/40 flex items-center justify-center mx-auto mb-4">
+                            <span className="material-icons text-teal-400 text-3xl">pix</span>
+                        </div>
+                        <h3 className="text-white font-black text-lg mb-2">Cadastre sua chave PIX</h3>
+                        <p className="text-gray-400 text-sm mb-6">
+                            Você ainda não tem uma chave PIX cadastrada. Cadastre agora para poder receber seus pagamentos e saques.
+                        </p>
+                        <button
+                            onClick={() => { setShowPixReminder(false); onOpenProfile('pix'); }}
+                            className="w-full h-12 bg-teal-500 text-white font-black uppercase tracking-wide rounded-xl active:scale-95 transition mb-2"
+                        >
+                            Cadastrar PIX
+                        </button>
+                        <button
+                            onClick={() => setShowPixReminder(false)}
+                            className="w-full h-10 text-gray-400 text-sm font-semibold"
+                        >
+                            Depois
+                        </button>
+                    </div>
+                </div>
+            )}
+
             {/* History Overlay */}
             {showHistory && (
                 <DriverHistory

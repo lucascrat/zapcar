@@ -47,6 +47,9 @@ export interface UserProfile {
   address_city?: string; // Cidade
   address_zip?: string; // CEP
   email?: string; // E-mail do usuário
+  doc_cnh_url?: string; // Foto da CNH (documentos para análise)
+  doc_address_proof_url?: string; // Foto do comprovante de endereço (documentos para análise)
+  work_city?: string; // Cidade em que o motorista quer trabalhar
 }
 
 export interface Message {
