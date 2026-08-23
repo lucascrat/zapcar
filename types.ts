@@ -34,6 +34,7 @@ export interface UserProfile {
   vehicle_type?: 'car' | 'motorcycle'; // Novo campo para tipo de veículo
   lat?: number;
   lng?: number;
+  location_updated_at?: string; // Última vez que o GPS foi atualizado (motorista "online de verdade")
   unread_count?: number; // Contador de mensagens não lidas (Frontend Only)
   is_pip_active?: boolean; // Indica se o app nativo está em modo PiP
   wallet_coins?: number; // Moedas do cliente (Bingo/Videos)

@@ -10,7 +10,7 @@ import { hashPassword } from '../utils/passwordHash';
 // INSERT/UPDATE no PostgREST) e falha com "permission denied" se password entrar
 // nessa lista - por isso todo insert/update em `profiles` que precisa da linha de
 // volta usa esta constante em vez de `.select()`.
-export const PROFILE_SAFE_COLUMNS = 'id, username, phone, role, status, is_approved, subscription_expires_at, avatar_url, vehicle_model, vehicle_plate, vehicle_color, vehicle_type, lat, lng, wallet_coins, financial_balance, pix_key, whatsapp, cpf, address_street, address_number, address_neighborhood, address_city, address_zip, email, is_pip_active, unread_count, created_at, updated_at, doc_cnh_url, doc_address_proof_url, work_city';
+export const PROFILE_SAFE_COLUMNS = 'id, username, phone, role, status, is_approved, subscription_expires_at, avatar_url, vehicle_model, vehicle_plate, vehicle_color, vehicle_type, lat, lng, location_updated_at, wallet_coins, financial_balance, pix_key, whatsapp, cpf, address_street, address_number, address_neighborhood, address_city, address_zip, email, is_pip_active, unread_count, created_at, updated_at, doc_cnh_url, doc_address_proof_url, work_city';
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   db: {
@@ -97,12 +97,20 @@ export const fetchUserProfile = async (userId: string): Promise<UserProfile | nu
 };
 
 export const fetchOnlineDrivers = async (): Promise<UserProfile[]> => {
+  // Só considera "online" quem teve a localização atualizada recentemente -
+  // status='available' sozinho pode ficar "preso" (motorista fechou o app sem
+  // ficar offline). Mesmo critério do despacho de corridas (ver
+  // sequentialNotifications.ts MAX_LOCATION_AGE_MINUTES e o job
+  // auto_offline_stale_drivers, que corrige o status em até 2 min).
+  const freshCutoff = new Date(Date.now() - 5 * 60 * 1000).toISOString();
   const { data, error } = await supabase
     .from('profiles')
     .select(PROFILE_SAFE_COLUMNS)
     .eq('role', UserRole.DRIVER)
     .eq('is_approved', true) // Only approved drivers
     .eq('status', DriverStatus.AVAILABLE)
+    .not('location_updated_at', 'is', null)
+    .gte('location_updated_at', freshCutoff)
     .order('created_at', { ascending: false }); // Mais recentes primeiro
 
   if (error) {

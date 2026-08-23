@@ -8,6 +8,12 @@ import { supabase } from './supabaseClient';
 // Raio máximo de busca em km
 const MAX_SEARCH_RADIUS_KM = 15;
 
+// Motorista só é considerado "online de verdade" se a localização foi
+// atualizada há no máximo esse tempo (evita chamar quem fechou o app sem
+// ficar offline - status ficava "preso" em 'available'). Mesmo valor usado
+// na RPC get_drivers_within_radius e no job auto_offline_stale_drivers.
+const MAX_LOCATION_AGE_MINUTES = 5;
+
 // Limite máximo de tentativas de skip (motoristas sem token ou com status errado)
 // Previne recursão infinita caso muitos motoristas estejam com problemas
 const MAX_SKIP_RETRIES = 10;
@@ -147,7 +153,8 @@ export const notifyNextDriver = async (rideId: string, _skipRetryCount: number =
             let rpcQuery = supabase.rpc('get_drivers_within_radius', {
                 origin_lat: ride.origin_lat,
                 origin_lng: ride.origin_lng,
-                radius_km: MAX_SEARCH_RADIUS_KM
+                radius_km: MAX_SEARCH_RADIUS_KM,
+                max_location_age_minutes: MAX_LOCATION_AGE_MINUTES
             }).select('id, username, lat, lng, status, push_tokens(token), vehicle_type');
 
             if (ride.vehicle_type) {
@@ -172,7 +179,11 @@ export const notifyNextDriver = async (rideId: string, _skipRetryCount: number =
         }
 
         if (!rpcUsed) {
-            // Fallback para a query completa (método antigo)
+            // Fallback para a query completa (método antigo). Mesmo filtro de
+            // "online de verdade" da RPC: location_updated_at recente, não só
+            // status='available' (que pode ficar "preso" se o motorista fechar
+            // o app sem ficar offline) - ver MAX_LOCATION_AGE_MINUTES.
+            const freshCutoff = new Date(Date.now() - MAX_LOCATION_AGE_MINUTES * 60 * 1000).toISOString();
             let driversQuery = supabase
                 .from('profiles')
                 .select('id, username, lat, lng, status, push_tokens(token), vehicle_type')
@@ -180,7 +191,9 @@ export const notifyNextDriver = async (rideId: string, _skipRetryCount: number =
                 .eq('status', 'available')
                 .eq('is_approved', true)
                 .not('lat', 'is', null)
-                .not('lng', 'is', null);
+                .not('lng', 'is', null)
+                .not('location_updated_at', 'is', null)
+                .gte('location_updated_at', freshCutoff);
 
             if (ride.vehicle_type) {
                 driversQuery = driversQuery.eq('vehicle_type', ride.vehicle_type);
