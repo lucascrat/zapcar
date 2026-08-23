@@ -1,12 +1,18 @@
 package br.com.client.chegoja;
 
+import android.app.AlertDialog;
 import android.app.KeyguardManager;
+import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
+import android.net.Uri;
 import android.os.Bundle;
 import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.PowerManager;
+import android.provider.Settings;
 import android.util.Rational;
 import android.view.WindowManager;
 import android.app.PictureInPictureParams;
@@ -98,6 +104,92 @@ public class MainActivity extends BridgeActivity {
         return s.replace("\\", "\\\\").replace("'", "\\'");
     }
 
+    // ── Permissões de "não me mate em segundo plano" ─────────────────────────
+    // Pedidas quando o motorista loga (via requestPermissions() no WebAppInterface).
+    // Sem isso, o Android/MIUI podem matar o app e a notificação de corrida
+    // (full-screen intent) nunca chega a acordar o celular.
+
+    private boolean isIgnoringBatteryOptimizations() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return true;
+        PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
+        return pm != null && pm.isIgnoringBatteryOptimizations(getPackageName());
+    }
+
+    private boolean isXiaomi() {
+        String manufacturer = Build.MANUFACTURER;
+        return manufacturer != null && manufacturer.toLowerCase().contains("xiaomi");
+    }
+
+    void maybeShowPermissionsDialog() {
+        boolean needsBattery = !isIgnoringBatteryOptimizations();
+        boolean isXiaomiDevice = isXiaomi();
+        SharedPreferences prefs = getSharedPreferences("chegoja_prefs", Context.MODE_PRIVATE);
+        boolean autostartAsked = prefs.getBoolean("autostart_asked", false);
+
+        // Bateria a gente sempre consegue checar de verdade (API do Android), então
+        // continua perguntando enquanto não estiver liberada. Autostart não dá pra
+        // checar (é específico da MIUI e não tem API pública), então só pergunta
+        // uma vez pra não encher o saco do motorista todo login.
+        if (!needsBattery && (!isXiaomiDevice || autostartAsked)) return;
+
+        StringBuilder msg = new StringBuilder(
+                "Pra não perder nenhuma corrida (a notificação precisa acordar o celular mesmo com o app fechado), ative:\n"
+        );
+        if (needsBattery) msg.append("\n• Sem restrição de bateria");
+        if (isXiaomiDevice && !autostartAsked) msg.append("\n• Inicialização automática (autostart)");
+
+        try {
+            new AlertDialog.Builder(this)
+                    .setTitle("Ativar notificações de corrida")
+                    .setMessage(msg.toString())
+                    .setCancelable(true)
+                    .setPositiveButton("Ativar agora", (dialog, which) -> {
+                        if (needsBattery) requestIgnoreBatteryOptimizations();
+                        if (isXiaomiDevice && !autostartAsked) {
+                            openMiuiAutoStartSettings();
+                            prefs.edit().putBoolean("autostart_asked", true).apply();
+                        }
+                    })
+                    .setNegativeButton("Agora não", (dialog, which) -> {
+                        if (isXiaomiDevice) prefs.edit().putBoolean("autostart_asked", true).apply();
+                    })
+                    .show();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void requestIgnoreBatteryOptimizations() {
+        try {
+            Intent intent = new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS);
+            intent.setData(Uri.parse("package:" + getPackageName()));
+            startActivity(intent);
+        } catch (Exception e) {
+            try {
+                startActivity(new Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS));
+            } catch (Exception ignored) {
+            }
+        }
+    }
+
+    private void openMiuiAutoStartSettings() {
+        try {
+            Intent intent = new Intent();
+            intent.setComponent(new ComponentName(
+                    "com.miui.securitycenter",
+                    "com.miui.permcenter.autostart.AutoStartManagementActivity"
+            ));
+            startActivity(intent);
+        } catch (Exception e) {
+            try {
+                Intent fallback = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
+                fallback.setData(Uri.parse("package:" + getPackageName()));
+                startActivity(fallback);
+            } catch (Exception ignored) {
+            }
+        }
+    }
+
     @Override
     public void onStart() {
         super.onStart();
@@ -146,6 +238,15 @@ public class MainActivity extends BridgeActivity {
         @JavascriptInterface
         public void showToast(String toast) {
             android.widget.Toast.makeText(mActivity, toast, android.widget.Toast.LENGTH_SHORT).show();
+        }
+
+        // Chamado pelo JS quando um motorista faz login (ver App.tsx). Sem isso o
+        // app nunca pedia pro usuário liberar bateria/autostart, então em muitos
+        // aparelhos (principalmente Xiaomi/MIUI) o sistema mata o app em segundo
+        // plano e as notificações de corrida nunca chegam a acordar o celular.
+        @JavascriptInterface
+        public void requestPermissions() {
+            mActivity.runOnUiThread(mActivity::maybeShowPermissionsDialog);
         }
 
         @JavascriptInterface

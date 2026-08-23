@@ -71,6 +71,10 @@
     <!-- Permite que a notificação de corrida (type=new_ride) acorde a tela e abra
          o app por cima da tela de bloqueio, igual uma chamada chegando. -->
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT"/>
+    <!-- Necessária pra pedir ao motorista pra tirar o app da otimização de bateria
+         (ver MainActivity.requestIgnoreBatteryOptimizations) - sem isso o Android
+         pode matar o app em segundo plano e a notificação nunca acorda o celular. -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"/>
     <uses-permission android:name="android.permission.VIBRATE"/>
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />

@@ -41,10 +41,16 @@ export const AdminNotificationsView: React.FC = () => {
 
             // 2. Send FCM push notifications via Edge Function
             if (sendPush) {
+                // A RPC get_push_tokens só reconhece 'drivers'/'clients' (plural) para
+                // filtro por papel - 'target' aqui é singular (usado pelo Mural/
+                // sendBroadcast). Sem esse mapeamento, "Apenas Motoristas"/"Apenas
+                // Clientes" batiam em nenhum branch da RPC e o push saía pra 0 pessoas
+                // silenciosamente (a função ainda retornava sucesso).
+                const pushTargetType = target === 'driver' ? 'drivers' : target === 'client' ? 'clients' : 'all';
                 const fcmResult = await sendNotification(
                     title.trim(),
                     message.trim(),
-                    target,
+                    pushTargetType,
                     {
                         imageUrl: imageUrl.trim() || undefined,
                         sound: sound.trim() || 'default'
