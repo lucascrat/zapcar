@@ -85,6 +85,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
         { id: 'coupons', icon: 'confirmation_number', label: 'Cupons', section: 'marketing' },
         { id: 'notifications', icon: 'campaign', label: 'Notificações', section: 'marketing' },
         { id: 'bingo', icon: 'casino', label: 'Bingo', section: 'marketing' },
+        { id: 'rewards', icon: 'emoji_events', label: 'Premiações', section: 'marketing' },
 
         // Tools
         { id: 'settings', icon: 'settings', label: 'Configurações', section: 'tools' },

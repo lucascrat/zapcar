@@ -7,6 +7,7 @@ import { AdMobService } from '../services/adMobService';
 import { AppMap } from './AppMap';
 import { ChatWindow } from './ChatWindow';
 import { DriverHistory } from './DriverHistory';
+import { DriverRewardsScreen } from './DriverRewardsScreen';
 import { soundService } from '../services/soundService';
 
 interface DriverDashboardProps {
@@ -32,6 +33,7 @@ export const DriverDashboard: React.FC<DriverDashboardProps> = ({
     const [showMenu, setShowMenu] = useState(false);
     const [showChat, setShowChat] = useState(false);
     const [showHistory, setShowHistory] = useState(false);
+    const [showRewards, setShowRewards] = useState(false);
     const [chatContact, setChatContact] = useState<UserProfile | null>(null);
     const [messages, setMessages] = useState<Message[]>([]);
 
@@ -528,6 +530,21 @@ export const DriverDashboard: React.FC<DriverDashboardProps> = ({
                                 </button>
 
                                 <button
+                                    onClick={() => { setShowRewards(true); setShowMenu(false); }}
+                                    className="w-full flex items-center gap-4 px-4 py-3.5 hover:bg-gradient-to-r hover:from-yellow-500/10 hover:to-transparent rounded-2xl transition-all group relative"
+                                >
+                                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-yellow-500/20 to-amber-600/10 flex items-center justify-center group-hover:scale-110 transition-transform">
+                                        <span className="material-icons text-yellow-400">emoji_events</span>
+                                    </div>
+                                    <div className="flex-1 text-left">
+                                        <p className="text-white font-semibold text-sm">Premiações &amp; Ranking</p>
+                                        <p className="text-gray-500 text-[10px]">Top 10 motoristas da semana</p>
+                                    </div>
+                                    <span className="absolute right-4 top-2 text-[8px] bg-yellow-500 text-black font-black px-1.5 py-0.5 rounded-full uppercase tracking-wide">Novo</span>
+                                    <span className="material-icons text-gray-600 text-sm">chevron_right</span>
+                                </button>
+
+                                <button
                                     onClick={() => { soundService.requestPermission(); setShowMenu(false); }}
                                     className="w-full flex items-center gap-4 px-4 py-3.5 hover:bg-gradient-to-r hover:from-cyan-500/10 hover:to-transparent rounded-2xl transition-all group"
                                 >
@@ -683,6 +700,14 @@ export const DriverDashboard: React.FC<DriverDashboardProps> = ({
                 <div className="shrink-0 pb-safe z-10 h-[50px]">
                     {/* The banner will be positioned here by AdMobService.showBanner */}
                 </div>
+            )}
+
+            {/* ── Tela de Premiações ────────────────────────── */}
+            {showRewards && (
+                <DriverRewardsScreen
+                    currentUser={currentUser}
+                    onClose={() => setShowRewards(false)}
+                />
             )}
         </div>
     );

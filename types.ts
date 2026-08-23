@@ -277,7 +277,38 @@ export interface Ride {
 }
 
 // Tipo para as abas do Painel Admin
-export type AdminTab = 'overview' | 'clients' | 'details' | 'map' | 'history' | 'settings' | 'chat' | 'bingo' | 'approvals' | 'notifications' | 'plans' | 'banners' | 'coupons' | 'central' | 'wallets' | 'store' | 'drivers' | 'rides' | 'taximeter' | 'bot';
+export type AdminTab = 'overview' | 'clients' | 'details' | 'map' | 'history' | 'settings' | 'chat' | 'bingo' | 'approvals' | 'notifications' | 'plans' | 'banners' | 'coupons' | 'central' | 'wallets' | 'store' | 'drivers' | 'rides' | 'taximeter' | 'bot' | 'rewards';
+
+// ── Sistema de Premiação Semanal ──────────────────────────────────────────────
+export interface RewardTier {
+  id: string;
+  title: string;
+  description: string;
+  min_rides: number;
+  prize_value: number;
+  image_url?: string;
+  badge_emoji: string;
+  card_color: string;
+  is_active: boolean;
+  display_order: number;
+  created_at: string;
+}
+
+export interface RewardsConfig {
+  id: number;
+  is_enabled: boolean;
+  week_title: string;
+  subtitle: string;
+  updated_at: string;
+}
+
+export interface DriverRankingEntry {
+  driver_id: string;
+  username: string;
+  avatar_url?: string;
+  vehicle_type?: string;
+  weekly_rides: number;
+}
 
 export interface StoreProduct {
   id: string;

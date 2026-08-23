@@ -20,6 +20,7 @@ import { AdminBotView } from '../src/components/admin/AdminBotView';
 import { AdminTaximeterView } from '../src/components/admin/AdminTaximeterView';
 import { AdminOverviewView } from '../src/components/admin/AdminOverviewView';
 import { AdminClientsView } from '../src/components/admin/AdminClientsView';
+import { AdminRewardsView } from '../src/components/admin/AdminRewardsView';
 import { ErrorBoundary } from '../src/components/shared/ErrorBoundary';
 import { ToastProvider, useToast } from '../src/components/shared';
 import { UserProfile, AdminTab, DriverStatus } from '../types';
@@ -193,6 +194,9 @@ const AdminDashboardContent: React.FC<AdminDashboardDesktopProps> = ({
 
             case 'bingo':
                 return <AdminBingoView />;
+
+            case 'rewards':
+                return <AdminRewardsView />;
 
             case 'central':
                 return <AdminDispatchView />;

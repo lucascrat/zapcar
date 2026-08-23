@@ -2,5 +2,13 @@
 	{
 		"pkg": "@capacitor-community/admob",
 		"classpath": "com.getcapacitor.community.admob.AdMob"
+	},
+	{
+		"pkg": "@capacitor/browser",
+		"classpath": "com.capacitorjs.plugins.browser.BrowserPlugin"
+	},
+	{
+		"pkg": "@capacitor/push-notifications",
+		"classpath": "com.capacitorjs.plugins.pushnotifications.PushNotificationsPlugin"
 	}
 ]

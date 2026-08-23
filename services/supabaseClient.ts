@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SCHEMA } from '../constants';
-import { Message, UserProfile, UserRole, DriverStatus, AppSettings, BingoSettings, BingoCard, BingoRankingUser, BroadcastMessage, DriverPlan, Ride, Banner, Coupon, StoreProduct, WalletTransaction, StoreOrder, AppPaymentRequest } from '../types';
+import { Message, UserProfile, UserRole, DriverStatus, AppSettings, BingoSettings, BingoCard, BingoRankingUser, BroadcastMessage, DriverPlan, Ride, Banner, Coupon, StoreProduct, WalletTransaction, StoreOrder, AppPaymentRequest, RewardTier, RewardsConfig, DriverRankingEntry } from '../types';
 import { hashPassword } from '../utils/passwordHash';
 
 // Colunas de `profiles` seguras para devolver ao cliente depois de um INSERT/UPDATE.
@@ -2437,6 +2437,115 @@ export const fetchAllRides = async (limit = 500): Promise<Ride[]> => {
   }
 };
 
+
+/**
+ * SISTEMA DE PREMIAÇÃO E RANKING SEMANAL
+ */
+
+export const fetchRewardsConfig = async (): Promise<RewardsConfig | null> => {
+  try {
+    const { data, error } = await supabase
+      .from('rewards_config')
+      .select('*')
+      .eq('id', 1)
+      .single();
+    if (error) throw error;
+    return data as RewardsConfig;
+  } catch (e) {
+    handleDbError(e, "fetchRewardsConfig");
+    return null;
+  }
+};
+
+export const updateRewardsConfig = async (updates: Partial<Omit<RewardsConfig, 'id' | 'updated_at'>>): Promise<boolean> => {
+  try {
+    const { error } = await supabase
+      .from('rewards_config')
+      .update({ ...updates, updated_at: new Date().toISOString() })
+      .eq('id', 1);
+    if (error) throw error;
+    return true;
+  } catch (e) {
+    handleDbError(e, "updateRewardsConfig");
+    return false;
+  }
+};
+
+export const fetchRewardTiers = async (): Promise<RewardTier[]> => {
+  try {
+    const { data, error } = await supabase
+      .from('reward_tiers')
+      .select('*')
+      .eq('is_active', true)
+      .order('display_order', { ascending: true });
+    if (error) throw error;
+    return (data || []) as RewardTier[];
+  } catch (e) {
+    handleDbError(e, "fetchRewardTiers");
+    return [];
+  }
+};
+
+export const fetchAllRewardTiers = async (): Promise<RewardTier[]> => {
+  try {
+    const { data, error } = await supabase
+      .from('reward_tiers')
+      .select('*')
+      .order('display_order', { ascending: true });
+    if (error) throw error;
+    return (data || []) as RewardTier[];
+  } catch (e) {
+    handleDbError(e, "fetchAllRewardTiers");
+    return [];
+  }
+};
+
+export const upsertRewardTier = async (tier: Partial<RewardTier>): Promise<{ ok: boolean; errorMsg?: string }> => {
+  try {
+    const { error } = await supabase
+      .from('reward_tiers')
+      .upsert(tier, { onConflict: 'id' });
+    if (error) return { ok: false, errorMsg: error.message };
+    return { ok: true };
+  } catch (e: any) {
+    return { ok: false, errorMsg: e?.message || String(e) };
+  }
+};
+
+export const deleteRewardTier = async (id: string): Promise<{ ok: boolean; errorMsg?: string }> => {
+  try {
+    const { error } = await supabase
+      .from('reward_tiers')
+      .delete()
+      .eq('id', id);
+    if (error) return { ok: false, errorMsg: error.message };
+    return { ok: true };
+  } catch (e: any) {
+    return { ok: false, errorMsg: e?.message || String(e) };
+  }
+};
+
+export const fetchWeeklyDriverRanking = async (limit = 10): Promise<DriverRankingEntry[]> => {
+  try {
+    const { data, error } = await supabase.rpc('get_weekly_driver_ranking', { limit_count: limit });
+    if (error) throw error;
+    return (data || []) as DriverRankingEntry[];
+  } catch (e) {
+    handleDbError(e, "fetchWeeklyDriverRanking");
+    return [];
+  }
+};
+
+export const fetchDriverWeeklyRides = async (driverId: string): Promise<number> => {
+  try {
+    const { data, error } = await supabase.rpc('get_driver_weekly_rides', { driver_id_param: driverId });
+    if (error) throw error;
+    return Number(data) || 0;
+  } catch (e) {
+    handleDbError(e, "fetchDriverWeeklyRides");
+    return 0;
+  }
+};
 
 /**
  * ADMIN: GESTÃO DE PRODUTOS (STORE MANAGEMENT)
