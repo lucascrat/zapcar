@@ -1,13 +1,102 @@
 package br.com.client.chegoja;
 
+import android.app.KeyguardManager;
+import android.content.Context;
+import android.content.Intent;
 import android.os.Bundle;
 import android.os.Build;
+import android.os.Handler;
+import android.os.Looper;
 import android.util.Rational;
+import android.view.WindowManager;
 import android.app.PictureInPictureParams;
 import android.webkit.JavascriptInterface;
 import com.getcapacitor.BridgeActivity;
 
 public class MainActivity extends BridgeActivity {
+
+    // Extras pendentes de uma notificação (corrida/chat) que abriu o app - só
+    // conseguimos rodar o JS depois que o WebView terminar de carregar, então
+    // guardamos aqui e disparamos com um pequeno atraso em onStart().
+    private Intent pendingNotificationIntent;
+
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        handleNotificationIntent(getIntent());
+    }
+
+    @Override
+    public void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        handleNotificationIntent(intent);
+    }
+
+    private void handleNotificationIntent(Intent intent) {
+        if (intent == null) return;
+        String type = intent.getStringExtra("type");
+        if (type == null) return;
+
+        if ("new_ride".equals(type)) {
+            // Igual uma chamada chegando: mostra por cima da tela de bloqueio e
+            // acorda a tela, mesmo se o app estava totalmente fechado.
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+                setShowWhenLocked(true);
+                setTurnScreenOn(true);
+                KeyguardManager km = (KeyguardManager) getSystemService(Context.KEYGUARD_SERVICE);
+                if (km != null) km.requestDismissKeyguard(this, null);
+            } else {
+                getWindow().addFlags(
+                        WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED
+                                | WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
+                                | WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
+                                | WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD
+                );
+            }
+        }
+
+        pendingNotificationIntent = intent;
+        dispatchPendingNotificationEvent();
+    }
+
+    // Dispara o evento JS correspondente (openRide/openChat) assim que o
+    // WebView estiver pronto. Com o app totalmente fechado (force-stop / morto
+    // pelo sistema), o boot frio + restauração de sessão + montagem do React
+    // pode demorar mais que um único atraso curto, então tenta em algumas
+    // janelas de tempo até conseguir (disparar o evento 2x é inofensivo: os
+    // handlers de openRide/openChat só re-buscam dados e reabrem a mesma tela).
+    private static final long[] DISPATCH_RETRY_DELAYS_MS = {1200, 2800, 4500};
+
+    private void dispatchPendingNotificationEvent() {
+        for (long delay : DISPATCH_RETRY_DELAYS_MS) {
+            new Handler(Looper.getMainLooper()).postDelayed(() -> tryDispatchNotificationEvent(), delay);
+        }
+    }
+
+    private void tryDispatchNotificationEvent() {
+        if (pendingNotificationIntent == null || this.bridge == null || this.bridge.getWebView() == null) return;
+        String type = pendingNotificationIntent.getStringExtra("type");
+        String js = null;
+        if ("new_ride".equals(type)) {
+            String rideId = pendingNotificationIntent.getStringExtra("ride_id");
+            if (rideId != null) {
+                js = "window.dispatchEvent(new CustomEvent('openRide', { detail: { rideId: '" + escapeJs(rideId) + "' } }))";
+            }
+        } else if ("chat_message".equals(type)) {
+            String senderId = pendingNotificationIntent.getStringExtra("sender_id");
+            if (senderId != null) {
+                js = "window.dispatchEvent(new CustomEvent('openChat', { detail: { partnerId: '" + escapeJs(senderId) + "' } }))";
+            }
+        }
+        if (js != null) {
+            this.bridge.getWebView().evaluateJavascript(js, null);
+        }
+    }
+
+    private String escapeJs(String s) {
+        return s.replace("\\", "\\\\").replace("'", "\\'");
+    }
 
     @Override
     public void onStart() {
@@ -17,6 +106,9 @@ public class MainActivity extends BridgeActivity {
             this.bridge.getWebView().getSettings().setMediaPlaybackRequiresUserGesture(false);
             this.bridge.getWebView().addJavascriptInterface(new WebAppInterface(this), "Android");
         }
+        // Não reagenda dispatchPendingNotificationEvent() aqui: onCreate/onNewIntent
+        // já programaram as tentativas (ver DISPATCH_RETRY_DELAYS_MS) e onStart roda
+        // logo em seguida, então evita disparar o evento em duplicidade.
     }
 
     public class WebAppInterface {

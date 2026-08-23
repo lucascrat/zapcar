@@ -85,10 +85,13 @@ class PushNotificationService {
                     vibration: true
                 });
 
-                // Special Channel (Custom Sound)
+                // Special Channel (Custom Sound) - "_v2": canais Android são imutáveis
+                // depois de criados, então o id foi versionado pra garantir que todo
+                // mundo (inclusive quem já tinha o app instalado antes do res/raw/ubb.mp3
+                // existir) receba o canal com o som correto.
                 await PushNotifications.createChannel({
-                    id: 'special_alert',
-                    name: 'Alertas Especiais',
+                    id: 'special_alert_v2',
+                    name: 'Alertas Especiais (Corridas)',
                     description: 'Alertas com som personalizado',
                     importance: 5,
                     visibility: 1,

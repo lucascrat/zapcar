@@ -56,6 +56,10 @@ dependencies {
     implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
     implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
     implementation project(':capacitor-android')
+    // Necessario para MyFirebaseMessagingService.java (mesma versao usada pelo
+    // plugin @capacitor/push-notifications, que so expoe essas classes como
+    // dependencia interna 'implementation', nao transitiva para o app module).
+    implementation "com.google.firebase:firebase-messaging:23.3.1"
     testImplementation "junit:junit:$junitVersion"
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
     androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
