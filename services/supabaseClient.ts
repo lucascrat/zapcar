@@ -2630,6 +2630,44 @@ export const fetchDriverWeeklyRides = async (driverId: string): Promise<number> 
 };
 
 /**
+ * ADMIN: RELATÓRIO DE DESEMPENHO DE MOTORISTAS
+ * Corridas recebidas (mesmo critério anti-fraude da premiação: só corrida de
+ * cliente ou admin), saldo e tempo online desde `periodStart` - tudo num só
+ * lugar pra facilitar identificar quem realmente está trabalhando.
+ */
+export interface DriverPerformanceEntry {
+  driver_id: string;
+  username: string;
+  avatar_url: string | null;
+  vehicle_type: string;
+  is_approved: boolean;
+  status: string;
+  financial_balance: number;
+  wallet_coins: number;
+  rides_count: number;
+  online_seconds: number;
+}
+
+export const fetchDriverPerformanceReport = async (periodStart: Date): Promise<DriverPerformanceEntry[]> => {
+  try {
+    const { data, error } = await supabase.rpc('get_driver_performance_report', {
+      period_start: periodStart.toISOString()
+    });
+    if (error) throw error;
+    return (data || []).map((d: any) => ({
+      ...d,
+      financial_balance: Number(d.financial_balance) || 0,
+      wallet_coins: Number(d.wallet_coins) || 0,
+      rides_count: Number(d.rides_count) || 0,
+      online_seconds: Number(d.online_seconds) || 0,
+    }));
+  } catch (e) {
+    handleDbError(e, "fetchDriverPerformanceReport");
+    return [];
+  }
+};
+
+/**
  * ADMIN: GESTÃO DE PRODUTOS (STORE MANAGEMENT)
  */
 

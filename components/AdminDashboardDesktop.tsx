@@ -22,6 +22,7 @@ import { AdminOverviewView } from '../src/components/admin/AdminOverviewView';
 import { AdminClientsView } from '../src/components/admin/AdminClientsView';
 import { AdminRewardsView } from '../src/components/admin/AdminRewardsView';
 import { AdminSupportView } from '../src/components/admin/AdminSupportView';
+import { AdminDriverPerformanceView } from '../src/components/admin/AdminDriverPerformanceView';
 import { ErrorBoundary } from '../src/components/shared/ErrorBoundary';
 import { ToastProvider, useToast } from '../src/components/shared';
 import { UserProfile, AdminTab, DriverStatus } from '../types';
@@ -262,6 +263,9 @@ const AdminDashboardContent: React.FC<AdminDashboardDesktopProps> = ({
 
             case 'support':
                 return <AdminSupportView currentUser={currentUser} onUnreadChange={loadUnreadMessages} initialPartnerId={openChatPartnerId} />;
+
+            case 'performance':
+                return <AdminDriverPerformanceView />;
 
             case 'central':
                 return <AdminDispatchView />;

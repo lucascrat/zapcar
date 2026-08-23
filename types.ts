@@ -277,7 +277,7 @@ export interface Ride {
 }
 
 // Tipo para as abas do Painel Admin
-export type AdminTab = 'overview' | 'clients' | 'details' | 'map' | 'history' | 'settings' | 'chat' | 'bingo' | 'approvals' | 'notifications' | 'plans' | 'banners' | 'coupons' | 'central' | 'wallets' | 'store' | 'drivers' | 'rides' | 'taximeter' | 'bot' | 'rewards' | 'support';
+export type AdminTab = 'overview' | 'clients' | 'details' | 'map' | 'history' | 'settings' | 'chat' | 'bingo' | 'approvals' | 'notifications' | 'plans' | 'banners' | 'coupons' | 'central' | 'wallets' | 'store' | 'drivers' | 'rides' | 'taximeter' | 'bot' | 'rewards' | 'support' | 'performance';
 
 // ── Sistema de Premiação Semanal ──────────────────────────────────────────────
 export interface RewardTier {

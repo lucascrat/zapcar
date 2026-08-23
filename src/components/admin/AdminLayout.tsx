@@ -72,6 +72,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
         // Main
         { id: 'overview', icon: 'dashboard', label: 'Dashboard', section: 'main' },
         { id: 'drivers', icon: 'people', label: 'Todos os Motoristas', badge: stats?.totalDrivers, section: 'main' },
+        { id: 'performance', icon: 'insights', label: 'Desempenho dos Motoristas', section: 'main' },
         { id: 'approvals', icon: 'verified_user', label: 'Aprovação', badge: stats?.pendingApprovals, badgeType: 'warning', section: 'main' },
         { id: 'rides', icon: 'route', label: 'Central de Corridas', section: 'main' },
 
