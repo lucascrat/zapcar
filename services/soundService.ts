@@ -1,31 +1,24 @@
 // Sounds Service
 // Sons mais altos e distintos para simular apps de transporte (99/Uber)
 
-// Alarme de chamada (Personalizado)
+// Alarme de chamada / nova corrida (Personalizado) - SÓ para chamadas reais,
+// nunca reutilizar em mensagens de chat: motorista confundia "chegou
+// mensagem" com "chegou corrida" porque os dois tocavam o mesmo arquivo.
 const CALL_SOUND_URL = '/ubb.mp3';
 
 // Som de toque específico para o painel de Admin (Telefone Clássico)
 const ADMIN_CALL_URL = '/ubb.mp3';
 
-// Notificação recebida (Som de alerta mais alto e claro)
-const RECEIVED_URL = '/ubb.mp3';
-
-// Som de envio (Swoosh)
-const SENT_URL = '/ubb.mp3';
-
 // The global `pushalert` variable is now declared on the Window interface in `types.ts`
 
 class SoundService {
-  private sentAudio: HTMLAudioElement;
-  private receivedAudio: HTMLAudioElement;
   private callAudio: HTMLAudioElement;
   private adminCallAudio: HTMLAudioElement;
+  private audioCtx: AudioContext | null = null;
   private hasNotificationPermission: boolean = false;
   private activeNotification: Notification | null = null;
 
   constructor() {
-    this.sentAudio = new Audio(SENT_URL);
-    this.receivedAudio = new Audio(RECEIVED_URL);
     this.callAudio = new Audio(CALL_SOUND_URL);
     this.adminCallAudio = new Audio(ADMIN_CALL_URL);
 
@@ -35,10 +28,6 @@ class SoundService {
     this.adminCallAudio.loop = true;
     this.adminCallAudio.volume = 0.8;
 
-    this.receivedAudio.volume = 1.0;
-
-    this.sentAudio.load();
-    this.receivedAudio.load();
     this.callAudio.load();
     this.adminCallAudio.load();
 
@@ -139,14 +128,67 @@ class SoundService {
     }
   }
 
-  playSent() {
-    this.sentAudio.currentTime = 0;
-    this.sentAudio.play().catch(e => console.log("Audio blocked:", e));
+  // ── Sons de MENSAGEM (chat) ──────────────────────────────────────────────
+  // Sintetizados via Web Audio API (sem arquivo) de propósito: precisam soar
+  // claramente diferentes do alarme de chamada/corrida (ubb.mp3), que é um
+  // som insistente de "atenda agora". Mensagem é só um blip curto e educado.
+
+  private getAudioContext(): AudioContext | null {
+    try {
+      if (!this.audioCtx) {
+        const Ctx = window.AudioContext || (window as any).webkitAudioContext;
+        if (!Ctx) return null;
+        this.audioCtx = new Ctx();
+      }
+      if (this.audioCtx.state === 'suspended') {
+        this.audioCtx.resume().catch(() => {});
+      }
+      return this.audioCtx;
+    } catch (e) {
+      console.warn("[SoundService] Web Audio API indisponível:", e);
+      return null;
+    }
   }
 
+  private playChime(notes: { freq: number; start: number; duration: number }[], volume = 0.18) {
+    const ctx = this.getAudioContext();
+    if (!ctx) return;
+    try {
+      const now = ctx.currentTime;
+      notes.forEach(({ freq, start, duration }) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.value = freq;
+        const t0 = now + start;
+        const t1 = t0 + duration;
+        gain.gain.setValueAtTime(0, t0);
+        gain.gain.linearRampToValueAtTime(volume, t0 + 0.015);
+        gain.gain.exponentialRampToValueAtTime(0.0001, t1);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(t0);
+        osc.stop(t1 + 0.02);
+      });
+    } catch (e) {
+      console.log("[SoundService] Falha ao tocar chime:", e);
+    }
+  }
+
+  // Blip curto e ascendente - mensagem ENVIADA (chat de suporte, etc.)
+  playSent() {
+    this.playChime([
+      { freq: 720, start: 0, duration: 0.09 },
+      { freq: 980, start: 0.07, duration: 0.09 },
+    ], 0.15);
+  }
+
+  // "Ding" de dois tons - mensagem RECEBIDA
   playReceived() {
-    this.receivedAudio.currentTime = 0;
-    this.receivedAudio.play().catch(e => console.log("Audio blocked:", e));
+    this.playChime([
+      { freq: 1046, start: 0, duration: 0.12 },
+      { freq: 784, start: 0.1, duration: 0.16 },
+    ], 0.2);
   }
 
   playMessageAlert() {
@@ -154,10 +196,11 @@ class SoundService {
       window.Android.triggerNativeMessageSound();
       return;
     }
-    this.receivedAudio.currentTime = 0;
-    this.receivedAudio.play().catch(e => console.log("Audio blocked:", e));
+    this.playReceived();
     if (navigator.vibrate) {
-      navigator.vibrate([200, 100, 200, 100, 200]);
+      // Padrão curto e único - bem diferente da vibração de chamada,
+      // que é longa e repetida (ver playRingtone).
+      navigator.vibrate([120, 60, 120]);
     }
   }
 
