@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { UserProfile, UserRole, Ride, DriverStatus, AppSettings, Coupon } from '../types';
-import { fetchOnlineDrivers, createRideRequest, fetchActiveRide, fetchRideById, subscribeToRides, fetchAppSettings, cancelRide, subscribeToProfiles, fetchAvailableCoupons, useCoupon, updateUserProfile, supabase, fetchUserProfile } from '../services/supabaseClient';
+import { UserProfile, UserRole, Ride, DriverStatus, AppSettings, Coupon, Message } from '../types';
+import { fetchOnlineDrivers, createRideRequest, fetchActiveRide, fetchRideById, subscribeToRides, fetchAppSettings, cancelRide, subscribeToProfiles, fetchAvailableCoupons, useCoupon, updateUserProfile, supabase, fetchUserProfile, fetchAdminContact, fetchMessages, subscribeToMessages, markMessagesAsRead } from '../services/supabaseClient';
 import { notifyNextDriver } from '../services/sequentialNotifications';
 // AdMob removido da tela do cliente para experiência limpa
 // import { AdMobService } from '../services/adMobService';
@@ -9,9 +9,11 @@ import { AdBanner } from './AdBanner';
 import { DriverStories } from './DriverStories';
 import { AppMap } from './AppMap';
 import { RideStatusOverlay } from './RideStatusOverlay';
+import { ChatWindow } from './ChatWindow';
 import { sendNotification } from '../services/notificationSender';
 import { RewardsHub } from './RewardsHub';
 import { geocodeForward, geocodeReverse, getDirections } from '../services/placesService';
+import { soundService } from '../services/soundService';
 
 interface ClientDashboardProps {
     currentUser: UserProfile;
@@ -53,6 +55,52 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     const [isRefreshingWallet, setIsRefreshingWallet] = useState(false);
     const [sidebarCoins, setSidebarCoins] = useState<number>(currentUser.wallet_coins || 0);
+
+    // Chat de Suporte (cliente <-> admin)
+    const [showSupportChat, setShowSupportChat] = useState(false);
+    const [supportContact, setSupportContact] = useState<UserProfile | null>(null);
+    const [supportMessages, setSupportMessages] = useState<Message[]>([]);
+    const [unreadSupportCount, setUnreadSupportCount] = useState(0);
+    const showSupportChatRef = useRef(false);
+    useEffect(() => { showSupportChatRef.current = showSupportChat; }, [showSupportChat]);
+
+    // Carrega o contato de suporte (admin) e assina mensagens em tempo real,
+    // pra avisar o cliente assim que o admin responder mesmo com o chat fechado.
+    useEffect(() => {
+        let unsub: (() => void) | undefined;
+
+        (async () => {
+            const admin = await fetchAdminContact();
+            if (!admin) return;
+            setSupportContact(admin);
+
+            const msgs = await fetchMessages(currentUser.id, admin.id);
+            setSupportMessages(msgs);
+            setUnreadSupportCount(msgs.filter(m => m.receiver_id === currentUser.id && !m.is_read).length);
+
+            const sub = subscribeToMessages(currentUser.id, (newMsg) => {
+                if (newMsg.sender_id !== admin.id && newMsg.receiver_id !== admin.id) return;
+
+                setSupportMessages(prev => {
+                    if (prev.some(m => m.id === newMsg.id)) return prev;
+                    return [...prev, newMsg];
+                });
+
+                const isReply = newMsg.receiver_id === currentUser.id;
+                if (isReply) {
+                    if (showSupportChatRef.current) {
+                        markMessagesAsRead(currentUser.id, admin.id);
+                    } else {
+                        setUnreadSupportCount(prev => prev + 1);
+                        soundService.playMessageAlert();
+                    }
+                }
+            });
+            unsub = () => sub.unsubscribe();
+        })();
+
+        return () => unsub?.();
+    }, [currentUser.id]);
 
     // View State Management
     type ViewState = 'home' | 'search_input' | 'location_check' | 'vehicle_select';
@@ -614,15 +662,29 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
     };
 
     // Helper for Menu Items
-    const MenuItem = ({ icon, label, active, onClick }: any) => (
+    const MenuItem = ({ icon, label, active, badge, onClick }: any) => (
         <button
             onClick={onClick}
-            className={`w-full flex items-center gap-4 p-4 rounded-xl transition-all ${active ? 'bg-whatsapp-green/10 text-whatsapp-green' : 'text-gray-400 hover:bg-white/5 hover:text-white'}`}
+            className={`relative w-full flex items-center gap-4 p-4 rounded-xl transition-all ${active ? 'bg-whatsapp-green/10 text-whatsapp-green' : 'text-gray-400 hover:bg-white/5 hover:text-white'}`}
         >
-            <span className="material-icons">{icon}</span>
+            <span className="relative material-icons">
+                {icon}
+                {badge > 0 && (
+                    <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-[16px] px-1 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center">
+                        {badge > 9 ? '9+' : badge}
+                    </span>
+                )}
+            </span>
             <span className="font-bold text-sm tracking-wide">{label}</span>
         </button>
     );
+
+    const openSupportChat = () => {
+        setShowSupportChat(true);
+        setIsMenuOpen(false);
+        if (supportContact) markMessagesAsRead(currentUser.id, supportContact.id);
+        setUnreadSupportCount(0);
+    };
 
     return (
         <div className="flex-1 flex flex-col h-full bg-[#111b21] relative overflow-hidden font-sans">
@@ -683,6 +745,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
                             <MenuItem icon="card_giftcard" label="Prêmios" active={activeTab === 'rewards'} onClick={() => { setActiveTab('rewards'); setIsMenuOpen(false); }} />
                             <div className="h-px bg-white/5 my-3 mx-4"></div>
                             <MenuItem icon="style" label="Bingo" onClick={() => { onOpenBingo(); setIsMenuOpen(false); }} />
+                            <MenuItem icon="support_agent" label="Suporte" badge={unreadSupportCount} onClick={openSupportChat} />
                         </div>
 
                         {/* Logout Button */}
@@ -713,6 +776,9 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
                             <button onClick={() => setIsMenuOpen(true)} className="flex items-center gap-3 active:scale-95 transition-transform">
                                 <div className="relative">
                                     <img src={currentUser.avatar_url || "/logo.png"} className="w-11 h-11 rounded-full object-cover border-2 border-white shadow" />
+                                    {unreadSupportCount > 0 && (
+                                        <span className="absolute -top-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-red-500 border-2 border-brand-400 animate-pulse"></span>
+                                    )}
                                 </div>
                                 <h1 className="chegoja-header-name text-gray-900 font-black text-2xl tracking-tight">Olá, {currentUser.username.split(' ')[0]}!</h1>
                             </button>
@@ -1761,6 +1827,32 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
                         settings={settings}
                         currentUser={currentUser}
                     />
+                </div>
+            )}
+
+            {/* Chat de Suporte (cliente <-> admin) */}
+            {showSupportChat && supportContact && (
+                <div className="absolute inset-0 z-[210] bg-whatsapp-dark">
+                    <div className="h-full flex flex-col">
+                        <div className="h-14 px-4 flex items-center gap-3 bg-whatsapp-panel border-b border-white/10 shrink-0">
+                            <button onClick={() => setShowSupportChat(false)} className="text-gray-400 hover:text-white">
+                                <span className="material-icons">arrow_back</span>
+                            </button>
+                            <img src={supportContact.avatar_url || 'https://via.placeholder.com/40'} className="w-10 h-10 rounded-full" />
+                            <div>
+                                <p className="text-white font-bold">{supportContact.username}</p>
+                                <p className="text-xs text-gray-400">Suporte</p>
+                            </div>
+                        </div>
+                        <div className="flex-1 overflow-hidden">
+                            <ChatWindow
+                                currentUser={currentUser}
+                                chatPartner={supportContact}
+                                messages={supportMessages}
+                                onSendMessage={(msg) => setSupportMessages(p => [...p, msg])}
+                            />
+                        </div>
+                    </div>
                 </div>
             )}
         </div>

@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { UserProfile, AppSettings, DriverStatus, Message } from '../types';
-import { fetchAppSettings, updateDriverStatus, fetchAdminContact, fetchMessages, subscribeToMessages, fetchOnlineDrivers } from '../services/supabaseClient';
+import { fetchAppSettings, updateDriverStatus, fetchAdminContact, fetchMessages, subscribeToMessages, markMessagesAsRead, fetchOnlineDrivers } from '../services/supabaseClient';
 import { acceptRideSequential, rejectRideSequential } from '../services/sequentialNotifications';
 import { AdMobService } from '../services/adMobService';
 import { AppMap } from './AppMap';
@@ -36,6 +36,9 @@ export const DriverDashboard: React.FC<DriverDashboardProps> = ({
     const [showRewards, setShowRewards] = useState(false);
     const [chatContact, setChatContact] = useState<UserProfile | null>(null);
     const [messages, setMessages] = useState<Message[]>([]);
+    const [unreadChatCount, setUnreadChatCount] = useState(0);
+    const showChatRef = useRef(false);
+    useEffect(() => { showChatRef.current = showChat; }, [showChat]);
 
     // Taximeter States
     const [taximeterActive, setTaximeterActive] = useState(false);
@@ -60,7 +63,8 @@ export const DriverDashboard: React.FC<DriverDashboardProps> = ({
 
     useEffect(() => {
         fetchAppSettings().then(setSettings);
-        loadAdminContact();
+        let unsubChat: (() => void) | undefined;
+        loadAdminContact().then(cleanup => { unsubChat = cleanup; });
         startGpsWatcher();
         fetchOnlineDrivers().then(drivers => {
             setOnlineDrivers(drivers.filter(d => d.id !== currentUser.id));
@@ -68,6 +72,7 @@ export const DriverDashboard: React.FC<DriverDashboardProps> = ({
 
         return () => {
             if (gpsRef.current) navigator.geolocation.clearWatch(gpsRef.current);
+            unsubChat?.();
         };
     }, []);
 
@@ -105,6 +110,30 @@ export const DriverDashboard: React.FC<DriverDashboardProps> = ({
             setChatContact(admin);
             const msgs = await fetchMessages(currentUser.id, admin.id);
             setMessages(msgs);
+            setUnreadChatCount(msgs.filter(m => m.receiver_id === currentUser.id && !m.is_read).length);
+
+            // Notificação em tempo real: se o admin responder com o chat fechado,
+            // o motorista precisa saber sem precisar abrir o menu pra checar.
+            const sub = subscribeToMessages(currentUser.id, (newMsg) => {
+                if (newMsg.sender_id !== admin.id && newMsg.receiver_id !== admin.id) return;
+
+                setMessages(prev => {
+                    if (prev.some(m => m.id === newMsg.id)) return prev;
+                    return [...prev, newMsg];
+                });
+
+                const isReply = newMsg.receiver_id === currentUser.id;
+                if (isReply) {
+                    if (showChatRef.current) {
+                        markMessagesAsRead(currentUser.id, admin.id);
+                    } else {
+                        setUnreadChatCount(prev => prev + 1);
+                        soundService.playMessageAlert();
+                    }
+                }
+            });
+
+            return () => sub.unsubscribe();
         }
     };
 
@@ -380,9 +409,12 @@ export const DriverDashboard: React.FC<DriverDashboardProps> = ({
                 </div>
                 <button
                     onClick={() => setShowMenu(!showMenu)}
-                    className="w-9 h-9 md:w-10 md:h-10 rounded-full bg-white/5 flex items-center justify-center text-gray-400 hover:text-white hover:bg-white/10 transition"
+                    className="relative w-9 h-9 md:w-10 md:h-10 rounded-full bg-white/5 flex items-center justify-center text-gray-400 hover:text-white hover:bg-white/10 transition"
                 >
                     <span className="material-icons">menu</span>
+                    {unreadChatCount > 0 && (
+                        <span className="absolute top-0 right-0 w-3 h-3 rounded-full bg-red-500 border-2 border-[#0f1a24] animate-pulse"></span>
+                    )}
                 </button>
             </div>
 
@@ -430,15 +462,27 @@ export const DriverDashboard: React.FC<DriverDashboardProps> = ({
                                 <p className="px-3 py-2 text-[10px] text-gray-500 uppercase tracking-widest font-bold">Ações Rápidas</p>
 
                                 <button
-                                    onClick={() => { setShowChat(true); setShowMenu(false); }}
+                                    onClick={() => {
+                                        setShowChat(true);
+                                        setShowMenu(false);
+                                        if (chatContact) markMessagesAsRead(currentUser.id, chatContact.id);
+                                        setUnreadChatCount(0);
+                                    }}
                                     className="w-full flex items-center gap-4 px-4 py-3.5 hover:bg-gradient-to-r hover:from-green-500/10 hover:to-transparent rounded-2xl transition-all group"
                                 >
-                                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-green-500/20 to-green-600/10 flex items-center justify-center group-hover:scale-110 transition-transform">
+                                    <div className="relative w-10 h-10 rounded-xl bg-gradient-to-br from-green-500/20 to-green-600/10 flex items-center justify-center group-hover:scale-110 transition-transform">
                                         <span className="material-icons text-green-400">chat</span>
+                                        {unreadChatCount > 0 && (
+                                            <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center border-2 border-[#152232]">
+                                                {unreadChatCount > 9 ? '9+' : unreadChatCount}
+                                            </span>
+                                        )}
                                     </div>
                                     <div className="flex-1 text-left">
                                         <p className="text-white font-semibold text-sm">Chat / Suporte</p>
-                                        <p className="text-gray-500 text-[10px]">Fale com a central</p>
+                                        <p className="text-gray-500 text-[10px]">
+                                            {unreadChatCount > 0 ? `${unreadChatCount} mensagem(ns) nova(s)` : 'Fale com a central'}
+                                        </p>
                                     </div>
                                     <span className="material-icons text-gray-600 text-sm">chevron_right</span>
                                 </button>

@@ -3,7 +3,7 @@
  * Wrapper que integra o AdminLayout com as views modulares
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { AdminLayout } from '../src/components/admin/AdminLayout';
 import { AdminDriversView } from '../src/components/admin/AdminDriversView';
 import { AdminSettingsView } from '../src/components/admin/AdminSettingsView';
@@ -52,6 +52,11 @@ const AdminDashboardContent: React.FC<AdminDashboardDesktopProps> = ({
     const [searchQuery, setSearchQuery] = useState('');
     const [filterStatus, setFilterStatus] = useState<DriverStatus | 'all' | 'pending'>('all');
     const [unreadMessages, setUnreadMessages] = useState(0);
+    // Evita som duplicado: quando a aba "support" está aberta, o próprio
+    // AdminSupportView já toca o alerta por conversa; aqui só cuidamos do
+    // badge global e da notificação de sistema quando o admin está noutra aba.
+    const activeTabRef = useRef(activeTab);
+    useEffect(() => { activeTabRef.current = activeTab; }, [activeTab]);
 
     // Calculate stats
     const onlineDriversList = drivers.filter(d => d.status === DriverStatus.AVAILABLE);
@@ -124,8 +129,21 @@ const AdminDashboardContent: React.FC<AdminDashboardDesktopProps> = ({
             }, (payload) => {
                 const msg = payload.new as { receiver_id?: string; sender_id?: string };
                 if (msg?.receiver_id === currentUser.id) {
-                    soundService.playMessageAlert();
                     loadUnreadMessages();
+                    // Se a Central de Atendimento já está aberta, ela mesma decide se toca
+                    // o alerta (só quando a conversa recebida não é a que já está aberta).
+                    // Evita tocar o som duas vezes ao mesmo tempo.
+                    if (activeTabRef.current !== 'support') {
+                        soundService.playMessageAlert();
+                    }
+                    // Notificação do sistema (aba minimizada/em segundo plano) - avisa o
+                    // admin mesmo se ele não estiver olhando o painel no momento.
+                    if (document.hidden) {
+                        soundService.sendNotification(
+                            'Nova mensagem no suporte',
+                            'Um motorista ou cliente respondeu no chat. Abra a Central de Atendimento.'
+                        );
+                    }
                 }
             })
             .subscribe();
