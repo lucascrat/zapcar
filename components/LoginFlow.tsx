@@ -249,9 +249,9 @@ export const LoginFlow: React.FC<LoginFlowProps> = ({ onLoginSuccess }) => {
                 )}
             </div>
 
-            <div className="flex-1 w-full max-w-sm flex flex-col items-center justify-center mt-12 mb-8">
+            <div className="chegoja-login-content flex-1 w-full max-w-sm flex flex-col items-center justify-center mt-12 mb-8">
                 <div className="relative mb-6 group cursor-pointer" onClick={() => avatarInputRef.current?.click()}>
-                    <div className="w-32 h-32 rounded-full overflow-hidden border-4 border-gray-50 shadow-lg bg-gray-100 flex items-center justify-center">
+                    <div className="chegoja-login-avatar w-32 h-32 rounded-full overflow-hidden border-4 border-gray-50 shadow-lg bg-gray-100 flex items-center justify-center">
                         {avatarPreview ? (
                             <img src={avatarPreview} alt="Preview" className="w-full h-full object-cover" />
                         ) : (

@@ -714,11 +714,11 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
                                 <div className="relative">
                                     <img src={currentUser.avatar_url || "/logo.png"} className="w-11 h-11 rounded-full object-cover border-2 border-white shadow" />
                                 </div>
-                                <h1 className="text-gray-900 font-black text-2xl tracking-tight">Olá, {currentUser.username.split(' ')[0]}!</h1>
+                                <h1 className="chegoja-header-name text-gray-900 font-black text-2xl tracking-tight">Olá, {currentUser.username.split(' ')[0]}!</h1>
                             </button>
                             <button
                                 onClick={() => setActiveTab('pay')}
-                                className="bg-black/10 px-3 py-1.5 rounded-full flex items-center gap-1.5 active:scale-95 transition-transform"
+                                className="shrink-0 bg-black/10 px-3 py-1.5 rounded-full flex items-center gap-1.5 active:scale-95 transition-transform"
                             >
                                 <span className="material-icons text-gray-900 text-base">stars</span>
                                 <span className="text-gray-900 font-black text-sm">{sidebarCoins}</span>
@@ -730,7 +730,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
                     <div className="flex-1 overflow-y-auto relative -mt-12 pb-32">
                         <div className="px-4 space-y-4">
                             {/* Card do Mapa */}
-                            <div className="rounded-3xl overflow-hidden shadow-lg h-52 relative bg-gray-200">
+                            <div className="chegoja-map-card rounded-3xl overflow-hidden shadow-lg h-52 relative bg-gray-200">
                                 <AppMap drivers={drivers} userLocation={userLocation} onMarkerClick={onStartChat} settings={settings} />
                             </div>
 
@@ -741,7 +741,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
                                 className="w-full bg-white rounded-full py-4 px-6 flex items-center gap-3 shadow-lg active:scale-[0.98] transition-all"
                             >
                                 <span className="material-icons text-gray-900 text-2xl">search</span>
-                                <span className="text-gray-900 text-xl font-black tracking-tight">Para onde vamos?</span>
+                                <span className="chegoja-search-bar text-gray-900 text-xl font-black tracking-tight">Para onde vamos?</span>
                             </button>
 
                             {/* Banners promocionais em carrossel (cadastrados pelo admin) */}
@@ -801,13 +801,13 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
                     <div className="bg-brand-400 px-5 pt-5 pb-6 shrink-0">
                         <button onClick={() => setIsMenuOpen(true)} className="flex items-center gap-3 active:scale-95 transition-transform">
                             <img src={currentUser.avatar_url || "/logo.png"} className="w-11 h-11 rounded-full object-cover border-2 border-white shadow" />
-                            <h1 className="text-gray-900 font-black text-2xl tracking-tight">Olá, {currentUser.username.split(' ')[0]}!</h1>
+                            <h1 className="chegoja-header-name text-gray-900 font-black text-2xl tracking-tight">Olá, {currentUser.username.split(' ')[0]}!</h1>
                         </button>
                     </div>
 
                     <div className="flex-1 overflow-y-auto pb-32">
                         {/* Hero */}
-                        <div className="text-center pt-8 pb-6 px-6">
+                        <div className="chegoja-delivery-hero text-center pt-8 pb-6 px-6">
                             <p className="text-gray-700 font-bold text-xl tracking-wide uppercase">Você precisa,</p>
                             <div className="flex items-center justify-center gap-2 mt-1">
                                 <span className="material-icons text-brand-600 text-3xl bg-brand-100 rounded-lg p-1">arrow_forward</span>
@@ -877,9 +877,9 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
                         <div className="flex items-center justify-between">
                             <button onClick={() => setIsMenuOpen(true)} className="flex items-center gap-3 active:scale-95 transition-transform">
                                 <img src={currentUser.avatar_url || "/logo.png"} className="w-11 h-11 rounded-full object-cover border-2 border-white shadow" />
-                                <h1 className="text-gray-900 font-black text-2xl tracking-tight">Olá, {currentUser.username.split(' ')[0]}</h1>
+                                <h1 className="chegoja-header-name text-gray-900 font-black text-2xl tracking-tight">Olá, {currentUser.username.split(' ')[0]}</h1>
                             </button>
-                            <button onClick={() => setActiveTab('profile')} className="w-10 h-10 rounded-full bg-black/10 flex items-center justify-center active:scale-95">
+                            <button onClick={() => setActiveTab('profile')} className="shrink-0 w-10 h-10 rounded-full bg-black/10 flex items-center justify-center active:scale-95">
                                 <span className="material-icons text-gray-900">person</span>
                             </button>
                         </div>
@@ -891,7 +891,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
                             <div className="bg-white rounded-3xl p-6 shadow-lg">
                                 <p className="text-gray-500 font-bold text-sm mb-1">Saldo na Carteira (R$)</p>
                                 <div className="flex items-center justify-between">
-                                    <p className="text-gray-900 font-black text-4xl tracking-tight">
+                                    <p className="chegoja-pay-balance text-gray-900 font-black text-4xl tracking-tight">
                                         {((currentUser.financial_balance || 0) + (sidebarCoins * (settings?.coin_value_brl || 0))).toFixed(2).replace('.', ',')}
                                     </p>
                                     <button
@@ -1697,7 +1697,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
                             <div className="bg-gradient-to-br from-[#00a884] to-[#017561] rounded-[32px] p-8 shadow-2xl relative overflow-hidden">
                                 <div className="relative z-10 text-center">
                                     <p className="text-white/70 text-xs font-bold uppercase tracking-widest mb-2">Saldo Disponível</p>
-                                    <h3 className="text-4xl font-black text-white">
+                                    <h3 className="chegoja-pay-balance text-4xl font-black text-white">
                                         R$ {((currentUser.financial_balance || 0) + ((currentUser.wallet_coins || 0) * (settings?.coin_value_brl || 0))).toFixed(2)}
                                     </h3>
                                     <div className="mt-6 flex flex-col gap-4 items-center">
@@ -1725,7 +1725,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
             {/* Bottom Navigation - Estilo 99 (pílula flutuante: Corrida | Entrega | Pay) */}
             {viewState === 'home' && !activeRide && (activeTab === 'home' || activeTab === 'delivery' || activeTab === 'pay') && (
                 <div className="absolute bottom-5 left-1/2 -translate-x-1/2 z-[45] pb-safe-area">
-                    <div className="bg-white rounded-full shadow-[0_8px_30px_rgba(0,0,0,0.2)] px-4 py-2 flex items-center gap-2">
+                    <div className="chegoja-bottom-nav bg-white rounded-full shadow-[0_8px_30px_rgba(0,0,0,0.2)] px-4 py-2 flex items-center gap-2">
                         {([
                             { tab: 'home', icon: 'directions_car', label: 'Corrida' },
                             { tab: 'delivery', icon: 'inventory_2', label: 'Entrega' },

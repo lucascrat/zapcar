@@ -1,0 +1,88 @@
+/* ==========================================================================
+   ChegoJá – Small Screen Adaptations (≤ 360px)
+   Ajustes para phones de 320-360px. O font-size: 14px em ≤380px (index.css)
+   já escala a maioria dos elementos rem. Este arquivo trata os casos que
+   precisam de atenção adicional.
+   ========================================================================== */
+
+/* ------------------------------------------------------------------
+   Base: reduzir ainda mais em telas muito pequenas (320px)
+   ------------------------------------------------------------------ */
+@media (max-width: 340px) {
+  html {
+    font-size: 13px;
+  }
+}
+
+/* ------------------------------------------------------------------
+   Cabeçalhos hero grandes (Entrega e Pay): text-4xl em 320px fica
+   muito grande. Reduzimos via seletor de contexto.
+   ------------------------------------------------------------------ */
+@media (max-width: 360px) {
+  /* Heading hero da aba Entrega */
+  .chegoja-delivery-hero h2 {
+    font-size: 1.75rem !important;
+    line-height: 2rem !important;
+  }
+
+  /* Imagens dos veículos na hero da Entrega */
+  .chegoja-delivery-hero img {
+    width: 5rem !important;
+    height: 5rem !important;
+  }
+
+  /* Saldo em destaque no Pay */
+  .chegoja-pay-balance {
+    font-size: 2rem !important;
+    line-height: 2.25rem !important;
+  }
+
+  /* Avatar do login: w-32 h-32 → menor */
+  .chegoja-login-avatar {
+    width: 5.5rem !important;
+    height: 5.5rem !important;
+  }
+
+  /* Margem superior da área central do login */
+  .chegoja-login-content {
+    margin-top: 2.5rem !important;
+    margin-bottom: 1.5rem !important;
+  }
+
+  /* Nome de usuário nos headers – truncar para não empurrar o botão de moedas */
+  .chegoja-header-name {
+    max-width: 140px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 1.1rem !important;
+  }
+
+  /* Card do mapa na home: reduzir altura para sobrar espaço para os atalhos */
+  .chegoja-map-card {
+    height: 9rem !important;
+  }
+
+  /* Input de busca "Para onde vamos?" – texto menor */
+  .chegoja-search-bar {
+    font-size: 1rem !important;
+  }
+
+  /* Bottom nav: padding interno menor para não travar em 320px */
+  .chegoja-bottom-nav {
+    padding-left: 0.75rem !important;
+    padding-right: 0.75rem !important;
+  }
+
+  .chegoja-bottom-nav button {
+    padding-left: 0.5rem !important;
+    padding-right: 0.5rem !important;
+  }
+}
+
+/* ------------------------------------------------------------------
+   Utilitário: pb-safe-area (safe-area-inset-bottom com fallback)
+   ------------------------------------------------------------------ */
+.pb-safe-area {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
