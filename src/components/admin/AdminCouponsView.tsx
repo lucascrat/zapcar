@@ -128,11 +128,12 @@ export const AdminCouponsView: React.FC = () => {
     const handleDeleteCoupon = async (couponId: string) => {
         if (!confirm('Deseja excluir este cupom?')) return;
 
-        const success = await deleteCoupon(couponId);
-        if (!success) {
-            alert('Erro ao excluir cupom');
+        const result = await deleteCoupon(couponId);
+        if (!result.ok) {
+            alert('Erro ao excluir cupom: ' + (result.errorMsg || 'Erro desconhecido. Verifique o console (F12).'));
+        } else {
+            loadCoupons();
         }
-        loadCoupons();
     };
 
     const getVehicleLabel = (type: string) => {

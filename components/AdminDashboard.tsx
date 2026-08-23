@@ -59,8 +59,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onL
 
     const handleDeleteCoupon = async (id: string) => {
         if (!window.confirm("Deseja excluir este cupom?")) return;
-        const success = await deleteCoupon(id);
-        if (success) loadCoupons();
+        const result = await deleteCoupon(id);
+        if (result.ok) {
+            loadCoupons();
+        } else {
+            alert('Erro ao excluir cupom: ' + (result.errorMsg || 'Verifique o console (F12).'));
+        }
     };
 
     // Store Functions

@@ -1384,18 +1384,25 @@ export const createCoupon = async (coupon: Partial<Coupon>, imageFile?: File): P
   }
 };
 
-export const deleteCoupon = async (id: string): Promise<boolean> => {
-  const { error } = await supabase
+export const deleteCoupon = async (id: string): Promise<{ ok: boolean; errorMsg?: string }> => {
+  const { error, count } = await supabase
     .from('coupons')
-    .delete()
+    .delete({ count: 'exact' })
     .eq('id', id);
 
   if (error) {
+    console.error('[deleteCoupon] Erro ao deletar cupom:', error);
     handleDbError(error, "deleteCoupon");
-    return false;
+    return { ok: false, errorMsg: error.message };
   }
 
-  return true;
+  // count === 0 significa que a linha existe mas RLS bloqueou silenciosamente
+  if (count === 0) {
+    console.error('[deleteCoupon] Cupom não encontrado ou RLS bloqueou (0 linhas afetadas). Verifique GRANT DELETE e a policy coupons_delete.');
+    return { ok: false, errorMsg: 'Sem permissão para excluir (RLS bloqueou). Execute o SQL de correção no Supabase.' };
+  }
+
+  return { ok: true };
 };
 
 export const useCoupon = async (id: string): Promise<boolean> => {
