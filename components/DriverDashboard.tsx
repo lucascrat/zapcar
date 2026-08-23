@@ -389,14 +389,14 @@ export const DriverDashboard: React.FC<DriverDashboardProps> = ({
             {/* Menu Dropdown */}
             {showMenu && (
                 <>
-                    {/* Backdrop com blur */}
+                    {/* Backdrop com blur — z-[60] garante que fica acima do FAB (z-40) */}
                     <div
-                        className="fixed inset-0 z-30 bg-black/40 backdrop-blur-sm animate-fade-in"
+                        className="fixed inset-0 z-[60] bg-black/40 backdrop-blur-sm animate-fade-in"
                         onClick={() => setShowMenu(false)}
                     ></div>
 
-                    {/* Menu Container Premium */}
-                    <div className="absolute top-16 right-3 left-3 md:left-auto md:right-4 md:w-72 z-40 animate-slide-down">
+                    {/* Menu Container Premium — z-[70] acima do backdrop */}
+                    <div className="absolute top-16 right-3 left-3 md:left-auto md:right-4 md:w-72 z-[70] animate-slide-down">
                         {/* Header do Menu com Avatar */}
                         <div className="bg-gradient-to-br from-[#1a2a38] via-[#152232] to-[#0d1a28] rounded-t-3xl p-4 border border-white/10 border-b-0">
                             <div className="flex items-center gap-4">
@@ -423,8 +423,8 @@ export const DriverDashboard: React.FC<DriverDashboardProps> = ({
                             </div>
                         </div>
 
-                        {/* Menu Items Container */}
-                        <div className="bg-gradient-to-b from-[#152232] to-[#0f1a28] rounded-b-3xl border border-white/10 border-t-0 overflow-hidden shadow-2xl">
+                        {/* Menu Items Container — max-h + overflow-y para "Sair" aparecer */}
+                        <div className="bg-gradient-to-b from-[#152232] to-[#0f1a28] rounded-b-3xl border border-white/10 border-t-0 overflow-y-auto shadow-2xl" style={{ maxHeight: 'calc(100dvh - 120px)' }}>
                             {/* Seção Principal */}
                             <div className="p-2">
                                 <p className="px-3 py-2 text-[10px] text-gray-500 uppercase tracking-widest font-bold">Ações Rápidas</p>
@@ -531,16 +531,18 @@ export const DriverDashboard: React.FC<DriverDashboardProps> = ({
 
                                 <button
                                     onClick={() => { setShowRewards(true); setShowMenu(false); }}
-                                    className="w-full flex items-center gap-4 px-4 py-3.5 hover:bg-gradient-to-r hover:from-yellow-500/10 hover:to-transparent rounded-2xl transition-all group relative"
+                                    className="w-full flex items-center gap-4 px-4 py-3.5 hover:bg-gradient-to-r hover:from-yellow-500/10 hover:to-transparent rounded-2xl transition-all group"
                                 >
                                     <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-yellow-500/20 to-amber-600/10 flex items-center justify-center group-hover:scale-110 transition-transform">
                                         <span className="material-icons text-yellow-400">emoji_events</span>
                                     </div>
                                     <div className="flex-1 text-left">
-                                        <p className="text-white font-semibold text-sm">Premiações &amp; Ranking</p>
+                                        <p className="text-white font-semibold text-sm flex items-center gap-2">
+                                            Premiações &amp; Ranking
+                                            <span className="text-[8px] bg-yellow-500 text-black font-black px-1.5 py-0.5 rounded-full uppercase tracking-wide">Novo</span>
+                                        </p>
                                         <p className="text-gray-500 text-[10px]">Top 10 motoristas da semana</p>
                                     </div>
-                                    <span className="absolute right-4 top-2 text-[8px] bg-yellow-500 text-black font-black px-1.5 py-0.5 rounded-full uppercase tracking-wide">Novo</span>
                                     <span className="material-icons text-gray-600 text-sm">chevron_right</span>
                                 </button>
 
