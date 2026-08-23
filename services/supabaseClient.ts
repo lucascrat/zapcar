@@ -1665,6 +1665,16 @@ export const fetchAllDriversWithStats = async (): Promise<(UserProfile & { month
   return driversWithStats;
 };
 
+/** Formata uma Date para "YYYY-MM-DD" usando o horário LOCAL do dispositivo
+ *  (evita bug de UTC onde corridas após 21h BRT aparecem no dia seguinte no gráfico).
+ */
+const toLocalDateStr = (date: Date): string => {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+};
+
 export const fetchRevenueStats = async (days: number = 7): Promise<{ date: string, amount: number }[]> => {
   try {
     const startDate = new Date();
@@ -1681,16 +1691,17 @@ export const fetchRevenueStats = async (days: number = 7): Promise<{ date: strin
 
     const statsMap: Record<string, number> = {};
 
-    // Initialize map with last N days
+    // Initialize map with last N days usando data LOCAL (não UTC)
     for (let i = 0; i < days; i++) {
       const d = new Date();
       d.setDate(d.getDate() - i);
-      const dateStr = d.toISOString().split('T')[0];
-      statsMap[dateStr] = 0;
+      statsMap[toLocalDateStr(d)] = 0;
     }
 
     (data || []).forEach((ride: any) => {
-      const dateStr = ride.created_at.split('T')[0];
+      // Usar data local para evitar que corridas após 21h BRT apareçam no dia seguinte
+      const localDate = new Date(ride.created_at);
+      const dateStr = toLocalDateStr(localDate);
       if (statsMap[dateStr] !== undefined) {
         statsMap[dateStr] += Number(ride.final_price || 0);
       }
@@ -1713,7 +1724,8 @@ export const fetchDashboardMetrics = async () => {
     const promises = [
       supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'driver'),
       supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'client'),
-      supabase.from('rides').select('*', { count: 'exact', head: true }).gte('created_at', today.toISOString()),
+      // Conta apenas corridas FINALIZADAS hoje (exclui canceladas e em andamento)
+      supabase.from('rides').select('*', { count: 'exact', head: true }).eq('status', 'finished').gte('created_at', today.toISOString()),
       supabase.from('rides').select('final_price').eq('status', 'finished').gte('created_at', today.toISOString())
     ];
 
@@ -2405,12 +2417,17 @@ export const createDispatchRide = async (dispatchData: any): Promise<{ ride: Rid
   }
 };
 
-export const fetchAllRides = async (): Promise<Ride[]> => {
+export const fetchAllRides = async (limit = 500): Promise<Ride[]> => {
   try {
+    // Limite explícito para evitar truncamento silencioso do PostgREST
+    // (o padrão PGRST_DB_MAX_ROWS pode ser 1000; sem .limit() o comportamento varia).
+    // 500 cobre o monitor admin sem penalizar a performance.
+    // Para histórico completo, use paginação com .range().
     const { data, error } = await supabase
       .from('rides')
       .select('*, driver:driver_id(*), client:client_id(*)')
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: false })
+      .limit(limit);
 
     if (error) throw error;
     return data as Ride[];

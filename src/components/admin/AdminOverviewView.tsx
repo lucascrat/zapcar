@@ -152,7 +152,7 @@ export const AdminOverviewView: React.FC = () => {
                     <div className="admin-stat-icon">
                         <span className="material-icons">route</span>
                     </div>
-                    <p className="admin-stat-label">Corridas Hoje</p>
+                    <p className="admin-stat-label">Concluídas Hoje</p>
                     <p className="admin-stat-value">{metrics?.todayRides || 0}</p>
                 </div>
 
