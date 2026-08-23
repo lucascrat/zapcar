@@ -52,6 +52,7 @@ const AdminDashboardContent: React.FC<AdminDashboardDesktopProps> = ({
     const [searchQuery, setSearchQuery] = useState('');
     const [filterStatus, setFilterStatus] = useState<DriverStatus | 'all' | 'pending'>('all');
     const [unreadMessages, setUnreadMessages] = useState(0);
+    const [openChatPartnerId, setOpenChatPartnerId] = useState<string | null>(null);
     // Evita som duplicado: quando a aba "support" está aberta, o próprio
     // AdminSupportView já toca o alerta por conversa; aqui só cuidamos do
     // badge global e da notificação de sistema quando o admin está noutra aba.
@@ -154,6 +155,19 @@ const AdminDashboardContent: React.FC<AdminDashboardDesktopProps> = ({
         };
     }, []);
 
+    // Abre a Central de Atendimento na conversa certa ao tocar na notificação
+    // push de nova mensagem (disparado pelo pushService).
+    useEffect(() => {
+        const handleOpenChat = (event: any) => {
+            const partnerId = event.detail?.partnerId;
+            if (!partnerId) return;
+            setOpenChatPartnerId(partnerId);
+            setActiveTab('support');
+        };
+        window.addEventListener('openChat', handleOpenChat);
+        return () => window.removeEventListener('openChat', handleOpenChat);
+    }, []);
+
     // Reset filter when changing tabs
     useEffect(() => {
         if (activeTab === 'drivers') {
@@ -247,7 +261,7 @@ const AdminDashboardContent: React.FC<AdminDashboardDesktopProps> = ({
                 return <AdminRewardsView />;
 
             case 'support':
-                return <AdminSupportView currentUser={currentUser} onUnreadChange={loadUnreadMessages} />;
+                return <AdminSupportView currentUser={currentUser} onUnreadChange={loadUnreadMessages} initialPartnerId={openChatPartnerId} />;
 
             case 'central':
                 return <AdminDispatchView />;

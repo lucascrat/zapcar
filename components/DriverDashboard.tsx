@@ -76,6 +76,19 @@ export const DriverDashboard: React.FC<DriverDashboardProps> = ({
         };
     }, []);
 
+    // Abre o chat de suporte ao tocar na notificação push de nova mensagem
+    // (disparado pelo pushService quando o usuário toca a notificação do sistema).
+    useEffect(() => {
+        const handleOpenChat = () => {
+            setShowChat(true);
+            setShowMenu(false);
+            if (chatContact) markMessagesAsRead(currentUser.id, chatContact.id);
+            setUnreadChatCount(0);
+        };
+        window.addEventListener('openChat', handleOpenChat);
+        return () => window.removeEventListener('openChat', handleOpenChat);
+    }, [chatContact, currentUser.id]);
+
     const [gpsError, setGpsError] = useState<string | null>(null);
 
     const startGpsWatcher = () => {

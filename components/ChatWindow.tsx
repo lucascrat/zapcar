@@ -2,6 +2,7 @@
 import { Message, UserProfile, UserRole } from '../types';
 import { sendMessage, generateUUID, markMessagesAsRead } from '../services/supabaseClient';
 import { soundService } from '../services/soundService';
+import { sendNotification } from '../services/notificationSender';
 
 interface ChatWindowProps {
   currentUser: UserProfile;
@@ -33,11 +34,13 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ currentUser, chatPartner
   const handleSendText = async () => {
     if (!inputText.trim() || !chatPartner) return;
 
+    const textToSend = inputText.trim();
+
     const newMessage: Message = {
       id: generateUUID(),
       sender_id: currentUser.id,
       receiver_id: chatPartner.id,
-      content: inputText.trim(),
+      content: textToSend,
       media_type: 'text',
       created_at: new Date().toISOString(),
       is_read: false
@@ -53,6 +56,21 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ currentUser, chatPartner
     } catch (e) {
       console.error("Failed to send message to DB", e);
     }
+
+    // Notificação push (FCM) - garante que o destinatário veja a mensagem na
+    // tela do celular (barra de notificações/tela bloqueada) mesmo com o app
+    // minimizado ou fechado, igual às notificações de corrida/aprovação.
+    const senderLabel = currentUser.role === UserRole.ADMIN ? 'Suporte ChegoJá' : (currentUser.username || 'Nova mensagem');
+    sendNotification(
+      senderLabel,
+      textToSend.length > 120 ? `${textToSend.slice(0, 117)}...` : textToSend,
+      'user',
+      {
+        targetUserId: chatPartner.id,
+        sound: 'default',
+        data: { type: 'chat_message', sender_id: currentUser.id }
+      }
+    ).catch(e => console.error('[ChatWindow] Falha ao enviar push da mensagem:', e));
   };
 
   if (!chatPartner) return null;

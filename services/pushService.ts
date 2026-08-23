@@ -43,11 +43,11 @@ class PushNotificationService {
 
             PushNotifications.addListener('pushNotificationReceived', (notification) => {
                 console.log('[Push] Notification received in foreground:', notification);
-                // Play alert sound for foreground notification
-                soundService.playReceived();
-                // Display a simple alert for testing foreground notifications
-                if (typeof window !== 'undefined') {
-                    alert('Notificação Recebida: ' + notification.title + '\n' + notification.body);
+                // Mensagens de chat já tocam seu próprio alerta sonoro via subscription
+                // em tempo real (soundService.playMessageAlert, ver DriverDashboard/
+                // ClientDashboard/AdminSupportView) - evita tocar duas vezes.
+                if (notification.data?.type !== 'chat_message') {
+                    soundService.playReceived();
                 }
                 this.handleNotification(notification);
             });
@@ -176,6 +176,9 @@ class PushNotificationService {
             console.log('[Push] Should navigate to ride:', data.ride_id);
             // You can dispatch an event here to navigate
             window.dispatchEvent(new CustomEvent('openRide', { detail: { rideId: data.ride_id } }));
+        } else if (data?.type === 'chat_message') {
+            console.log('[Push] Should open chat with:', data.sender_id);
+            window.dispatchEvent(new CustomEvent('openChat', { detail: { partnerId: data.sender_id } }));
         }
     }
 

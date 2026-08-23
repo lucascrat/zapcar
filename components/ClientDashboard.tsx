@@ -102,6 +102,19 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
         return () => unsub?.();
     }, [currentUser.id]);
 
+    // Abre o chat de suporte ao tocar na notificação push de nova mensagem
+    // (disparado pelo pushService quando o usuário toca a notificação do sistema).
+    useEffect(() => {
+        const handleOpenChat = () => {
+            setShowSupportChat(true);
+            setIsMenuOpen(false);
+            if (supportContact) markMessagesAsRead(currentUser.id, supportContact.id);
+            setUnreadSupportCount(0);
+        };
+        window.addEventListener('openChat', handleOpenChat);
+        return () => window.removeEventListener('openChat', handleOpenChat);
+    }, [supportContact, currentUser.id]);
+
     // View State Management
     type ViewState = 'home' | 'search_input' | 'location_check' | 'vehicle_select';
     const [viewState, setViewState] = useState<ViewState>('home');

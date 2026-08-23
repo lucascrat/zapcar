@@ -19,9 +19,11 @@ import { ChatWindow } from '../../../components/ChatWindow';
 interface AdminSupportViewProps {
     currentUser: UserProfile;
     onUnreadChange?: () => void;
+    /** Id de um contato a abrir automaticamente (ex: veio de uma notificação push). */
+    initialPartnerId?: string | null;
 }
 
-export const AdminSupportView: React.FC<AdminSupportViewProps> = ({ currentUser, onUnreadChange }) => {
+export const AdminSupportView: React.FC<AdminSupportViewProps> = ({ currentUser, onUnreadChange, initialPartnerId }) => {
     const [conversations, setConversations] = useState<ChatContact[]>([]);
     const [loading, setLoading] = useState(true);
     const [selectedPartner, setSelectedPartner] = useState<UserProfile | null>(null);
@@ -80,6 +82,15 @@ export const AdminSupportView: React.FC<AdminSupportViewProps> = ({ currentUser,
             onUnreadChange?.();
         }
     };
+
+    // Abre automaticamente a conversa indicada (ex: admin tocou numa notificação push).
+    useEffect(() => {
+        if (!initialPartnerId || conversations.length === 0) return;
+        if (selectedPartnerRef.current?.id === initialPartnerId) return;
+        const contact = conversations.find(c => c.user.id === initialPartnerId);
+        if (contact) handleSelectConversation(contact);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [initialPartnerId, conversations]);
 
     const handleSendMessage = async (msg: Message) => {
         setMessages(prev => [...prev, msg]);
