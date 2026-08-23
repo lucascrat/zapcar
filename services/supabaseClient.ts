@@ -1385,6 +1385,20 @@ export const createCoupon = async (coupon: Partial<Coupon>, imageFile?: File): P
 };
 
 export const deleteCoupon = async (id: string): Promise<{ ok: boolean; errorMsg?: string }> => {
+  // Passo 1: anular rides.coupon_id para este cupom.
+  // A FK rides_coupon_id_fkey impede DELETE enquanto houver corridas referenciando
+  // o cupom; setar NULL preserva o histórico da corrida sem bloquear a exclusão.
+  const { error: nullifyError } = await supabase
+    .from('rides')
+    .update({ coupon_id: null })
+    .eq('coupon_id', id);
+
+  if (nullifyError) {
+    console.error('[deleteCoupon] Erro ao anular coupon_id nas corridas:', nullifyError);
+    return { ok: false, errorMsg: 'Erro ao desvincular corridas do cupom: ' + nullifyError.message };
+  }
+
+  // Passo 2: deletar o cupom
   const { error, count } = await supabase
     .from('coupons')
     .delete({ count: 'exact' })
