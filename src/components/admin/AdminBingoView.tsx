@@ -91,7 +91,7 @@ export const AdminBingoView: React.FC = () => {
         if (drawMode === 'random') {
             const num = await drawBingoNumber();
             if (num) setLastDrawn(num);
-            else alert("Todos os números já foram sorteados!");
+            else toastError('Todos os números já foram sorteados!');
         } else {
             const num = parseInt(manualNumber);
             if (isNaN(num) || num < 1 || num > 75) {

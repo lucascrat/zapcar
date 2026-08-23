@@ -44,7 +44,8 @@ export const AdminClientsView: React.FC = () => {
             setClients(prev => prev.filter(c => c.id !== id));
             alert("Cliente removido!");
         } catch (error) {
-            alert("Erro ao remover cliente");
+            const msg = error instanceof Error ? error.message : String(error);
+            alert("Erro ao remover cliente: " + msg);
         }
     };
 
@@ -129,9 +130,6 @@ export const AdminClientsView: React.FC = () => {
                                         </td>
                                         <td className="px-4 py-4 text-right">
                                             <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                <Button variant="outline" size="sm" title="Editar">
-                                                    <span className="material-icons text-xs">edit</span>
-                                                </Button>
                                                 <Button variant="outline" size="sm" onClick={() => handleDelete(client.id)} className="hover:bg-red-500/20 hover:border-red-500/50">
                                                     <span className="material-icons text-xs text-red-400">delete</span>
                                                 </Button>
