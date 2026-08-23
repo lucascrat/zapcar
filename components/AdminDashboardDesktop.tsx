@@ -21,6 +21,7 @@ import { AdminTaximeterView } from '../src/components/admin/AdminTaximeterView';
 import { AdminOverviewView } from '../src/components/admin/AdminOverviewView';
 import { AdminClientsView } from '../src/components/admin/AdminClientsView';
 import { AdminRewardsView } from '../src/components/admin/AdminRewardsView';
+import { AdminSupportView } from '../src/components/admin/AdminSupportView';
 import { ErrorBoundary } from '../src/components/shared/ErrorBoundary';
 import { ToastProvider, useToast } from '../src/components/shared';
 import { UserProfile, AdminTab, DriverStatus } from '../types';
@@ -29,8 +30,10 @@ import {
     fetchAllDriversWithStats,
     approveDriver,
     deleteDriver,
+    fetchUnreadSupportCount,
     supabase
 } from '../services/supabaseClient';
+import { soundService } from '../services/soundService';
 
 interface AdminDashboardDesktopProps {
     currentUser: UserProfile;
@@ -48,6 +51,7 @@ const AdminDashboardContent: React.FC<AdminDashboardDesktopProps> = ({
     const [isLoading, setIsLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
     const [filterStatus, setFilterStatus] = useState<DriverStatus | 'all' | 'pending'>('all');
+    const [unreadMessages, setUnreadMessages] = useState(0);
 
     // Calculate stats
     const onlineDriversList = drivers.filter(d => d.status === DriverStatus.AVAILABLE);
@@ -59,6 +63,13 @@ const AdminDashboardContent: React.FC<AdminDashboardDesktopProps> = ({
         pendingApprovals: drivers.filter(d => !d.is_approved).length,
         todayRides: 0, // TODO: Fetch from rides table
         todayEarnings: 0, // TODO: Calculate from rides
+        pendingMessages: unreadMessages,
+    };
+
+    // Load unread support message count
+    const loadUnreadMessages = async () => {
+        const count = await fetchUnreadSupportCount(currentUser.id);
+        setUnreadMessages(count);
     };
 
     // Load drivers
@@ -88,6 +99,7 @@ const AdminDashboardContent: React.FC<AdminDashboardDesktopProps> = ({
 
     useEffect(() => {
         loadDrivers();
+        loadUnreadMessages();
 
         // Realtime subscription
         const subscription = supabase
@@ -101,8 +113,26 @@ const AdminDashboardContent: React.FC<AdminDashboardDesktopProps> = ({
             })
             .subscribe();
 
+        // Alerta global de novas mensagens de suporte (motorista/cliente -> admin),
+        // independente de qual aba do painel está aberta no momento.
+        const messagesSubscription = supabase
+            .channel('admin_support_alert')
+            .on('postgres_changes', {
+                event: 'INSERT',
+                schema: 'chegoja',
+                table: 'messages'
+            }, (payload) => {
+                const msg = payload.new as { receiver_id?: string; sender_id?: string };
+                if (msg?.receiver_id === currentUser.id) {
+                    soundService.playMessageAlert();
+                    loadUnreadMessages();
+                }
+            })
+            .subscribe();
+
         return () => {
             subscription.unsubscribe();
+            messagesSubscription.unsubscribe();
         };
     }, []);
 
@@ -197,6 +227,9 @@ const AdminDashboardContent: React.FC<AdminDashboardDesktopProps> = ({
 
             case 'rewards':
                 return <AdminRewardsView />;
+
+            case 'support':
+                return <AdminSupportView currentUser={currentUser} onUnreadChange={loadUnreadMessages} />;
 
             case 'central':
                 return <AdminDispatchView />;

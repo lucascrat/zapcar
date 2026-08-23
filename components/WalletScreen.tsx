@@ -98,8 +98,13 @@ export const WalletScreen: React.FC<WalletScreenProps> = ({ currentUser, onClose
         setOrders(ords.filter(o => o.user_id === currentUser.id));
         setSettings(s);
         const refreshed = await fetchUserProfile(currentUser.id);
-        if (refreshed && typeof refreshed.wallet_coins === 'number') {
-            setUserCoins(refreshed.wallet_coins || 0);
+        if (refreshed) {
+            if (typeof refreshed.wallet_coins === 'number') {
+                setUserCoins(refreshed.wallet_coins || 0);
+            }
+            // Propaga financial_balance e demais campos atualizados ao componente pai
+            // para que o card de saldo do motorista reflita o novo valor após saque
+            if (onUpdateUser) onUpdateUser(refreshed);
         }
         setLoading(false);
     };

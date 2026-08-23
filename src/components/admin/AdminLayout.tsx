@@ -23,6 +23,7 @@ interface AdminLayoutProps {
         pendingApprovals: number;
         todayRides: number;
         todayEarnings: number;
+        pendingMessages?: number;
     };
     searchQuery?: string;
     onSearchChange?: (query: string) => void;
@@ -76,6 +77,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
 
         // Management
         { id: 'clients', icon: 'person', label: 'Gestão de Clientes', section: 'management' },
+        { id: 'support', icon: 'support_agent', label: 'Central de Atendimento', badge: stats?.pendingMessages, badgeType: 'success', section: 'management' },
         { id: 'central', icon: 'headset_mic', label: 'Central de Despacho', section: 'management' },
         { id: 'wallets', icon: 'account_balance_wallet', label: 'Financeiro', section: 'management' },
         { id: 'store', icon: 'storefront', label: 'Loja / Produtos', section: 'management' },

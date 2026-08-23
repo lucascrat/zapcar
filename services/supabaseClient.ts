@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SCHEMA } from '../constants';
-import { Message, UserProfile, UserRole, DriverStatus, AppSettings, BingoSettings, BingoCard, BingoRankingUser, BroadcastMessage, DriverPlan, Ride, Banner, Coupon, StoreProduct, WalletTransaction, StoreOrder, AppPaymentRequest, RewardTier, RewardsConfig, DriverRankingEntry } from '../types';
+import { Message, UserProfile, UserRole, DriverStatus, AppSettings, BingoSettings, BingoCard, BingoRankingUser, BroadcastMessage, DriverPlan, Ride, Banner, Coupon, StoreProduct, WalletTransaction, StoreOrder, AppPaymentRequest, RewardTier, RewardsConfig, DriverRankingEntry, ChatContact } from '../types';
 import { hashPassword } from '../utils/passwordHash';
 
 // Colunas de `profiles` seguras para devolver ao cliente depois de um INSERT/UPDATE.
@@ -960,6 +960,88 @@ export const markMessagesAsRead = async (userId: string, senderId: string): Prom
     return false;
   }
   return true;
+};
+
+// --- SUPPORT CHAT (Admin Central de Atendimento) ---
+
+/**
+ * Lista as conversas de suporte do admin: agrupa todas as mensagens que
+ * envolvem o admin por "outro participante" (motorista ou cliente),
+ * trazendo a última mensagem e a contagem de não lidas de cada um.
+ */
+export const fetchSupportConversations = async (adminId: string): Promise<ChatContact[]> => {
+  try {
+    const { data, error } = await supabase
+      .from('messages')
+      .select('*')
+      .or(`sender_id.eq.${adminId},receiver_id.eq.${adminId}`)
+      .order('created_at', { ascending: false })
+      .limit(1000);
+
+    if (error) {
+      handleDbError(error, "fetchSupportConversations");
+      return [];
+    }
+
+    const msgs = (data || []) as Message[];
+    const grouped = new Map<string, { last: Message; unread: number }>();
+
+    for (const m of msgs) {
+      const partnerId = m.sender_id === adminId ? m.receiver_id : m.sender_id;
+      if (!partnerId || partnerId === adminId) continue;
+
+      const entry = grouped.get(partnerId);
+      const isUnreadForAdmin = m.receiver_id === adminId && !m.is_read;
+      if (!entry) {
+        grouped.set(partnerId, { last: m, unread: isUnreadForAdmin ? 1 : 0 });
+      } else if (isUnreadForAdmin) {
+        entry.unread++;
+      }
+    }
+
+    const partnerIds = Array.from(grouped.keys());
+    if (partnerIds.length === 0) return [];
+
+    const { data: profiles, error: profError } = await supabase
+      .from('profiles')
+      .select(PROFILE_SAFE_COLUMNS)
+      .in('id', partnerIds);
+
+    if (profError) {
+      handleDbError(profError, "fetchSupportConversations_profiles");
+      return [];
+    }
+
+    const profileMap = new Map((profiles as UserProfile[]).map(p => [p.id, p]));
+    const contacts: ChatContact[] = [];
+
+    for (const [partnerId, entry] of grouped.entries()) {
+      const user = profileMap.get(partnerId);
+      if (!user) continue; // Perfil pode ter sido excluído
+      contacts.push({ user, lastMessage: entry.last, unreadCount: entry.unread });
+    }
+
+    contacts.sort((a, b) => new Date(b.lastMessage?.created_at || 0).getTime() - new Date(a.lastMessage?.created_at || 0).getTime());
+    return contacts;
+  } catch (e) {
+    handleDbError(e, "fetchSupportConversations_EXCEPTION");
+    return [];
+  }
+};
+
+/** Conta rapidamente quantas mensagens não lidas o admin tem no total (para badge do menu). */
+export const fetchUnreadSupportCount = async (adminId: string): Promise<number> => {
+  const { count, error } = await supabase
+    .from('messages')
+    .select('id', { count: 'exact', head: true })
+    .eq('receiver_id', adminId)
+    .eq('is_read', false);
+
+  if (error) {
+    handleDbError(error, "fetchUnreadSupportCount");
+    return 0;
+  }
+  return count || 0;
 };
 
 // --- AUTH FUNCTIONS ---
