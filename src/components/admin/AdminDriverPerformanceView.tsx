@@ -53,18 +53,25 @@ export const AdminDriverPerformanceView: React.FC = () => {
     const [search, setSearch] = useState('');
     const [activeRideDriverIds, setActiveRideDriverIds] = useState<Set<string>>(new Set());
 
-    const load = useCallback(async () => {
-        setLoading(true);
+    const load = useCallback(async (silent = false) => {
+        if (!silent) setLoading(true);
         const [data, ridesRes] = await Promise.all([
             fetchDriverPerformanceReport(getPeriodStart(period)),
             supabase.from('rides').select('driver_id').in('status', ACTIVE_RIDE_STATUSES).not('driver_id', 'is', null),
         ]);
         setEntries(data);
         setActiveRideDriverIds(new Set((ridesRes.data || []).map((r: any) => r.driver_id)));
-        setLoading(false);
+        if (!silent) setLoading(false);
     }, [period]);
 
     useEffect(() => { load(); }, [load]);
+
+    // Atualiza sozinho a cada 20s (status online/em corrida/pausado/offline e
+    // corridas mudam o tempo todo) - sem isso só via clique manual no refresh.
+    useEffect(() => {
+        const poll = setInterval(() => load(true), 20000);
+        return () => clearInterval(poll);
+    }, [load]);
 
     const filtered = entries.filter(e =>
         !search.trim() || e.username?.toLowerCase().includes(search.toLowerCase())
@@ -102,7 +109,7 @@ export const AdminDriverPerformanceView: React.FC = () => {
                         <option value="all">Desde o Início</option>
                     </select>
                     <button
-                        onClick={load}
+                        onClick={() => load()}
                         className="w-10 h-10 rounded-xl bg-white/5 hover:bg-white/10 flex items-center justify-center text-gray-300 transition"
                         title="Atualizar"
                     >

@@ -108,17 +108,36 @@ const AdminDashboardContent: React.FC<AdminDashboardDesktopProps> = ({
         loadDrivers();
         loadUnreadMessages();
 
-        // Realtime subscription
-        const subscription = supabase
-            .channel('admin_realtime')
-            .on('postgres_changes', {
-                event: '*',
-                schema: 'chegoja',
-                table: 'profiles'
-            }, () => {
-                loadDrivers(true);
-            })
-            .subscribe();
+        // Realtime subscription - atualiza a lista sozinha quando o status de
+        // algum motorista muda (online/em corrida/pausado/offline), sem precisar
+        // dar refresh na página. Se o websocket cair ou o navegador ficar muito
+        // tempo em segundo plano, resubscreve sozinho (CHANNEL_ERROR/TIMED_OUT/
+        // CLOSED) em vez de ficar travado silenciosamente até um F5 manual.
+        let subscription: ReturnType<typeof supabase.channel>;
+        const connectDriversRealtime = () => {
+            subscription = supabase
+                .channel('admin_realtime')
+                .on('postgres_changes', {
+                    event: '*',
+                    schema: 'chegoja',
+                    table: 'profiles'
+                }, () => {
+                    loadDrivers(true);
+                })
+                .subscribe((status) => {
+                    if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+                        console.warn('[AdminDashboard] Realtime de motoristas caiu (' + status + '), reconectando em 3s...');
+                        supabase.removeChannel(subscription);
+                        setTimeout(connectDriversRealtime, 3000);
+                    }
+                });
+        };
+        connectDriversRealtime();
+
+        // Rede de segurança: mesmo que o realtime funcione perfeitamente, recarrega
+        // a lista a cada 20s. Cobre qualquer falha silenciosa de conexão (troca de
+        // rede, aba muito tempo em segundo plano, etc.) sem depender só do websocket.
+        const pollInterval = setInterval(() => loadDrivers(true), 20000);
 
         // Alerta global de novas mensagens de suporte (motorista/cliente -> admin),
         // independente de qual aba do painel está aberta no momento.
@@ -151,7 +170,8 @@ const AdminDashboardContent: React.FC<AdminDashboardDesktopProps> = ({
             .subscribe();
 
         return () => {
-            subscription.unsubscribe();
+            clearInterval(pollInterval);
+            supabase.removeChannel(subscription);
             messagesSubscription.unsubscribe();
         };
     }, []);
