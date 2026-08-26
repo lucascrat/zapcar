@@ -2,6 +2,7 @@ package br.com.client.chegoja;
 
 import android.app.AlertDialog;
 import android.app.KeyguardManager;
+import android.app.NotificationManager;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
@@ -120,21 +121,36 @@ public class MainActivity extends BridgeActivity {
         return manufacturer != null && manufacturer.toLowerCase().contains("xiaomi");
     }
 
+    // A partir do Android 14 (API 34), USE_FULL_SCREEN_INTENT declarado no manifest
+    // não é mais suficiente sozinho - o sistema pode negar em silêncio pra apps que
+    // a Play Store não classificou como "chamada/alarme", e o app precisa checar em
+    // runtime e mandar o motorista liberar manualmente. Sem isso, a notificação de
+    // corrida chega normal (por isso "recebe a notificação, está tudo ok") mas o
+    // full-screen intent (MyFirebaseMessagingService) vira notificação comum: não
+    // acorda a tela nem abre o app sozinho por cima do WhatsApp/o que estiver aberto.
+    private boolean needsFullScreenIntentPermission() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) return false; // < 34: só o manifest já garante
+        NotificationManager manager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+        return manager != null && !manager.canUseFullScreenIntent();
+    }
+
     void maybeShowPermissionsDialog() {
         boolean needsBattery = !isIgnoringBatteryOptimizations();
+        boolean needsFullScreenIntent = needsFullScreenIntentPermission();
         boolean isXiaomiDevice = isXiaomi();
         SharedPreferences prefs = getSharedPreferences("chegoja_prefs", Context.MODE_PRIVATE);
         boolean autostartAsked = prefs.getBoolean("autostart_asked", false);
 
-        // Bateria a gente sempre consegue checar de verdade (API do Android), então
-        // continua perguntando enquanto não estiver liberada. Autostart não dá pra
-        // checar (é específico da MIUI e não tem API pública), então só pergunta
-        // uma vez pra não encher o saco do motorista todo login.
-        if (!needsBattery && (!isXiaomiDevice || autostartAsked)) return;
+        // Bateria e tela cheia a gente sempre consegue checar de verdade (API do
+        // Android), então continua perguntando enquanto não estiverem liberadas.
+        // Autostart não dá pra checar (é específico da MIUI e não tem API pública),
+        // então só pergunta uma vez pra não encher o saco do motorista todo login.
+        if (!needsBattery && !needsFullScreenIntent && (!isXiaomiDevice || autostartAsked)) return;
 
         StringBuilder msg = new StringBuilder(
-                "Pra não perder nenhuma corrida (a notificação precisa acordar o celular mesmo com o app fechado), ative:\n"
+                "Pra não perder nenhuma corrida (o app precisa abrir sozinho e mostrar a chamada, mesmo em segundo plano ou com o celular travado), ative:\n"
         );
+        if (needsFullScreenIntent) msg.append("\n• Mostrar chamada de corrida em tela cheia");
         if (needsBattery) msg.append("\n• Sem restrição de bateria");
         if (isXiaomiDevice && !autostartAsked) msg.append("\n• Inicialização automática (autostart)");
 
@@ -144,6 +160,7 @@ public class MainActivity extends BridgeActivity {
                     .setMessage(msg.toString())
                     .setCancelable(true)
                     .setPositiveButton("Ativar agora", (dialog, which) -> {
+                        if (needsFullScreenIntent) requestFullScreenIntentPermission();
                         if (needsBattery) requestIgnoreBatteryOptimizations();
                         if (isXiaomiDevice && !autostartAsked) {
                             openMiuiAutoStartSettings();
@@ -154,6 +171,16 @@ public class MainActivity extends BridgeActivity {
                         if (isXiaomiDevice) prefs.edit().putBoolean("autostart_asked", true).apply();
                     })
                     .show();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void requestFullScreenIntentPermission() {
+        try {
+            Intent intent = new Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT);
+            intent.setData(Uri.parse("package:" + getPackageName()));
+            startActivity(intent);
         } catch (Exception e) {
             e.printStackTrace();
         }
