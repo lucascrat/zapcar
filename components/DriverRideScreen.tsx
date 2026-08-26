@@ -285,6 +285,14 @@ export const DriverRideScreen: React.FC<DriverRideScreenProps> = ({ ride, driver
                             >
                                 Cheguei
                             </button>
+                        ) : ride.status === 'arrived' ? (
+                            <button
+                                onClick={() => onStatusUpdate('started')}
+                                className="py-3.5 bg-whatsapp-green text-black font-black rounded-2xl transition shadow-lg active:scale-95 text-[11px] uppercase tracking-widest flex items-center justify-center gap-2"
+                            >
+                                <span className="material-icons text-base">play_arrow</span>
+                                Iniciar Corrida
+                            </button>
                         ) : ride.status === 'finished' ? (
                             <div className="col-span-2 space-y-3 animate-slide-up">
                                 <div className="bg-green-600/20 p-4 rounded-2xl border border-green-500/30 text-center">

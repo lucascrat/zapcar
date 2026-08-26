@@ -6,7 +6,13 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { Card } from '../../components/shared';
-import { fetchDriverPerformanceReport, DriverPerformanceEntry } from '../../../services/supabaseClient';
+import { fetchDriverPerformanceReport, DriverPerformanceEntry, supabase } from '../../../services/supabaseClient';
+
+// status='busy' também é usado pelo botão LIVRE/OCUPADO que o motorista aperta
+// pra se pausar sem ficar offline (App.tsx handleStatusToggle) - sem checar se
+// existe corrida ativa de verdade, motorista pausado aparece como "Em corrida"
+// aqui também (mesmo problema corrigido no AdminDashboard.tsx).
+const ACTIVE_RIDE_STATUSES = ['accepted', 'en_route', 'arrived', 'started', 'waiting_payment'];
 
 type Period = 'today' | 'week' | 'month' | 'all';
 
@@ -45,11 +51,16 @@ export const AdminDriverPerformanceView: React.FC = () => {
     const [entries, setEntries] = useState<DriverPerformanceEntry[]>([]);
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
+    const [activeRideDriverIds, setActiveRideDriverIds] = useState<Set<string>>(new Set());
 
     const load = useCallback(async () => {
         setLoading(true);
-        const data = await fetchDriverPerformanceReport(getPeriodStart(period));
+        const [data, ridesRes] = await Promise.all([
+            fetchDriverPerformanceReport(getPeriodStart(period)),
+            supabase.from('rides').select('driver_id').in('status', ACTIVE_RIDE_STATUSES).not('driver_id', 'is', null),
+        ]);
         setEntries(data);
+        setActiveRideDriverIds(new Set((ridesRes.data || []).map((r: any) => r.driver_id)));
         setLoading(false);
     }, [period]);
 
@@ -160,7 +171,9 @@ export const AdminDriverPerformanceView: React.FC = () => {
                                                 entry.status === 'busy' ? 'bg-yellow-500/15 text-yellow-400' :
                                                 'bg-gray-500/15 text-gray-400'
                                             }`}>
-                                                {entry.status === 'available' ? 'Online' : entry.status === 'busy' ? 'Em corrida' : 'Offline'}
+                                                {entry.status === 'available' ? 'Online' :
+                                                    entry.status === 'busy' ? (activeRideDriverIds.has(entry.driver_id) ? 'Em corrida' : 'Pausado') :
+                                                        'Offline'}
                                             </span>
                                         </td>
                                         <td className="py-3 px-4 text-right">

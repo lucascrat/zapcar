@@ -1,5 +1,5 @@
 
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { supabase, PROFILE_SAFE_COLUMNS, fetchAllDriversForAdmin, fetchAllDriversWithStats, deleteDriver, updateDriverStatus, updateDriverVehicle, updateDriverPassword, fetchAppSettings, updateAppSettings, approveDriver, fetchMessages, subscribeToMessages, subscribeToProfiles, fetchBingoSettings, updateBingoSettings, drawBingoNumber, drawSpecificBingoNumber, resetBingo, fetchBingoRanking, subscribeToBingo, sendBroadcast, addSubscriptionDays, fetchBanners, addBanner, deleteBanner, updateBannerOrder, uploadBannerImage, fetchAllCoupons, createCoupon, deleteCoupon, createDispatchRide, cleanupDuplicateUsers, fetchDuplicateUsers, fetchStoreProducts, createStoreProduct, updateStoreProduct, deleteStoreProduct, uploadStoreProductImage, updateUserProfile, fetchAllRides } from '../services/supabaseClient';
 import { UserProfile, DriverStatus, CallRecord, AppSettings, Message, BingoSettings, BingoRankingUser, AdminTab, Banner, Coupon, StoreProduct, Ride } from '../types';
 import { AdminWalletManager } from './AdminWalletManager';
@@ -307,8 +307,40 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onL
             })
             .subscribe();
 
+        // Subscription Realtime para status dos motoristas (online/em corrida/ocupado/offline)
+        // Atualiza a lista em tempo real sem precisar recarregar a página nem
+        // refazer a query de estatísticas (monthly_rides) inteira a cada evento -
+        // só corrige o campo que mudou no motorista já carregado.
+        const driversStatusSub = supabase
+            .channel('admin_drivers_status')
+            .on('postgres_changes', { event: '*', schema: 'chegoja', table: 'profiles', filter: 'role=eq.driver' }, (payload) => {
+                if (payload.eventType === 'DELETE') {
+                    const removedId = (payload.old as any)?.id;
+                    if (removedId) setDrivers(prev => prev.filter(d => d.id !== removedId));
+                    return;
+                }
+                const updated = payload.new as UserProfile;
+                if (!updated?.id) return;
+                setDrivers(prev => {
+                    const idx = prev.findIndex(d => d.id === updated.id);
+                    if (idx === -1) {
+                        // Motorista novo (acabou de se cadastrar) - entra na lista já,
+                        // monthly_rides real chega no próximo loadDrivers()
+                        return [{ ...updated, monthly_rides: 0 }, ...prev];
+                    }
+                    const next = [...prev];
+                    next[idx] = { ...next[idx], ...updated };
+                    return next;
+                });
+                // Mantém o painel de detalhe (à direita) em sincronia também,
+                // se o motorista atualizado for o que está aberto no momento.
+                setSelectedDriver(prev => (prev && prev.id === updated.id) ? { ...prev, ...updated } : prev);
+            })
+            .subscribe();
+
         return () => {
             supabase.removeChannel(settingsSub);
+            supabase.removeChannel(driversStatusSub);
             soundService.stopAdminCallSound();
         };
     }, []);
@@ -1118,6 +1150,25 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onL
 
     const [page, setPage] = useState(1);
     const pageSize = 20;
+    // status='busy' é usado tanto pra "motorista realmente em corrida" quanto pro
+    // botão LIVRE/OCUPADO que o próprio motorista aperta pra pausar sem ficar
+    // offline (App.tsx handleStatusToggle) - sem essa distinção, motorista que só
+    // pausou aparece como "Em Corrida" no painel. Só é "Em Corrida" de verdade se
+    // ele tiver uma corrida com status ativo (não finalizada/cancelada) atribuída.
+    const ACTIVE_RIDE_STATUSES = new Set(['accepted', 'en_route', 'arrived', 'started', 'waiting_payment']);
+    const driversWithActiveRide = useMemo(() => {
+        const set = new Set<string>();
+        for (const r of allRides) {
+            if (r.driver_id && ACTIVE_RIDE_STATUSES.has(r.status)) set.add(r.driver_id);
+        }
+        return set;
+    }, [allRides]);
+    const getDriverStatusLabel = (driver: UserProfile): 'Disponível' | 'Em Corrida' | 'Pausado' | 'Offline' => {
+        if (driver.status === 'available') return 'Disponível';
+        if (driver.status === 'busy') return driversWithActiveRide.has(driver.id) ? 'Em Corrida' : 'Pausado';
+        return 'Offline';
+    };
+
     const filteredDrivers = drivers.filter(d => {
         const matchesSearch = d.username.toLowerCase().includes(searchTerm.toLowerCase());
         if (filterStatus === 'pending') {
@@ -2788,7 +2839,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onL
                                                     <span className={`px-2 py-0.5 rounded text-xs font-medium uppercase ${selectedDriver.status === 'available' ? 'bg-green-100 text-green-800' :
                                                         selectedDriver.status === 'busy' ? 'bg-red-100 text-red-800' : 'bg-gray-100 text-gray-800'
                                                         }`}>
-                                                        {selectedDriver.status}
+                                                        {getDriverStatusLabel(selectedDriver)}
                                                     </span>
                                                     <span className="text-gray-400 text-sm">•</span>
                                                     <span className="text-gray-500 text-sm">Motorista Aprovado</span>
@@ -3799,17 +3850,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onL
                                             <div key={ride.id} className="p-4 bg-gray-50 rounded-xl border border-gray-200 flex items-center gap-4">
                                                 <div className="flex-1 min-w-0">
                                                     <div className="flex items-center gap-2 mb-1">
-                                                        <span className={`px-2 py-0.5 text-[10px] font-bold uppercase rounded-full ${ride.status === 'completed' || ride.status === 'finished' ? 'bg-green-100 text-green-700' :
+                                                        <span className={`px-2 py-0.5 text-[10px] font-bold uppercase rounded-full ${ride.status === 'finished' ? 'bg-green-100 text-green-700' :
                                                             ride.status === 'accepted' ? 'bg-blue-100 text-blue-700 animate-pulse' :
-                                                                ride.status === 'in_progress' ? 'bg-orange-100 text-orange-700' :
+                                                                ride.status === 'en_route' || ride.status === 'arrived' || ride.status === 'started' || ride.status === 'waiting_payment' ? 'bg-orange-100 text-orange-700' :
                                                                     ride.status === 'cancelled' ? 'bg-red-100 text-red-700' :
                                                                         'bg-gray-100 text-gray-600'
                                                             }`}>
-                                                            {ride.status === 'completed' || ride.status === 'finished' ? '✓ Finalizada' :
+                                                            {ride.status === 'finished' ? '✓ Finalizada' :
                                                                 ride.status === 'accepted' ? '📤 Enviada' :
-                                                                    ride.status === 'in_progress' ? '🚗 Em Corrida' :
-                                                                        ride.status === 'cancelled' ? '✗ Cancelada' :
-                                                                            ride.status}
+                                                                    ride.status === 'en_route' ? '🚗 A Caminho' :
+                                                                        ride.status === 'arrived' ? '📍 No Local' :
+                                                                            ride.status === 'started' ? '🚗 Em Corrida' :
+                                                                                ride.status === 'waiting_payment' ? '💰 Aguardando Pagamento' :
+                                                                                    ride.status === 'cancelled' ? '✗ Cancelada' :
+                                                                                        ride.status}
                                                         </span>
                                                         <span className="text-xs text-gray-500">
                                                             {new Date(ride.created_at).toLocaleString('pt-BR', {
@@ -3901,11 +3955,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onL
                                                         <td className="px-6 py-4">
                                                             <div className="flex flex-col gap-1">
                                                                 <span className={`px-2 py-0.5 text-[10px] font-bold rounded-full w-fit uppercase ${driver.status === 'available' ? 'bg-green-100 text-green-700' :
-                                                                    driver.status === 'busy' ? 'bg-orange-100 text-orange-700' :
+                                                                    driver.status === 'busy' ? (driversWithActiveRide.has(driver.id) ? 'bg-orange-100 text-orange-700' : 'bg-yellow-100 text-yellow-700') :
                                                                         'bg-gray-100 text-gray-500'
                                                                     }`}>
-                                                                    {driver.status === 'available' ? 'Disponível' :
-                                                                        driver.status === 'busy' ? 'Em Corrida' : 'Offline'}
+                                                                    {getDriverStatusLabel(driver)}
                                                                 </span>
                                                                 {!driver.is_approved && (
                                                                     <span className="text-[10px] text-yellow-600 font-bold italic">Aguardando Aprovação</span>

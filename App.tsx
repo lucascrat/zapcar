@@ -1411,9 +1411,9 @@ export default function App() {
               const ok = await updateRideStatus(activeRide.id, newStatus);
               if (ok) {
                 // Notificar Cliente sobre mudanças importantes
-                if (newStatus === 'arrived' || newStatus === 'waiting_payment') {
-                  const title = newStatus === 'arrived' ? "Motorista Chegou! 🚗" : "Corrida Finalizada! 🏁";
-                  const body = newStatus === 'arrived' ? "Seu motorista parceiro chegou ao local de partida." : "O motorista solicitou o pagamento da corrida.";
+                if (newStatus === 'arrived' || newStatus === 'started' || newStatus === 'waiting_payment') {
+                  const title = newStatus === 'arrived' ? "Motorista Chegou! 🚗" : newStatus === 'started' ? "Corrida Iniciada! 🚀" : "Corrida Finalizada! 🏁";
+                  const body = newStatus === 'arrived' ? "Seu motorista parceiro chegou ao local de partida." : newStatus === 'started' ? "Sua corrida começou. Boa viagem!" : "O motorista solicitou o pagamento da corrida.";
 
                   sendNotification(
                     title,
