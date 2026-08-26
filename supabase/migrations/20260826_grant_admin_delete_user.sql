@@ -1,0 +1,22 @@
+-- =================================================================================
+-- NAO CONSEGUE EXCLUIR MOTORISTA NO PAINEL ADMIN
+--
+-- Causa raiz confirmada direto no banco: chegoja.admin_delete_user(uuid) - a RPC
+-- que deleteDriver() chama (services/supabaseClient.ts) - so tem EXECUTE
+-- concedido pra 'postgres'. Nunca foi liberada pra 'authenticated' (o role que
+-- a sessao do admin usa de verdade, via supabase.auth.signInWithPassword).
+-- PostgREST recusa a chamada com "permission denied for function
+-- admin_delete_user" antes mesmo de entrar na funcao - por isso o clique na
+-- lixeira do painel nao faz nada visivel de errado no banco (a funcao nunca
+-- chega a rodar).
+--
+-- A funcao ja tem a propria guarda de admin (IF NOT chegoja.is_admin() THEN
+-- RAISE EXCEPTION), entao e seguro liberar EXECUTE so pra 'authenticated' -
+-- quem nao for admin cadastrado em chegoja.admin_users continua bloqueado por
+-- dentro da funcao, igual as outras RPCs admin-only deste projeto
+-- (get_driver_performance_report segue o mesmo padrao).
+--
+-- Aplicar no Supabase Dashboard → SQL Editor → Execute
+-- =================================================================================
+
+GRANT EXECUTE ON FUNCTION chegoja.admin_delete_user(uuid) TO authenticated;
