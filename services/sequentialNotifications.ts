@@ -212,19 +212,14 @@ export const notifyNextDriver = async (rideId: string, _skipRetryCount: number =
         }
 
         if (!allDrivers || allDrivers.length === 0) {
-            console.log('[Sequential] No available drivers');
-
-            // Cancelar corrida
-            await supabase
-                .from('rides')
-                .update({
-                    status: 'cancelled',
-                    current_notified_driver_id: null,
-                    notification_sent_at: null
-                })
-                .eq('id', rideId);
-
-            return { success: false, message: 'No available drivers - ride cancelled' };
+            // Não cancela mais a corrida sozinho: ninguém online agora não quer dizer
+            // que ninguém vai ficar online - o motorista deve continuar buscando até o
+            // CLIENTE cancelar. current_notified_driver_id/notification_sent_at já
+            // estão null (nunca chegou a notificar ninguém nessa rodada), então o
+            // watchdog (checkNotificationTimeouts, a cada 10s) já pega essa corrida de
+            // novo sozinho e tenta achar motorista a cada tentativa.
+            console.log('[Sequential] No available drivers right now - will keep retrying until client cancels');
+            return { success: false, message: 'No available drivers - will retry' };
         }
 
         console.log(`[Sequential] Found ${allDrivers.length} drivers from query. Filtering by proximity (${MAX_SEARCH_RADIUS_KM}km)...`);
@@ -248,13 +243,18 @@ export const notifyNextDriver = async (rideId: string, _skipRetryCount: number =
             .sort((a, b) => a.distance - b.distance); // Ordenar por mais próximo
 
         if (driversWithDistance.length === 0) {
-            console.log(`[Sequential] ❌ No drivers within ${MAX_SEARCH_RADIUS_KM}km radius`);
+            // Já tentou (ou descartou) todo mundo que estava online dentro do raio -
+            // em vez de cancelar, reinicia o ciclo: limpa as tentativas pra todo mundo
+            // voltar a ser candidato (inclusive quem recusou/não respondeu antes) e
+            // deixa a corrida em 'searching' esperando o watchdog tentar de novo em
+            // até 10s. Só o cliente cancelando a corrida para esse ciclo.
+            console.log(`[Sequential] 🔁 No drivers left within ${MAX_SEARCH_RADIUS_KM}km after excluding previous attempts - resetting cycle to retry everyone again`);
 
-            // Cancelar corrida - sem motoristas próximos
             await supabase
                 .from('rides')
                 .update({
-                    status: 'cancelled',
+                    notification_attempts: [],
+                    ignored_drivers: [],
                     current_notified_driver_id: null,
                     notification_sent_at: null
                 })
@@ -262,7 +262,7 @@ export const notifyNextDriver = async (rideId: string, _skipRetryCount: number =
 
             return {
                 success: false,
-                message: `No drivers within ${MAX_SEARCH_RADIUS_KM}km - ride cancelled`
+                message: `No drivers within ${MAX_SEARCH_RADIUS_KM}km - attempts reset, will retry`
             };
         }
 
@@ -479,13 +479,15 @@ export const rejectRideSequential = async (rideId: string, driverId: string): Pr
  */
 export const checkNotificationTimeouts = async (): Promise<number> => {
     try {
-        // Buscar corridas em searching com notificação ativa
+        // Busca TODA corrida em 'searching', não só as com notificação ativa: quando
+        // notifyNextDriver esgota os motoristas disponíveis, ele reseta as tentativas
+        // e deixa current_notified_driver_id null em vez de cancelar a corrida (ver
+        // notifyNextDriver) - sem esse caso aqui, essas corridas ficariam paradas pra
+        // sempre, já que nada mais chama notifyNextDriver de novo pra elas.
         const { data: rides, error } = await supabase
             .from('rides')
             .select('id, current_notified_driver_id, notification_sent_at, notification_timeout_seconds')
-            .eq('status', 'searching')
-            .not('current_notified_driver_id', 'is', null)
-            .not('notification_sent_at', 'is', null);
+            .eq('status', 'searching');
 
         if (error || !rides) {
             return 0;
@@ -495,7 +497,16 @@ export const checkNotificationTimeouts = async (): Promise<number> => {
         const now = new Date();
 
         for (const ride of rides) {
-            const sentAt = new Date(ride.notification_sent_at!);
+            // Ninguém sendo notificado agora (corrida nova ou ciclo acabou de
+            // reiniciar) - tenta achar motorista imediatamente, sem esperar timeout.
+            if (!ride.current_notified_driver_id || !ride.notification_sent_at) {
+                console.log(`[checkTimeouts] Ride ${ride.id} sem motorista notificado - buscando`);
+                await notifyNextDriver(ride.id);
+                processedCount++;
+                continue;
+            }
+
+            const sentAt = new Date(ride.notification_sent_at);
             const elapsedSeconds = (now.getTime() - sentAt.getTime()) / 1000;
             const timeoutSeconds = ride.notification_timeout_seconds || 30;
 

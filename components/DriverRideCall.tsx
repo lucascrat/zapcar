@@ -9,8 +9,15 @@ interface DriverRideCallProps {
     onReject: () => void;
 }
 
+// Quanto tempo o motorista tem pra responder antes da chamada ser recusada
+// automaticamente. Precisa bater com o timeout do servidor (services/
+// sequentialNotifications.ts, notification_timeout_seconds - default 30s):
+// se esse valor aqui for menor, o app do motorista rejeita sozinho antes do
+// servidor sequer considerar a chamada expirada.
+const CALL_TIMEOUT_SECONDS = 30;
+
 export const DriverRideCall: React.FC<DriverRideCallProps> = ({ ride, onAccept, onReject }) => {
-    const [timeLeft, setTimeLeft] = useState(10);
+    const [timeLeft, setTimeLeft] = useState(CALL_TIMEOUT_SECONDS);
 
     // Hide banner during incoming call
     useEffect(() => {
@@ -79,7 +86,7 @@ export const DriverRideCall: React.FC<DriverRideCallProps> = ({ ride, onAccept, 
                                 strokeWidth="6"
                                 strokeLinecap="round"
                                 strokeDasharray="314"
-                                strokeDashoffset={314 - (314 * timeLeft / 10)}
+                                strokeDashoffset={314 - (314 * timeLeft / CALL_TIMEOUT_SECONDS)}
                                 className="transition-all duration-1000 ease-linear"
                             />
                         </svg>
