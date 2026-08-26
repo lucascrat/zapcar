@@ -15,12 +15,22 @@ interface Plan {
     created_at: string;
 }
 
-// Mensagem para falhas de permissão (RLS). Um bloqueio de RLS pode chegar como
-// erro 42501 (INSERT) ou, no caso de UPDATE/DELETE, como sucesso com 0 linhas
-// afetadas - por isso os handlers abaixo checam as duas situações.
-const RLS_HINT =
-    'O banco recusou a operação por falta de permissão (RLS) na tabela driver_plans. ' +
-    'É necessário liberar a política de escrita no Supabase.';
+// A policy de escrita em driver_plans já libera qualquer conta cadastrada em
+// chegoja.admin_users (conferido direto no banco) - então um bloqueio de RLS
+// aqui quase sempre é sessão de admin expirada ou a conta logada não estar
+// nessa tabela, não a policy em si. UPDATE/DELETE bloqueado por RLS não vem
+// como erro (42501 é só no INSERT) - some com 0 linhas afetadas silenciosamente,
+// por isso os handlers abaixo checam as duas situações e sugerem re-login em
+// vez de "libere a policy" (que já está liberada pra admin de verdade).
+const buildRlsHint = async (): Promise<string> => {
+    const { data } = await supabase.auth.getSession();
+    if (!data.session) {
+        return 'Sua sessão de admin expirou. Saia e entre de novo para continuar.';
+    }
+    return 'O banco recusou a operação (RLS) na tabela driver_plans. ' +
+        `Sua sessão está ativa (${data.session.user.email}), mas essa conta não está ` +
+        'cadastrada como administrador em chegoja.admin_users - fale com quem tem acesso ao banco.';
+};
 
 // A coluna "id" é TEXT e não tem valor padrão no banco, então precisa ser
 // gerada aqui na criação do plano.
@@ -89,12 +99,12 @@ export const AdminPlansView: React.FC = () => {
 
         if (error) {
             console.error('[AdminPlansView] Erro ao criar plano:', error);
-            alert('Erro ao criar plano: ' + error.message + (error.code === '42501' ? `\n\n${RLS_HINT}` : ''));
+            alert('Erro ao criar plano: ' + error.message + (error.code === '42501' ? `\n\n${await buildRlsHint()}` : ''));
             return;
         }
 
         if (!data || data.length === 0) {
-            alert(RLS_HINT);
+            alert(await buildRlsHint());
             return;
         }
 
@@ -115,12 +125,19 @@ export const AdminPlansView: React.FC = () => {
 
         if (error) {
             console.error('[AdminPlansView] Erro ao excluir plano:', error);
-            alert('Erro ao excluir plano: ' + error.message);
+            // FK: driver_plans é referenciado por subscriptions.plan_id (sem
+            // CASCADE) - motorista com assinatura vinculada a esse plano impede
+            // a exclusão. Não é RLS, é integridade referencial.
+            if (error.code === '23503') {
+                alert('Não é possível excluir: existem assinaturas de motoristas vinculadas a este plano.');
+            } else {
+                alert('Erro ao excluir plano: ' + error.message);
+            }
             return;
         }
 
         if (!data || data.length === 0) {
-            alert(RLS_HINT);
+            alert(await buildRlsHint());
             return;
         }
 
