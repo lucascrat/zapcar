@@ -2026,70 +2026,111 @@ export const fetchWalletTransactions = async (userId: string): Promise<WalletTra
 
 // --- PAGAMENTOS E SAQUES ---
 
+/**
+ * Dispara o Pix Envio automático de um saque já criado (chamado logo após
+ * request_payout devolver auto_eligible=true). Toda a validação de teto/limite
+ * é refeita no servidor (Edge Function) - aqui é só o gatilho.
+ */
+export const triggerAutoPayout = async (
+  requestId: string
+): Promise<{ status: string; e2eId?: string; message?: string; error?: string }> => {
+  try {
+    const { data, error } = await supabase.functions.invoke('efi-payment', {
+      body: { action: 'payout', requestId },
+    });
+    if (error) return { status: 'pending', error: error.message };
+    return data || { status: 'pending' };
+  } catch (e: any) {
+    console.error('[triggerAutoPayout] erro:', e);
+    return { status: 'pending', error: e?.message || String(e) };
+  }
+};
+
+/**
+ * Admin paga um saque na fila via PIX na hora (1 clique no Financeiro).
+ * Ignora o teto automático - exige JWT de admin, validado na Edge Function.
+ */
+export const adminForcePayout = async (
+  requestId: string
+): Promise<{ ok: boolean; status?: string; message?: string }> => {
+  try {
+    const { data, error } = await supabase.functions.invoke('efi-payment', {
+      body: { action: 'payout', requestId, adminForced: true },
+    });
+    if (error) return { ok: false, message: error.message };
+    const status = data?.status;
+    return {
+      ok: status === 'paid' || status === 'processing',
+      status,
+      message: data?.message || data?.error,
+    };
+  } catch (e: any) {
+    return { ok: false, message: e?.message || String(e) };
+  }
+};
+
+/** Consulta na Efí se um saque 'pending' com e2eId já foi concluído/recusado. */
+export const checkPayoutStatus = async (requestId: string): Promise<string> => {
+  try {
+    const { data, error } = await supabase.functions.invoke('efi-payment', {
+      body: { action: 'check_payout', requestId },
+    });
+    if (error) return 'pending';
+    return data?.status || 'pending';
+  } catch {
+    return 'pending';
+  }
+};
+
 export const createPaymentRequest = async (
   userId: string,
   type: 'driver_payout' | 'client_withdrawal',
   amountMoney: number,
   amountCoins: number,
   pixKey: string
-): Promise<{ success: boolean; message: string }> => {
+): Promise<{ success: boolean; message: string; autoPaid?: boolean }> => {
   try {
-    // 1. Check Balance and Deduct immediately
-    const user = await fetchUserProfile(userId);
-    if (!user) return { success: false, message: "Usuário não encontrado" };
-
-    if (type === 'client_withdrawal') {
-      if ((user.wallet_coins || 0) < amountCoins) {
-        return { success: false, message: "Saldo de moedas insuficiente." };
-      }
-      // Deduct Coins
-      const { error: deductError } = await supabase.rpc('increment_coins', {
-        user_id_param: userId,
-        amount_param: -amountCoins
-      });
-      if (deductError) return { success: false, message: "Erro ao debitar moedas." };
-    } else {
-      // Driver Payout - RPC atômica: checa saldo suficiente e debita num só
-      // UPDATE no banco (evita corrida entre leitura em JS e escrita de volta)
-      const { data: success, error: deductError } = await supabase.rpc('decrement_financial_balance_if_available', {
-        user_id_param: userId,
-        amount_param: amountMoney
-      });
-      if (deductError) return { success: false, message: "Erro ao debitar saldo financeiro." };
-      if (!success) return { success: false, message: "Saldo financeiro insuficiente." };
-    }
-
-    // 2. Create Request
-    const { error } = await supabase.from('payment_requests').insert({
-      user_id: userId,
-      type,
-      amount_money: amountMoney,
-      amount_coins: amountCoins,
-      pix_key: pixKey,
-      status: 'pending'
+    // Checagem de saldo + débito + criação do pedido numa transação atômica no
+    // banco (chegoja.request_payout). O INSERT direto em payment_requests foi
+    // revogado dos roles anon/authenticated na migration 20260827_auto_payout.sql.
+    const { data, error } = await supabase.rpc('request_payout', {
+      p_user_id: userId,
+      p_type: type,
+      p_amount_money: amountMoney,
+      p_amount_coins: amountCoins,
+      p_pix_key: pixKey,
     });
 
     if (error) {
-      // Rollback (Simplistic - ideally use transaction or RPC)
-      // Since supabase-js doesn't simple transactions, we log critical error.
-      // In production, use a single RPC for Check+Deduct+Insert.
-      console.error("CRITICAL: Failed to create request after deduction", error);
-      return { success: false, message: "Erro interno. Contate o suporte." };
+      handleDbError(error, 'createPaymentRequest');
+      return { success: false, message: 'Erro ao processar solicitação.' };
     }
 
-    // 3. Log Transaction
-    await supabase.from('wallet_transactions').insert({
-      user_id: userId,
-      type: 'payout',
-      amount_coins: type === 'client_withdrawal' ? -amountCoins : 0,
-      amount_money: type === 'driver_payout' ? -amountMoney : 0, // Negative for history visualization? Or positive as 'payout' type? Let's use negative to show deduction.
-      description: `Solicitação de Saque (${type === 'driver_payout' ? 'Motorista' : 'Cliente'})`
-    });
+    const res = (data || {}) as { ok?: boolean; message?: string; request_id?: string; auto_eligible?: boolean };
+    if (!res.ok) {
+      return { success: false, message: res.message || 'Não foi possível solicitar o saque.' };
+    }
 
-    return { success: true, message: "Solicitação enviada com sucesso!" };
+    // Saque de motorista dentro do teto -> tenta pagar na hora
+    if (type === 'driver_payout' && res.auto_eligible && res.request_id) {
+      const payout = await triggerAutoPayout(res.request_id);
+      if (payout.status === 'paid') {
+        return { success: true, autoPaid: true, message: 'Saque pago na hora! O PIX já caiu na sua conta.' };
+      }
+      if (payout.status === 'processing') {
+        return { success: true, autoPaid: true, message: 'Saque em processamento - o PIX cai em instantes.' };
+      }
+      if (payout.status === 'rejected') {
+        return { success: false, message: 'O envio do PIX foi recusado. O saldo foi estornado, confira a chave PIX.' };
+      }
+      // Caiu na fila do admin (teto/limite/indisponível) - o saldo já foi debitado
+      return { success: true, message: 'Solicitação enviada! Será processada em breve.' };
+    }
+
+    return { success: true, message: 'Solicitação enviada com sucesso!' };
   } catch (e) {
-    console.error("Exception in createPaymentRequest", e);
-    return { success: false, message: "Erro ao processar solicitação." };
+    console.error('Exception in createPaymentRequest', e);
+    return { success: false, message: 'Erro ao processar solicitação.' };
   }
 };
 

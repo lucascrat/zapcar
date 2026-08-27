@@ -3,7 +3,9 @@ import { AppPaymentRequest, WalletTransaction } from '../../../types';
 import {
     fetchPaymentRequests,
     updatePaymentRequestStatus,
-    fetchAllWalletTransactions
+    fetchAllWalletTransactions,
+    adminForcePayout,
+    checkPayoutStatus
 } from '../../../services/supabaseClient';
 import { Card, Button, Badge } from '../../components/shared';
 
@@ -27,10 +29,39 @@ export const AdminWalletsView: React.FC = () => {
             ]);
             setRequests(reqs);
             setTransactions(txs as any);
+
+            // Saques que a Efí devolveu como EM_PROCESSAMENTO ficam 'pending' com
+            // e2eId: consulta o status atual e, se já concluiu/recusou, o próprio
+            // check_payout atualiza o pedido no banco - aí recarregamos.
+            const processing = reqs.filter(r => r.status === 'pending' && r.type === 'driver_payout' && (r as any).efi_e2e_id);
+            if (processing.length > 0) {
+                const results = await Promise.all(processing.map(r => checkPayoutStatus(r.id)));
+                if (results.some(s => s === 'paid' || s === 'rejected')) {
+                    const fresh = await fetchPaymentRequests();
+                    setRequests(fresh);
+                }
+            }
         } catch (error) {
             console.error("Erro ao carregar dados financeiros:", error);
         }
         setLoading(false);
+    };
+
+    const handleForcePayout = async (id: string) => {
+        if (!window.confirm('Enviar o PIX deste saque agora, direto pela Efí?\nEssa ação transfere o dinheiro na hora.')) return;
+        setProcessingId(id);
+        try {
+            const res = await adminForcePayout(id);
+            if (res.ok) {
+                alert(res.status === 'paid' ? 'PIX enviado! Saque pago.' : 'PIX em processamento - deve concluir em instantes.');
+            } else {
+                alert('Não foi possível enviar o PIX: ' + (res.message || 'erro desconhecido.'));
+            }
+            await loadData();
+        } catch (error) {
+            alert("Erro inesperado ao enviar o PIX.");
+        }
+        setProcessingId(null);
     };
 
     const handleStatusUpdate = async (id: string, status: 'paid' | 'rejected') => {
@@ -205,20 +236,45 @@ export const AdminWalletsView: React.FC = () => {
                                                     </div>
                                                 </td>
                                                 <td>
-                                                    <Badge variant={
-                                                        req.status === 'paid' ? 'success' :
-                                                            req.status === 'pending' ? 'warning' : 'danger'
-                                                    }>
-                                                        {req.status === 'paid' ? 'Pago' :
-                                                            req.status === 'pending' ? 'Pendente' : 'Rejeitado'}
-                                                    </Badge>
+                                                    <div className="flex flex-col gap-1">
+                                                        <Badge variant={
+                                                            req.status === 'paid' ? 'success' :
+                                                                req.status === 'pending' ? 'warning' : 'danger'
+                                                        }>
+                                                            {req.status === 'paid' ? 'Pago' :
+                                                                req.status === 'pending' ? 'Pendente' : 'Rejeitado'}
+                                                        </Badge>
+                                                        {req.auto && (
+                                                            <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-blue-500/15 text-blue-400 font-bold uppercase w-fit">
+                                                                Automático
+                                                            </span>
+                                                        )}
+                                                        {req.status === 'pending' && (req as any).efi_e2e_id && (
+                                                            <span className="text-[9px] text-blue-400">PIX em processamento</span>
+                                                        )}
+                                                        {req.payout_error && (
+                                                            <span className="text-[9px] text-red-400 max-w-[120px] truncate" title={req.payout_error}>
+                                                                {req.payout_error}
+                                                            </span>
+                                                        )}
+                                                    </div>
                                                 </td>
                                                 <td>
                                                     {req.status === 'pending' && (
                                                         <div className="flex gap-2">
+                                                            {req.type === 'driver_payout' && (
+                                                                <button
+                                                                    className="admin-action-btn info"
+                                                                    title="Pagar via PIX agora (Efí)"
+                                                                    onClick={() => handleForcePayout(req.id)}
+                                                                    disabled={!!processingId}
+                                                                >
+                                                                    <span className="material-icons">bolt</span>
+                                                                </button>
+                                                            )}
                                                             <button
                                                                 className="admin-action-btn success"
-                                                                title="Aprovar Pagamento"
+                                                                title="Marcar como pago (você já transferiu na mão)"
                                                                 onClick={() => handleStatusUpdate(req.id, 'paid')}
                                                                 disabled={!!processingId}
                                                             >

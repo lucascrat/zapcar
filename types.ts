@@ -131,6 +131,11 @@ export interface AppSettings {
 
   // WhatsApp Settings
   official_whatsapp?: string;
+
+  // Saque automático do motorista (Pix Envio Efí)
+  auto_payout_enabled?: boolean;
+  auto_payout_max_amount?: number;   // teto por saque (R$); acima disso vai pra fila do admin
+  auto_payout_daily_limit?: number;  // teto diário por motorista (R$); 0 = sem limite
 }
 
 // Interfaces do Bingo
@@ -382,6 +387,11 @@ export interface AppPaymentRequest {
   created_at: string;
   updated_at: string;
   user?: UserProfile; // Joined
+  // Saque automático via Pix Envio (ver 20260827_auto_payout.sql)
+  auto?: boolean;
+  efi_e2e_id?: string;
+  payout_error?: string;
+  paid_at?: string;
 }
 
 export interface StoreOrder {

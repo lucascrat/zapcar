@@ -311,6 +311,195 @@ async function actionCheckReference(reference: string) {
   return { found: true, status: result.status };
 }
 
+// ---------------------------------------------------------------------------
+// SAQUE AUTOMÁTICO (Pix Envio da Efí)
+// ---------------------------------------------------------------------------
+// idEnvio: chave de idempotência da Efí (alfanumérico, <=35). Derivada do id do
+// payment_request, então reenviar a mesma solicitação nunca paga duas vezes.
+function buildIdEnvio(requestId: string): string {
+  return ("CJ" + String(requestId).replace(/[^a-zA-Z0-9]/g, "")).slice(0, 35);
+}
+
+// Confirma que quem chamou é admin de verdade (JWT do Supabase Auth + admin_users
+// via a RPC is_admin, que roda no contexto do usuário). Usado só no "adminForced".
+async function requireAdmin(req: any): Promise<void> {
+  const token = (req.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
+  if (!token) throw new Error("Não autorizado");
+  const anonKey = Deno.env.get("SUPABASE_ANON_KEY") || "";
+  const userClient = createClient(SUPABASE_URL, anonKey, {
+    db: { schema: "chegoja" },
+    global: { headers: { Authorization: `Bearer ${token}` } },
+  });
+  const { data: isAdmin, error } = await userClient.rpc("is_admin");
+  if (error || isAdmin !== true) throw new Error("Apenas administradores podem forçar o pagamento.");
+}
+
+// Marca o pedido como "não saiu automático" e devolve pra fila do admin.
+async function bailPayout(requestId: string, reason: string) {
+  await supabase.from("payment_requests").update({
+    efi_idenvio: null,
+    payout_error: reason,
+    updated_at: new Date().toISOString(),
+  }).eq("id", requestId);
+  return { status: "pending", message: reason };
+}
+
+// Estorna o saldo e marca o pedido como rejeitado (envio recusado pela Efí).
+async function refundAndReject(reqRow: any, reason: string) {
+  const amount = Number(reqRow.amount_money || 0);
+  await supabase.rpc("increment_financial_balance", { user_id_param: reqRow.user_id, amount_param: amount });
+  await supabase.from("wallet_transactions").insert({
+    user_id: reqRow.user_id,
+    type: "bonus",
+    amount_money: amount,
+    description: "Estorno: envio PIX não realizado",
+  });
+  await supabase.from("payment_requests").update({
+    status: "rejected",
+    payout_error: reason,
+    admin_note: "Envio automático falhou - saldo estornado",
+    updated_at: new Date().toISOString(),
+  }).eq("id", reqRow.id);
+  return { status: "rejected", message: reason };
+}
+
+async function actionPayout(req: any, body: any) {
+  const requestId: string = body.requestId;
+  const adminForced: boolean = body.adminForced === true;
+  if (!requestId) throw new Error("requestId ausente");
+  if (adminForced) await requireAdmin(req);
+
+  const { data: reqRow, error } = await supabase
+    .from("payment_requests").select("*").eq("id", requestId).maybeSingle();
+  if (error || !reqRow) throw new Error("Solicitação não encontrada");
+  if (reqRow.type !== "driver_payout") throw new Error("Solicitação não é de saque de motorista");
+  if (reqRow.status === "paid") return { status: "paid", message: "Já pago" };
+  if (reqRow.status === "rejected") return { status: "rejected", message: "Solicitação rejeitada" };
+  if (reqRow.status !== "pending") return { status: reqRow.status };
+
+  const amount = Number(reqRow.amount_money || 0);
+  if (!(amount >= 5)) return await bailPayout(requestId, "Valor inválido");
+
+  // Guarda-corpos server-side (ignora tudo isso se for admin forçando na mão)
+  if (!adminForced) {
+    const { data: st } = await supabase
+      .from("app_settings")
+      .select("auto_payout_enabled, auto_payout_max_amount, auto_payout_daily_limit")
+      .limit(1).maybeSingle();
+    const enabled = st?.auto_payout_enabled === true;
+    const maxAmount = Number(st?.auto_payout_max_amount || 0);
+    const dailyLimit = Number(st?.auto_payout_daily_limit || 0);
+
+    if (!enabled) return await bailPayout(requestId, "Pagamento automático desativado");
+    if (!(maxAmount > 0) || amount > maxAmount) return await bailPayout(requestId, "Acima do teto automático");
+
+    if (dailyLimit > 0) {
+      const since = new Date(); since.setHours(0, 0, 0, 0);
+      const { data: todays } = await supabase
+        .from("payment_requests")
+        .select("amount_money")
+        .eq("user_id", reqRow.user_id)
+        .eq("type", "driver_payout")
+        .eq("auto", true)
+        .in("status", ["paid", "pending"])
+        .neq("id", requestId)
+        .gte("created_at", since.toISOString());
+      const used = (todays || []).reduce((a: number, r: any) => a + Number(r.amount_money || 0), 0);
+      if (used + amount > dailyLimit) return await bailPayout(requestId, "Limite diário atingido");
+    }
+  }
+
+  const pixKey = String(reqRow.pix_key || "").trim();
+  if (!pixKey) return await bailPayout(requestId, "Motorista sem chave PIX cadastrada");
+
+  const idEnvio = buildIdEnvio(requestId);
+
+  // "Reserva" o pedido: grava o idEnvio só se ainda estiver nulo. Se outra
+  // chamada concorrente já reservou, sai sem reenviar.
+  const { data: claimed } = await supabase
+    .from("payment_requests")
+    .update({ efi_idenvio: idEnvio, payout_error: null, updated_at: new Date().toISOString() })
+    .eq("id", requestId)
+    .is("efi_idenvio", null)
+    .select()
+    .maybeSingle();
+  if (!claimed) {
+    return { status: "processing", message: "Envio já em andamento" };
+  }
+
+  // Dispara o Pix Envio
+  let efiResp: any;
+  try {
+    efiResp = await efiFetch(PIX_BASE, `/v2/gn/pix/${idEnvio}`, {
+      method: "PUT",
+      body: {
+        valor: amount.toFixed(2),
+        pagador: { chave: EFI_PIX_KEY, infoPagador: "Saque ChegoJá" },
+        favorecido: { chave: pixKey },
+      },
+    });
+  } catch (e: any) {
+    // Falha de comunicação/validação: libera o idEnvio pra permitir nova tentativa
+    return await bailPayout(requestId, String(e?.message || e).slice(0, 400));
+  }
+
+  const efiStatus: string = efiResp?.status || "EM_PROCESSAMENTO";
+  const e2e: string | null = efiResp?.e2eId || null;
+
+  if (efiStatus === "NAO_REALIZADO") {
+    return await refundAndReject(reqRow, "Efí: NAO_REALIZADO");
+  }
+
+  if (efiStatus === "REALIZADO") {
+    await supabase.from("payment_requests").update({
+      status: "paid",
+      efi_e2e_id: e2e,
+      paid_at: new Date().toISOString(),
+      admin_note: adminForced ? "Pago via PIX pelo admin" : "Pago automaticamente via PIX",
+      updated_at: new Date().toISOString(),
+    }).eq("id", requestId);
+    return { status: "paid", e2eId: e2e };
+  }
+
+  // EM_PROCESSAMENTO: continua 'pending', mas já com o e2eId pra consulta depois
+  await supabase.from("payment_requests").update({
+    efi_e2e_id: e2e,
+    admin_note: "PIX em processamento",
+    updated_at: new Date().toISOString(),
+  }).eq("id", requestId);
+  return { status: "processing", e2eId: e2e };
+}
+
+async function actionCheckPayout(requestId: string) {
+  const { data: reqRow } = await supabase
+    .from("payment_requests").select("*").eq("id", requestId).maybeSingle();
+  if (!reqRow) return { status: "not_found" };
+  if (reqRow.status !== "pending" || !reqRow.efi_e2e_id) return { status: reqRow.status };
+
+  let efiStatus = "";
+  try {
+    const r = await efiFetch(PIX_BASE, `/v2/gn/pix/enviados/${reqRow.efi_e2e_id}`, { method: "GET" });
+    efiStatus = r?.status || "";
+  } catch (e) {
+    console.error("[Efi] check_payout falhou:", e);
+    return { status: "pending" };
+  }
+
+  if (efiStatus === "REALIZADO") {
+    await supabase.from("payment_requests").update({
+      status: "paid",
+      paid_at: new Date().toISOString(),
+      admin_note: "Pago via PIX (confirmado)",
+      updated_at: new Date().toISOString(),
+    }).eq("id", requestId);
+    return { status: "paid" };
+  }
+  if (efiStatus === "NAO_REALIZADO") {
+    return await refundAndReject(reqRow, "Efí: NAO_REALIZADO (confirmado)");
+  }
+  return { status: "processing" };
+}
+
 // --- SERVER ---
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -334,6 +523,12 @@ serve(async (req) => {
         break;
       case "check_reference":
         result = await actionCheckReference(body.reference);
+        break;
+      case "payout":
+        result = await actionPayout(req, body);
+        break;
+      case "check_payout":
+        result = await actionCheckPayout(body.requestId);
         break;
       default:
         throw new Error("Ação inválida");

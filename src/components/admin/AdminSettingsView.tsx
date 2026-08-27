@@ -156,6 +156,56 @@ export const AdminSettingsView: React.FC = () => {
                     </div>
                 </div>
             </Card>
+
+            <Card>
+                <div className="admin-card-header">
+                    <h3 className="admin-card-title">Saque Automático (PIX)</h3>
+                </div>
+                <div className="admin-card-body space-y-4">
+                    <label className="flex items-center gap-3 cursor-pointer">
+                        <input
+                            type="checkbox"
+                            className="w-5 h-5 accent-green-500"
+                            checked={settings.auto_payout_enabled ?? false}
+                            onChange={(e) => setSettings({ ...settings, auto_payout_enabled: e.target.checked })}
+                        />
+                        <span className="text-white font-medium">Pagar saques de motorista automaticamente via PIX</span>
+                    </label>
+                    <p className="text-sm text-gray-400">
+                        Quando ligado, saques dentro dos limites abaixo são enviados na hora pela Efí.
+                        Acima do teto, ou se o envio falhar, o saque cai na fila do <strong>Financeiro</strong> pra você aprovar na mão.
+                    </p>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div className="admin-form-group">
+                            <label className="admin-form-label">Teto por saque (R$)</label>
+                            <input
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                className="admin-form-input"
+                                placeholder="Ex: 50.00"
+                                value={settings.auto_payout_max_amount ?? 0}
+                                onChange={(e) => setSettings({ ...settings, auto_payout_max_amount: parseFloat(e.target.value) || 0 })}
+                            />
+                            <p className="text-xs text-gray-500 mt-1">Saque acima disso vai pra fila do admin. 0 = nada sai automático.</p>
+                        </div>
+                        <div className="admin-form-group">
+                            <label className="admin-form-label">Teto diário por motorista (R$)</label>
+                            <input
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                className="admin-form-input"
+                                placeholder="Ex: 200.00"
+                                value={settings.auto_payout_daily_limit ?? 0}
+                                onChange={(e) => setSettings({ ...settings, auto_payout_daily_limit: parseFloat(e.target.value) || 0 })}
+                            />
+                            <p className="text-xs text-gray-500 mt-1">Soma dos saques automáticos do motorista no dia. 0 = sem limite diário.</p>
+                        </div>
+                    </div>
+                </div>
+            </Card>
         </div>
     );
 };
