@@ -469,6 +469,18 @@ async function actionPayout(req: any, body: any) {
     return { status: "processing", message: "Envio já em andamento" };
   }
 
+  // Manda também o CPF/CNPJ do motorista quando ele tem um cadastrado. A Efí
+  // recomenda enviar chave + documento juntos: ela confere no DICT se a chave
+  // pertence mesmo àquele titular e, quando não bate, devolve um erro dizendo
+  // isso - em vez do NAO_REALIZADO mudo que não explica nada. De quebra impede
+  // que um saque caia na chave de outra pessoa.
+  const favorecido: Record<string, string> = { chave: pixKey };
+  const { data: profile } = await supabase
+    .from("profiles").select("cpf").eq("id", reqRow.user_id).maybeSingle();
+  const doc = onlyDigits(profile?.cpf || "");
+  if (doc.length === 11) favorecido.cpf = doc;
+  else if (doc.length === 14) favorecido.cnpj = doc;
+
   // Dispara o Pix Envio
   let efiResp: any;
   try {
@@ -477,7 +489,7 @@ async function actionPayout(req: any, body: any) {
       body: {
         valor: amount.toFixed(2),
         pagador: { chave: EFI_PIX_KEY, infoPagador: "Saque ChegoJá" },
-        favorecido: { chave: pixKey },
+        favorecido,
       },
     });
   } catch (e: any) {
