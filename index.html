@@ -30,17 +30,62 @@
     window.process = window.process || { env: { API_KEY: '' } };
   </script>
   <script>
-    // DEBUG: Show errors on screen
-    window.onerror = function (msg, url, line) {
-      const d = document.getElementById('err-debug') || document.createElement('div');
-      if (!d.id) { d.id = 'err-debug'; d.style.cssText = 'position:fixed;top:0;left:0;width:100%;background:rgba(200,0,0,0.9);color:white;z-index:999999;padding:20px;font-size:14px;pointer-events:none;white-space:pre-wrap;'; document.body.appendChild(d); }
-      d.innerHTML += '<div>[JS ERROR] ' + msg + ' (' + url + ':' + line + ')</div>';
-    };
-    window.addEventListener('unhandledrejection', function (e) {
-      const d = document.getElementById('err-debug') || document.createElement('div');
-      if (!d.id) { d.id = 'err-debug'; d.style.cssText = 'position:fixed;top:0;left:0;width:100%;background:rgba(200,0,0,0.9);color:white;z-index:999999;padding:20px;font-size:14px;pointer-events:none;white-space:pre-wrap;'; document.body.appendChild(d); }
-      d.innerHTML += '<div>[PROMISE] ' + e.reason + '</div>';
-    });
+    // DEBUG: Mostra erros na tela (útil pra depurar em celular sem DevTools).
+    // Antes isso desenhava uma faixa vermelha sólida cobrindo a tela inteira e
+    // repetia a MESMA mensagem uma linha por ocorrência (ex.: um erro de
+    // script de terceiro disparando 5x virava 5 linhas idênticas), deixando
+    // telas como o painel admin ilegíveis. Agora fica num rodapé retrátil,
+    // agrupa mensagens repetidas (mostra "(x5)" em vez de repetir) e pode
+    // ser fechado.
+    (function () {
+      var counts = Object.create(null);
+      var rows = Object.create(null);
+      var panel = null;
+      var list = null;
+
+      function ensurePanel() {
+        if (panel) return panel;
+        panel = document.createElement('div');
+        panel.id = 'err-debug';
+        panel.style.cssText = 'position:fixed;left:0;right:0;bottom:0;max-height:35vh;overflow-y:auto;background:rgba(120,0,0,0.95);color:#fff;z-index:999999;padding:12px 40px 12px 12px;font:12px/1.4 monospace;white-space:pre-wrap;';
+        var close = document.createElement('button');
+        close.textContent = '✕';
+        close.title = 'Fechar';
+        close.style.cssText = 'position:absolute;top:4px;right:8px;background:transparent;border:0;color:#fff;font-size:16px;line-height:1;cursor:pointer;padding:4px 8px;';
+        close.onclick = function () {
+          panel.remove();
+          panel = null;
+          list = null;
+          counts = Object.create(null);
+          rows = Object.create(null);
+        };
+        list = document.createElement('div');
+        panel.appendChild(close);
+        panel.appendChild(list);
+        document.body.appendChild(panel);
+        return panel;
+      }
+
+      function report(text) {
+        ensurePanel();
+        var n = (counts[text] || 0) + 1;
+        counts[text] = n;
+        var row = rows[text];
+        if (!row) {
+          row = document.createElement('div');
+          rows[text] = row;
+          list.appendChild(row);
+        }
+        row.textContent = (n > 1 ? '(x' + n + ') ' : '') + text;
+      }
+
+      window.onerror = function (msg, url, line) {
+        report('[JS ERROR] ' + msg + ' (' + url + ':' + line + ')');
+      };
+      window.addEventListener('unhandledrejection', function (e) {
+        report('[PROMISE] ' + e.reason);
+      });
+    })();
   </script>
   <script type="module">
     try {
