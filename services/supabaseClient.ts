@@ -3,6 +3,14 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SCHEMA } from '../constants';
 import { Message, UserProfile, UserRole, DriverStatus, AppSettings, BingoSettings, BingoCard, BingoRankingUser, BroadcastMessage, DriverPlan, Ride, Banner, Coupon, StoreProduct, WalletTransaction, StoreOrder, AppPaymentRequest, RewardTier, RewardsConfig, DriverRankingEntry, ChatContact, VehicleCategory } from '../types';
 import { hashPassword } from '../utils/passwordHash';
 
+// ATENÇÃO AO ADICIONAR COLUNA AQUI: `chegoja.profiles` tem GRANT por COLUNA, não
+// por tabela (consequência do lockdown de `password`). Coluna nova NÃO herda os
+// grants, então entrar aqui sem o
+//   grant select (nova_coluna) on chegoja.profiles to anon, authenticated;
+// derruba TODA leitura de perfil do app com "permission denied for table
+// profiles" - o PostgREST recusa a query inteira, não só a coluna. Rode o grant
+// ANTES de subir o front. (Aconteceu com full_name em 2026-08-28.)
+//
 // Colunas de `profiles` seguras para devolver ao cliente depois de um INSERT/UPDATE.
 // Não inclui `password`: desde a migration 20260819_login_rpc_and_password_lockdown.sql,
 // a role `anon` não tem mais SELECT nessa coluna (só a RPC verify_login lê). Um

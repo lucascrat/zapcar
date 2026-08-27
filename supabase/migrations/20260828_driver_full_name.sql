@@ -12,6 +12,14 @@
 alter table chegoja.profiles
   add column if not exists full_name text;
 
+-- OBRIGATÓRIO, e ANTES de subir o front: `profiles` tem GRANT por COLUNA (não
+-- por tabela) desde o lockdown de `password`, e coluna nova não herda nada. Como
+-- full_name entrou em PROFILE_SAFE_COLUMNS, sem estes grants o PostgREST recusa
+-- a query INTEIRA com "permission denied for table profiles" - ou seja, toda
+-- leitura de perfil do app para de funcionar, não só o campo novo.
+grant select (full_name) on chegoja.profiles to anon, authenticated;
+grant update (full_name) on chegoja.profiles to anon, authenticated;
+
 -- A Edge Function efi-payment (role service_role) lê o documento do favorecido
 -- pra validar titularidade no Pix Envio. GRANT por COLUNA, pra nunca dar acesso
 -- à coluna `password` (bloqueada em 20260819_login_rpc_and_password_lockdown).
