@@ -10,7 +10,7 @@ import { hashPassword } from '../utils/passwordHash';
 // INSERT/UPDATE no PostgREST) e falha com "permission denied" se password entrar
 // nessa lista - por isso todo insert/update em `profiles` que precisa da linha de
 // volta usa esta constante em vez de `.select()`.
-export const PROFILE_SAFE_COLUMNS = 'id, username, phone, role, status, is_approved, subscription_expires_at, avatar_url, vehicle_model, vehicle_plate, vehicle_color, vehicle_type, lat, lng, location_updated_at, wallet_coins, financial_balance, pix_key, whatsapp, cpf, address_street, address_number, address_neighborhood, address_city, address_zip, email, is_pip_active, unread_count, created_at, updated_at, doc_cnh_url, doc_address_proof_url, work_city';
+export const PROFILE_SAFE_COLUMNS = 'id, username, full_name, phone, role, status, is_approved, subscription_expires_at, avatar_url, vehicle_model, vehicle_plate, vehicle_color, vehicle_type, lat, lng, location_updated_at, wallet_coins, financial_balance, pix_key, whatsapp, cpf, address_street, address_number, address_neighborhood, address_city, address_zip, email, is_pip_active, unread_count, created_at, updated_at, doc_cnh_url, doc_address_proof_url, work_city';
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   db: {

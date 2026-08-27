@@ -19,6 +19,7 @@ import {
 } from '../../../services/supabaseClient';
 import { PixKeyInput } from '../../../components/PixKeyInput';
 import { formatPixKeyForDisplay, getPixKeyTypeLabel } from '../../../utils/pixKey';
+import { validateCPF, formatCPF } from '../../../utils/validateCPF';
 import { getMapProviderPromise } from '../../../services/googleMapsLoader';
 import {
     createMap, addNavigationControl, addMarker, removeMarker, fitBounds, panTo, setZoom, onMapReady,
@@ -146,6 +147,7 @@ export const AdminDriversView: React.FC<AdminDriversViewProps> = ({
         if (!selectedDriver) return;
         setEditData({
             username: selectedDriver.username,
+            full_name: selectedDriver.full_name,
             email: selectedDriver.email,
             phone: selectedDriver.phone,
             whatsapp: selectedDriver.whatsapp,
@@ -167,6 +169,7 @@ export const AdminDriversView: React.FC<AdminDriversViewProps> = ({
             // Update Profile
             await updateUserProfile(selectedDriver.id, {
                 username: editData.username,
+                full_name: editData.full_name,
                 email: editData.email,
                 phone: editData.phone,
                 whatsapp: editData.whatsapp,
@@ -660,6 +663,20 @@ export const AdminDriversView: React.FC<AdminDriversViewProps> = ({
                         </div>
                     </div>
 
+                    {/* Sem CPF válido o banco recusa o Pix Envio ("chave não
+                        pertence ao titular") depois de já ter debitado o saldo -
+                        avisa antes de o motorista tentar sacar. */}
+                    {!validateCPF(selectedDriver.cpf || '') && (
+                        <div className="mx-5 mt-4 rounded-xl border border-yellow-500/30 bg-yellow-500/10 p-3 flex gap-2">
+                            <span className="material-icons text-yellow-500" style={{ fontSize: 18 }}>warning</span>
+                            <p className="text-xs text-yellow-200 leading-snug">
+                                <strong>Não consegue sacar:</strong> falta o CPF do titular da chave PIX
+                                {!selectedDriver.full_name && ' e o nome completo'}. O banco confere esses
+                                dados antes de liberar a transferência.
+                            </p>
+                        </div>
+                    )}
+
                     <div className="admin-detail-stats">
                         <div className="admin-detail-stat">
                             <p className="admin-detail-stat-value">{(selectedDriver as any).monthly_rides || 0}</p>
@@ -735,8 +752,22 @@ export const AdminDriversView: React.FC<AdminDriversViewProps> = ({
                                         <span className="admin-detail-row-value">{selectedDriver.email || '-'}</span>
                                     </div>
                                     <div className="admin-detail-row">
+                                        <span className="admin-detail-row-label">Nome completo</span>
+                                        <span className="admin-detail-row-value">
+                                            {selectedDriver.full_name || (
+                                                <span className="text-yellow-500">não informado</span>
+                                            )}
+                                        </span>
+                                    </div>
+                                    <div className="admin-detail-row">
                                         <span className="admin-detail-row-label">CPF</span>
-                                        <span className="admin-detail-row-value">{selectedDriver.cpf || '-'}</span>
+                                        <span className="admin-detail-row-value">
+                                            {selectedDriver.cpf
+                                                ? (validateCPF(selectedDriver.cpf)
+                                                    ? selectedDriver.cpf
+                                                    : <span className="text-red-400">{selectedDriver.cpf} (inválido)</span>)
+                                                : <span className="text-yellow-500">não informado</span>}
+                                        </span>
                                     </div>
                                     <div className="admin-detail-row">
                                         <span className="admin-detail-row-label">PIX</span>
@@ -931,13 +962,22 @@ export const AdminDriversView: React.FC<AdminDriversViewProps> = ({
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <Input
                             label="Nome de Usuário"
+                            hint="Usado no login - mudar aqui muda como ele entra no app"
                             value={editData.username || ''}
                             onChange={e => setEditData({ ...editData, username: e.target.value })}
                         />
                         <Input
-                            label="CPF"
+                            label="Nome completo (titular da conta)"
+                            hint="Como está no banco - conferido no saque"
+                            value={editData.full_name || ''}
+                            onChange={e => setEditData({ ...editData, full_name: e.target.value })}
+                        />
+                        <Input
+                            label="CPF (titular da chave PIX)"
+                            hint={editData.cpf && !validateCPF(editData.cpf) ? '⚠️ CPF inválido' : 'O banco confere se a chave PIX é deste CPF'}
                             value={editData.cpf || ''}
-                            onChange={e => setEditData({ ...editData, cpf: e.target.value })}
+                            onChange={e => setEditData({ ...editData, cpf: formatCPF(e.target.value) })}
+                            maxLength={14}
                         />
                         <Input
                             label="Telefone"

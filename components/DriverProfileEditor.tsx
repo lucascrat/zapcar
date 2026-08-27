@@ -5,6 +5,7 @@ import { updateUserProfile, fetchUserProfile, createPaymentRequest, fetchMyPayme
 import { useVehicleCategories } from '../src/contexts/VehicleCategoriesContext';
 import { PixKeyInput } from './PixKeyInput';
 import { formatPixKeyForDisplay, getPixKeyTypeLabel, repairStoredPixKey } from '../utils/pixKey';
+import { validateCPF } from '../utils/validateCPF';
 
 interface DriverProfileEditorProps {
     currentUser: UserProfile;
@@ -33,6 +34,7 @@ export const DriverProfileEditor: React.FC<DriverProfileEditorProps> = ({ curren
     const [pixKey, setPixKey] = useState(currentUser.pix_key || '');
     const [pixKeyValid, setPixKeyValid] = useState(false);
     const [cpf, setCpf] = useState(currentUser.cpf || '');
+    const [fullName, setFullName] = useState(currentUser.full_name || '');
     const [email, setEmail] = useState(currentUser.email || '');
 
     // Address (optional for PIX)
@@ -61,6 +63,7 @@ export const DriverProfileEditor: React.FC<DriverProfileEditorProps> = ({ curren
                 setVehicleType(fresh.vehicle_type || 'car');
                 setPixKey(fresh.pix_key || '');
                 setCpf(fresh.cpf || '');
+                setFullName(fresh.full_name || '');
                 setEmail(fresh.email || '');
                 setAddressStreet(fresh.address_street || '');
                 setAddressNumber(fresh.address_number || '');
@@ -101,6 +104,14 @@ export const DriverProfileEditor: React.FC<DriverProfileEditorProps> = ({ curren
             setUploadingImage(false);
         }
     };
+
+    // O banco só libera a transferência se a chave PIX pertencer ao CPF
+    // informado, então os três dados precisam estar completos antes do saque -
+    // sem isso o valor sai do saldo e volta minutos depois, sem o motorista
+    // entender o motivo.
+    const isCpfValid = validateCPF(cpf);
+    const isFullNameValid = fullName.trim().split(/\s+/).filter(p => p.length >= 2).length >= 2;
+    const podeSacar = isCpfValid && isFullNameValid && !!currentUser.pix_key;
 
     const loadPendingRequests = async () => {
         const requests = await fetchMyPaymentRequests(currentUser.id);
@@ -145,11 +156,20 @@ export const DriverProfileEditor: React.FC<DriverProfileEditorProps> = ({ curren
             alert('Confira a chave PIX: ela ainda está incompleta ou inválida.');
             return;
         }
+        if (!isFullNameValid) {
+            alert('Informe o nome completo do titular da conta (nome e sobrenome).');
+            return;
+        }
+        if (!isCpfValid) {
+            alert('Informe um CPF válido - precisa ser o do titular da chave PIX.');
+            return;
+        }
 
         setSaving(true);
         const success = await updateUserProfile(currentUser.id, {
             pix_key: pixKey,
             cpf,
+            full_name: fullName.trim(),
             email,
             address_street: addressStreet,
             address_number: addressNumber,
@@ -179,6 +199,18 @@ export const DriverProfileEditor: React.FC<DriverProfileEditorProps> = ({ curren
 
         if (!currentUser.pix_key) {
             alert('Configure sua chave PIX antes de solicitar saque.');
+            setActiveTab('pix');
+            return;
+        }
+
+        // Sem CPF/nome do titular o banco recusa a transferência ("chave não
+        // pertence ao titular") depois de já ter descontado o saldo. Melhor
+        // barrar aqui e mandar completar o cadastro.
+        if (!podeSacar) {
+            alert('Complete seus dados de recebimento antes de sacar:\n\n' +
+                (!isFullNameValid ? '• Nome completo do titular da conta\n' : '') +
+                (!isCpfValid ? '• CPF do titular da chave PIX\n' : '') +
+                '\nO banco confere se a chave PIX é mesmo sua antes de liberar o dinheiro.');
             setActiveTab('pix');
             return;
         }
@@ -283,7 +315,7 @@ export const DriverProfileEditor: React.FC<DriverProfileEditorProps> = ({ curren
                     {activeTab === 'pix' && (
                         <button
                             onClick={handleSavePix}
-                            disabled={saving || !pixKeyValid}
+                            disabled={saving || !pixKeyValid || !isCpfValid || !isFullNameValid}
                             className="bg-teal-500 text-white px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider active:scale-95 transition disabled:opacity-50"
                         >
                             {saving ? '...' : 'Salvar'}
@@ -292,7 +324,7 @@ export const DriverProfileEditor: React.FC<DriverProfileEditorProps> = ({ curren
                     {activeTab === 'withdraw' && (
                         <button
                             onClick={handleWithdraw}
-                            disabled={processingWithdraw || !currentUser.pix_key || !withdrawAmount || parseFloat(withdrawAmount) <= 0}
+                            disabled={processingWithdraw || !podeSacar || !withdrawAmount || parseFloat(withdrawAmount) <= 0}
                             className="bg-green-600 text-white px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider active:scale-95 transition disabled:opacity-50"
                         >
                             {processingWithdraw ? '...' : 'Sacar'}
@@ -473,12 +505,67 @@ export const DriverProfileEditor: React.FC<DriverProfileEditorProps> = ({ curren
 
                         {/* PIX Settings */}
                         <div className="bg-whatsapp-panel/40 p-5 rounded-2xl border border-white/5 space-y-4">
+                            {/* Nome e CPF do TITULAR da chave. O banco confere
+                                se a chave PIX pertence a esse CPF antes de
+                                liberar a transferência - chave certa com CPF de
+                                outra pessoa faz o saque ser recusado. */}
+                            <div>
+                                <label className="text-[10px] text-gray-500 uppercase font-bold mb-1 block">
+                                    Nome completo do titular da conta
+                                </label>
+                                <input
+                                    type="text"
+                                    value={fullName}
+                                    onChange={(e) => setFullName(e.target.value)}
+                                    placeholder="Como está no seu banco"
+                                    className="w-full bg-black/30 text-white px-4 py-3 rounded-xl border border-white/10 focus:border-teal-500 outline-none transition"
+                                />
+                                {fullName.trim() && !isFullNameValid && (
+                                    <p className="text-[11px] text-red-400 mt-1">Informe nome e sobrenome.</p>
+                                )}
+                            </div>
+
+                            <div>
+                                <label className="text-[10px] text-gray-500 uppercase font-bold mb-1 block">
+                                    CPF do titular
+                                </label>
+                                <input
+                                    type="tel"
+                                    inputMode="numeric"
+                                    value={cpf}
+                                    onChange={(e) => setCpf(formatCPF(e.target.value))}
+                                    placeholder="000.000.000-00"
+                                    maxLength={14}
+                                    className="w-full bg-black/30 text-white px-4 py-3 rounded-xl border outline-none transition"
+                                    style={{ borderColor: cpf.trim() ? (isCpfValid ? 'rgba(37,211,102,0.6)' : 'rgba(248,113,113,0.6)') : 'rgba(255,255,255,0.1)' }}
+                                />
+                                {cpf.trim() && !isCpfValid ? (
+                                    <p className="text-[11px] text-red-400 mt-1">
+                                        CPF inválido - confira os dígitos.
+                                    </p>
+                                ) : (
+                                    <p className="text-[10px] text-gray-500 mt-1">
+                                        Precisa ser o CPF do dono da chave PIX abaixo.
+                                    </p>
+                                )}
+                            </div>
+
                             <PixKeyInput
                                 label="Chave PIX para Recebimentos"
                                 value={currentUser.pix_key}
                                 onChange={setPixKey}
                                 onValidChange={setPixKeyValid}
                             />
+
+                            {!podeSacar && (
+                                <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-3 flex gap-2">
+                                    <span className="material-icons text-yellow-500 text-sm">info</span>
+                                    <p className="text-[11px] text-yellow-200 leading-snug">
+                                        Preencha nome completo, CPF e chave PIX para conseguir sacar.
+                                        O banco confere os três antes de liberar a transferência.
+                                    </p>
+                                </div>
+                            )}
 
                             <div className="pt-2 border-t border-white/5">
                                 <h4 className="text-white font-bold text-sm mb-3">Endereço de Cobrança</h4>
@@ -555,6 +642,16 @@ export const DriverProfileEditor: React.FC<DriverProfileEditorProps> = ({ curren
                                 <p className="text-xs text-red-400 mt-2">
                                     ⚠️ Configure sua chave PIX na aba "PIX / Recebimento"
                                 </p>
+                            )}
+                            {currentUser.pix_key && !podeSacar && (
+                                <button
+                                    onClick={() => setActiveTab('pix')}
+                                    className="text-xs text-yellow-400 mt-2 underline"
+                                >
+                                    ⚠️ Falta {!isFullNameValid ? 'seu nome completo' : ''}
+                                    {!isFullNameValid && !isCpfValid ? ' e ' : ''}
+                                    {!isCpfValid ? 'seu CPF' : ''} — toque para completar
+                                </button>
                             )}
                         </div>
 

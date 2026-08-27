@@ -41,7 +41,8 @@ export interface UserProfile {
   financial_balance?: number; // Saldo do motorista (Ganhos/Cupons)
   pix_key?: string; // Chave PIX do motorista
   whatsapp?: string; // WhatsApp oficial do perfil
-  cpf?: string; // CPF do usuário
+  cpf?: string; // CPF do usuário - titular da chave PIX, validado no Pix Envio
+  full_name?: string; // Nome completo do titular da conta (username é só o apelido de login)
   address_street?: string; // Rua do endereço
   address_number?: string; // Número do endereço
   address_neighborhood?: string; // Bairro
