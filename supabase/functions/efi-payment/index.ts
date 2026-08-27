@@ -182,7 +182,13 @@ async function actionCreatePix(body: any) {
     imagemQrcode = qr.imagemQrcode || "";
   }
 
-  await supabase.from("efi_payments").insert({
+  // Erro aqui não pode ficar em silêncio: sem essa linha, actionCheck/
+  // actionCheckReference nunca encontram o pagamento pra consultar o status
+  // na Efí - o app fica esperando aprovação pra sempre, mesmo já pago
+  // (foi exatamente esse bug - permission denied silencioso por falta de
+  // GRANT pro service_role, corrigido em
+  // supabase/migrations/20260827_grant_efi_payments_service_role.sql).
+  const { error: insertErr } = await supabase.from("efi_payments").insert({
     id: txid,
     type: "pix",
     efi_id: txid,
@@ -194,6 +200,9 @@ async function actionCreatePix(body: any) {
     plan_id: planId || null,
     product_id: payerData?.product?.id || null,
   });
+  if (insertErr) {
+    console.error("[Efi] FALHA ao registrar efi_payments (Pix) - polling/verificação nunca vão achar esse pagamento:", insertErr);
+  }
 
   return {
     id: txid,
@@ -237,7 +246,7 @@ async function actionCard(body: any) {
   const efiStatus = payResult.data?.status || "unknown";
   const mapped = normalizeCardStatus(efiStatus);
 
-  await supabase.from("efi_payments").insert({
+  const { error: insertErr } = await supabase.from("efi_payments").insert({
     id: String(chargeId),
     type: "card",
     efi_id: String(chargeId),
@@ -249,6 +258,9 @@ async function actionCard(body: any) {
     plan_id: planId || null,
     product_id: payerData?.product?.id || null,
   });
+  if (insertErr) {
+    console.error("[Efi] FALHA ao registrar efi_payments (cartão):", insertErr);
+  }
 
   return {
     success: mapped === "approved",
