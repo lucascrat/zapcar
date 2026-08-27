@@ -562,19 +562,58 @@ async function handleEfiWebhook(body: any) {
   return { ok: true };
 }
 
-async function actionCheckPayout(requestId: string) {
+// A Efí não devolve um "motivo" em campo próprio quando um envio termina como
+// NAO_REALIZADO - a explicação vem espalhada no corpo (devoluções, rejeição,
+// descrição). Guardamos o resumo em payout_error pra o admin (e a gente) saber
+// o que aconteceu em vez de só "NAO_REALIZADO".
+// payment_requests é legível por qualquer um (policy payment_requests_read),
+// então payout_error leva só o que o motorista/admin precisam ver - nunca o
+// corpo cru da Efí, que carrega a chave PIX da empresa. O JSON completo vai pro
+// console.log da função, visível só a quem tem acesso ao projeto Supabase.
+function describeEfiPayout(r: any): string {
+  const parts: string[] = [];
+  if (r?.status) parts.push(String(r.status));
+  for (const k of ["motivo", "descricao", "rejeicao", "detalhe"]) {
+    if (r?.[k]) parts.push(`${k}=${typeof r[k] === "string" ? r[k] : JSON.stringify(r[k])}`);
+  }
+  if (Array.isArray(r?.devolucoes) && r.devolucoes.length) {
+    parts.push(`devolucoes=${JSON.stringify(r.devolucoes).slice(0, 200)}`);
+  }
+  if (r?.horario?.solicitacao && !r?.horario?.liquidacao) {
+    parts.push('sem liquidação - verifique o saldo da conta Efí');
+  }
+  return parts.join(' | ').slice(0, 400);
+}
+
+/** `force` reconsulta mesmo pedido já rejeitado - usado pra diagnosticar. */
+async function actionCheckPayout(requestId: string, force = false) {
   const { data: reqRow } = await supabase
     .from("payment_requests").select("*").eq("id", requestId).maybeSingle();
   if (!reqRow) return { status: "not_found" };
-  if (reqRow.status !== "pending" || !reqRow.efi_e2e_id) return { status: reqRow.status };
+  if (!reqRow.efi_e2e_id) return { status: reqRow.status };
+  if (!force && reqRow.status !== "pending") return { status: reqRow.status };
 
-  let efiStatus = "";
+  let raw: any = null;
   try {
-    const r = await efiFetch(PIX_BASE, `/v2/gn/pix/enviados/${reqRow.efi_e2e_id}`, { method: "GET" });
-    efiStatus = r?.status || "";
-  } catch (e) {
+    raw = await efiFetch(PIX_BASE, `/v2/gn/pix/enviados/${reqRow.efi_e2e_id}`, { method: "GET" });
+  } catch (e: any) {
     console.error("[Efi] check_payout falhou:", e);
-    return { status: "pending" };
+    if (force) {
+      await supabase.from("payment_requests")
+        .update({ payout_error: `consulta falhou: ${String(e?.message || e)}`.slice(0, 500) })
+        .eq("id", requestId);
+    }
+    return { status: reqRow.status };
+  }
+
+  const efiStatus: string = raw?.status || "";
+  const detail = describeEfiPayout(raw);
+  console.log(`[Efi] envio ${reqRow.efi_e2e_id}:`, JSON.stringify(raw));
+
+  if (force) {
+    // Diagnóstico: registra o que a Efí respondeu sem mexer no status/saldo.
+    await supabase.from("payment_requests").update({ payout_error: detail }).eq("id", requestId);
+    return { status: reqRow.status, detail };
   }
 
   if (efiStatus === "REALIZADO") {
@@ -587,9 +626,15 @@ async function actionCheckPayout(requestId: string) {
     return { status: "paid" };
   }
   if (efiStatus === "NAO_REALIZADO") {
-    return await refundAndReject(reqRow, "Efí: NAO_REALIZADO (confirmado)");
+    return await refundAndReject(reqRow, `Efí: ${detail}`);
   }
   return { status: "processing" };
+}
+
+/** Saldo da conta Efí - causa nº 1 de envio aceito que depois não se realiza. */
+async function actionEfiBalance() {
+  const saldo = await efiFetch(PIX_BASE, "/v2/gn/saldo", { method: "GET" });
+  return { saldo };
 }
 
 // --- SERVER ---
@@ -633,6 +678,18 @@ serve(async (req) => {
         break;
       case "check_payout":
         result = await actionCheckPayout(body.requestId);
+        break;
+      case "recheck_payout": {
+        // Diagnóstico: reconsulta na Efí e grava o motivo em payout_error, sem
+        // alterar status nem saldo. Não devolve o corpo na resposta (o detalhe
+        // fica no banco, onde só quem já enxerga payment_requests lê).
+        const r = await actionCheckPayout(body.requestId, true);
+        result = { ok: true, status: r.status };
+        break;
+      }
+      case "efi_balance":
+        await requireAdmin(req);
+        result = await actionEfiBalance();
         break;
       case "setup_webhook":
         result = await actionSetupWebhook();

@@ -2069,6 +2069,27 @@ export const adminForcePayout = async (
   }
 };
 
+/**
+ * Saldo da conta Efí. É de lá que o PIX de saque sai - conta sem saldo faz o
+ * envio ser aceito e depois voltar como NAO_REALIZADO, que é confuso de
+ * diagnosticar sem ver este número. Exige admin (validado na Edge Function).
+ */
+export const fetchEfiBalance = async (): Promise<{ total?: number; blocked?: number; error?: string }> => {
+  try {
+    const { data, error } = await supabase.functions.invoke('efi-payment', {
+      body: { action: 'efi_balance' },
+    });
+    if (error) return { error: error.message };
+    const s = data?.saldo || {};
+    return {
+      total: Number(s.saldo ?? s.total ?? 0),
+      blocked: Number(s.bloqueado?.transacao ?? s.bloqueado ?? 0),
+    };
+  } catch (e: any) {
+    return { error: e?.message || String(e) };
+  }
+};
+
 /** Consulta na Efí se um saque 'pending' com e2eId já foi concluído/recusado. */
 export const checkPayoutStatus = async (requestId: string): Promise<string> => {
   try {

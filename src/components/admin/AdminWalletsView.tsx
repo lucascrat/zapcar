@@ -5,7 +5,8 @@ import {
     updatePaymentRequestStatus,
     fetchAllWalletTransactions,
     adminForcePayout,
-    checkPayoutStatus
+    checkPayoutStatus,
+    fetchEfiBalance
 } from '../../../services/supabaseClient';
 import { Card, Button, Badge } from '../../components/shared';
 import { formatPixKeyForDisplay, getPixKeyTypeLabel } from '../../../utils/pixKey';
@@ -16,6 +17,7 @@ export const AdminWalletsView: React.FC = () => {
     const [loading, setLoading] = useState(true);
     const [filter, setFilter] = useState<'all' | 'pending' | 'paid' | 'rejected'>('pending');
     const [processingId, setProcessingId] = useState<string | null>(null);
+    const [efiBalance, setEfiBalance] = useState<{ total?: number; blocked?: number; error?: string } | null>(null);
 
     useEffect(() => {
         loadData();
@@ -30,6 +32,7 @@ export const AdminWalletsView: React.FC = () => {
             ]);
             setRequests(reqs);
             setTransactions(txs as any);
+            fetchEfiBalance().then(setEfiBalance);
 
             // Saques que a Efí devolveu como EM_PROCESSAMENTO ficam 'pending' com
             // e2eId: consulta o status atual e, se já concluiu/recusou, o próprio
@@ -112,6 +115,31 @@ export const AdminWalletsView: React.FC = () => {
                     Atualizar
                 </Button>
             </div>
+
+            {/* Saldo da conta Efí - é de lá que o PIX de saque sai. Sem saldo, o
+                envio é aceito e depois volta como NAO_REALIZADO. */}
+            {efiBalance && !efiBalance.error && (
+                <div className={`rounded-lg border p-4 flex items-center justify-between ${(efiBalance.total || 0) <= 0
+                    ? 'border-red-500/40 bg-red-500/10'
+                    : 'border-white/10 bg-white/5'}`}>
+                    <div className="flex items-center gap-3">
+                        <span className={`material-icons ${(efiBalance.total || 0) <= 0 ? 'text-red-400' : 'text-green-400'}`}>
+                            account_balance
+                        </span>
+                        <div>
+                            <p className="text-sm font-semibold text-white">Saldo na conta Efí</p>
+                            <p className="text-xs text-gray-400">
+                                {(efiBalance.total || 0) <= 0
+                                    ? 'Sem saldo o PIX de saque não sai - a Efí aceita e depois recusa.'
+                                    : 'Disponível para pagar os saques automáticos.'}
+                            </p>
+                        </div>
+                    </div>
+                    <span className={`text-xl font-bold ${(efiBalance.total || 0) <= 0 ? 'text-red-400' : 'text-green-400'}`}>
+                        R$ {(efiBalance.total || 0).toFixed(2)}
+                    </span>
+                </div>
+            )}
 
             {/* Stats Summary */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
