@@ -228,6 +228,23 @@ public class MainActivity extends BridgeActivity {
         // Não reagenda dispatchPendingNotificationEvent() aqui: onCreate/onNewIntent
         // já programaram as tentativas (ver DISPATCH_RETRY_DELAYS_MS) e onStart roda
         // logo em seguida, então evita disparar o evento em duplicidade.
+
+        // Se o app voltou pra frente por outro caminho que não seja tocar na bolha
+        // (ex: usuário abriu pelos apps recentes/launcher), a bolha e o foreground
+        // service dela ficariam presos na tela por cima de tudo sem motivo -
+        // encerra sozinho.
+        stopService(new Intent(this, FloatingBubbleService.class));
+
+        // Reaproveita o mesmo evento/handler que o PiP nativo já usava pra resetar
+        // isPipActive, is_pip_active no perfil e checar corrida pendente (ver
+        // App.tsx handlePipExit) - só dispara se a bolha realmente estava ativa,
+        // pra não afetar aberturas normais do app.
+        if (FloatingBubbleService.wasActive) {
+            FloatingBubbleService.wasActive = false;
+            if (this.bridge != null && this.bridge.getWebView() != null) {
+                this.bridge.getWebView().evaluateJavascript("window.dispatchEvent(new CustomEvent('pipExit'))", null);
+            }
+        }
     }
 
     public class WebAppInterface {
@@ -241,15 +258,74 @@ public class MainActivity extends BridgeActivity {
         public void enterPipMode() {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 try {
-                    // Define a proporção da janela PiP (Vertical 3:4)
-                    Rational aspectRatio = new Rational(3, 4);
-                    PictureInPictureParams params = new PictureInPictureParams.Builder()
-                            .setAspectRatio(aspectRatio)
-                            .build();
-                    mActivity.enterPictureInPictureMode(params);
+                    // 1:1 (quadrado) em vez de 3:4 - o conteúdo em si já é um círculo
+                    // (ver isPipActive em App.tsx), então janela quadrada fica com
+                    // sobra mínima nas bordas e lê como um badge redondo, não uma
+                    // janela grande e retangular.
+                    Rational aspectRatio = new Rational(1, 1);
+                    PictureInPictureParams.Builder builder = new PictureInPictureParams.Builder()
+                            .setAspectRatio(aspectRatio);
+
+                    // Dica de tamanho/origem pro sistema: um quadrado pequeno (~72dp,
+                    // do tamanho de um ícone) no canto inferior direito. O Android usa
+                    // isso tanto pra animação de entrada quanto como sinal de que a
+                    // janela pode ficar pequena - sem isso ele tende a abrir bem maior
+                    // (perto do tamanho máximo permitido pelo fabricante).
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        float density = getResources().getDisplayMetrics().density;
+                        int sizePx = Math.round(72 * density);
+                        android.graphics.Rect decorBounds = new android.graphics.Rect();
+                        getWindow().getDecorView().getGlobalVisibleRect(decorBounds);
+                        int right = decorBounds.right > 0 ? decorBounds.right : getResources().getDisplayMetrics().widthPixels;
+                        int bottom = decorBounds.bottom > 0 ? decorBounds.bottom : getResources().getDisplayMetrics().heightPixels;
+                        android.graphics.Rect sourceHint = new android.graphics.Rect(
+                                right - sizePx, bottom - sizePx, right, bottom);
+                        builder.setSourceRectHint(sourceHint);
+                    }
+
+                    mActivity.enterPictureInPictureMode(builder.build());
                 } catch (Exception e) {
                     e.printStackTrace();
                 }
+            }
+        }
+
+        // Ícone flutuante (bolha) - substitui o PiP nativo como opção "pequena e
+        // discreta": o PiP tem tamanho mínimo imposto pela plataforma (não dá pra
+        // controlar), a bolha desenhada via overlay (FloatingBubbleService) sim.
+        @JavascriptInterface
+        public void showFloatingBubble() {
+            if (!hasOverlayPermission()) {
+                requestOverlayPermission();
+                android.widget.Toast.makeText(mActivity,
+                        "Permita \"Exibir sobre outros apps\" e toque de novo no ícone flutuante.",
+                        android.widget.Toast.LENGTH_LONG).show();
+                return;
+            }
+            android.content.Intent serviceIntent = new android.content.Intent(mActivity, FloatingBubbleService.class);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                mActivity.startForegroundService(serviceIntent);
+            } else {
+                mActivity.startService(serviceIntent);
+            }
+            // Manda o app pra segundo plano - é a bolha que fica visível agora, não
+            // a Activity encolhida (diferente do PiP).
+            mActivity.moveTaskToBack(true);
+        }
+
+        @JavascriptInterface
+        public boolean hasOverlayPermission() {
+            return Build.VERSION.SDK_INT < Build.VERSION_CODES.M
+                    || Settings.canDrawOverlays(mActivity);
+        }
+
+        private void requestOverlayPermission() {
+            try {
+                Intent intent = new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                        Uri.parse("package:" + getPackageName()));
+                startActivity(intent);
+            } catch (Exception e) {
+                e.printStackTrace();
             }
         }
 
@@ -306,12 +382,15 @@ public class MainActivity extends BridgeActivity {
             android.content.res.Configuration newConfig) {
         super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig);
 
-        if (!isInPictureInPictureMode) {
-            // Voltou para tela cheia (saiu do PiP)
-            // Executa JS para disparar evento
-            if (this.bridge != null && this.bridge.getWebView() != null) {
-                this.bridge.getWebView().evaluateJavascript("window.dispatchEvent(new CustomEvent('pipExit'))", null);
-            }
+        // App.tsx já escuta os dois eventos (pipEnter/pipExit) e troca pra tela
+        // simplificada do PiP (só o ícone do app, ver isPipActive em App.tsx) - mas
+        // só o 'pipExit' era disparado aqui. Sem o 'pipEnter', o app entrava no PiP
+        // mostrando o WebView inteiro encolhido (mapa, botões, tudo ilegível numa
+        // janela desse tamanho) em vez do ícone.
+        if (this.bridge != null && this.bridge.getWebView() != null) {
+            String event = isInPictureInPictureMode ? "pipEnter" : "pipExit";
+            this.bridge.getWebView().evaluateJavascript(
+                    "window.dispatchEvent(new CustomEvent('" + event + "'))", null);
         }
     }
 }

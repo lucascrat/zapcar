@@ -57,6 +57,20 @@
                 <action android:name="com.google.firebase.MESSAGING_EVENT" />
             </intent-filter>
         </service>
+
+        <!-- Bolha flutuante (substituto do PiP nativo - ver FloatingBubbleService).
+             foregroundServiceType="specialUse" é a categoria certa a partir do
+             Android 14 (API 34) pra serviços que não se encaixam nos tipos
+             pré-definidos (mídia, localização, etc.) - exige a property abaixo
+             explicando o motivo. -->
+        <service
+            android:name=".FloatingBubbleService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="floating_bubble_return_to_app" />
+        </service>
     </application>
 
     <!-- Permissions -->
@@ -66,6 +80,9 @@
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <!-- Categoria do foreground service da bolha flutuante (ver FloatingBubbleService
+         e android:foregroundServiceType="specialUse" no <service> dela). -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <!-- Permite que a notificação de corrida (type=new_ride) acorde a tela e abra
