@@ -19,6 +19,13 @@ const EFI_CLIENT_SECRET = Deno.env.get("EFI_CLIENT_SECRET") || "";
 const EFI_CERT_PEM = Deno.env.get("EFI_CERT_PEM") || "";
 const EFI_KEY_PEM = Deno.env.get("EFI_KEY_PEM") || "";
 const EFI_PIX_KEY = Deno.env.get("EFI_PIX_KEY") || "";
+// Chave usada como PAGADOR no Pix Envio. Precisa ser uma chave que pertence à
+// conta Efí (a de recebimento pode ser de outro banco, porque a conta tem
+// receberSemChave=true - mas pra DEBITAR a chave tem que ser dela). Quando a
+// chave errada é usada aqui, a Efí aceita a ordem, devolve e2eId e só depois
+// marca NAO_REALIZADO, sem dizer o motivo. Separada de EFI_PIX_KEY pra não
+// mexer nas cobranças, que funcionam com a chave atual.
+const EFI_PIX_KEY_SEND = Deno.env.get("EFI_PIX_KEY_SEND") || EFI_PIX_KEY;
 // "production" | "homolog"
 const EFI_ENV = (Deno.env.get("EFI_ENV") || "production").toLowerCase();
 
@@ -43,6 +50,9 @@ function getEfiClient() {
   return efiHttpClient;
 }
 
+// Escopos que a Efí devolveu no último token - ver getEfiToken().
+let lastTokenScope = "";
+
 // --- OAuth2 (client_credentials) ---
 async function getEfiToken(base: string): Promise<string> {
   if (!EFI_CLIENT_ID || !EFI_CLIENT_SECRET) {
@@ -63,6 +73,11 @@ async function getEfiToken(base: string): Promise<string> {
     console.error("[Efi] Erro ao obter token:", data);
     throw new Error(data.error_description || data.mensagem || "Falha na autenticação com a Efí");
   }
+  // O escopo devolvido diz o que esta aplicação Efí pode de fato fazer. Sem
+  // `gn.pix.send` aqui, o Pix Envio não está liberado por mais que o painel diga
+  // que sim - e a API aceita a ordem mesmo assim, devolvendo NAO_REALIZADO
+  // depois, sem explicar. Guardado pra conferência no diagnóstico.
+  lastTokenScope = data.scope || "";
   return data.access_token;
 }
 
@@ -488,7 +503,7 @@ async function actionPayout(req: any, body: any) {
       method: "PUT",
       body: {
         valor: amount.toFixed(2),
-        pagador: { chave: EFI_PIX_KEY, infoPagador: "Saque ChegoJá" },
+        pagador: { chave: EFI_PIX_KEY_SEND, infoPagador: "Saque ChegoJá" },
         favorecido,
       },
     });
@@ -530,10 +545,10 @@ async function actionPayout(req: any, body: any) {
 // autenticada"). Idempotente e sem input do chamador: chave e URL são fixas do
 // lado do servidor, então reexecutar só re-registra o mesmo endereço.
 async function actionSetupWebhook() {
-  if (!EFI_PIX_KEY) throw new Error("EFI_PIX_KEY não configurada");
+  if (!EFI_PIX_KEY_SEND) throw new Error("EFI_PIX_KEY não configurada");
   const webhookUrl = `${SUPABASE_URL}/functions/v1/efi-payment/webhook`;
   const token = await getEfiToken(PIX_BASE);
-  const res = await fetch(`${PIX_BASE}/v2/webhook/${encodeURIComponent(EFI_PIX_KEY)}`, {
+  const res = await fetch(`${PIX_BASE}/v2/webhook/${encodeURIComponent(EFI_PIX_KEY_SEND)}`, {
     method: "PUT",
     client: getEfiClient(),
     headers: {
@@ -671,6 +686,8 @@ async function actionDebugSent(body: any) {
   const out: Record<string, unknown> = {};
   try {
     out.saldo = await efiFetch(PIX_BASE, "/v2/gn/saldo", { method: "GET" });
+    out.escopos = lastTokenScope;
+    out.temPixSend = lastTokenScope.includes("gn.pix.send");
   } catch (e: any) { out.saldoErro = String(e?.message || e); }
   try {
     out.enviados = await efiFetch(
@@ -679,6 +696,14 @@ async function actionDebugSent(body: any) {
       { method: "GET" },
     );
   } catch (e: any) { out.enviadosErro = String(e?.message || e); }
+  // A chave usada como pagador precisa ser uma chave DA CONTA Efí. Se
+  // EFI_PIX_KEY apontar pra uma chave de outro banco, a Efí aceita a ordem e
+  // depois não consegue debitar - dá o mesmo NAO_REALIZADO mudo.
+  for (const p of ["/v2/gn/evp", "/v2/gn/chaves", "/v2/gn/pix/chaves", "/v2/gn/limites", "/v2/gn/config"]) {
+    try { out[`get ${p}`] = await efiFetch(PIX_BASE, p, { method: "GET" }); }
+    catch (e: any) { out[`get ${p}`] = `ERRO ${String(e?.message || e)}`; }
+  }
+
   // Algum Pix Envio já se realizou nesta conta alguma vez? Se a lista vier
   // vazia em meses, o problema é configuração da conta na Efí, não o payload.
   try {
@@ -695,7 +720,8 @@ async function actionDebugSent(body: any) {
   // O webhook realmente ficou associado à chave de origem? Sem ele a Efí recusa
   // o envio - já aconteceu aqui uma vez ("conta_chave_sem_webhook").
   try {
-    out.webhook = await efiFetch(PIX_BASE, `/v2/webhook/${encodeURIComponent(EFI_PIX_KEY)}`, { method: "GET" });
+    out.chavePagador = EFI_PIX_KEY_SEND;
+    out.webhook = await efiFetch(PIX_BASE, `/v2/webhook/${encodeURIComponent(EFI_PIX_KEY_SEND)}`, { method: "GET" });
   } catch (e: any) { out.webhookErro = String(e?.message || e); }
   console.log("[Efi][debug_sent]", JSON.stringify(out));
   return { ok: true, logged: true };
