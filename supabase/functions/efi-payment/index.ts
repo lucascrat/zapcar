@@ -683,7 +683,10 @@ async function actionEfiBalance() {
 async function actionDebugSent(body: any) {
   const fim = body?.fim || new Date().toISOString();
   const inicio = body?.inicio || new Date(Date.now() - 24 * 3600 * 1000).toISOString();
-  const out: Record<string, unknown> = {};
+  const out: Record<string, unknown> = {
+    EFI_ENV, PIX_BASE, COB_BASE,
+    clientIdPrefixo: EFI_CLIENT_ID.slice(0, 14),
+  };
   try {
     out.saldo = await efiFetch(PIX_BASE, "/v2/gn/saldo", { method: "GET" });
     out.escopos = lastTokenScope;
@@ -725,6 +728,53 @@ async function actionDebugSent(body: any) {
   } catch (e: any) { out.webhookErro = String(e?.message || e); }
   console.log("[Efi][debug_sent]", JSON.stringify(out));
   return { ok: true, logged: true };
+}
+
+/**
+ * Diagnóstico: dispara UM Pix Envio de valor arbitrário pra uma chave da própria
+ * conta (mesma titularidade, seguro), pra descobrir se o que trava é o VALOR.
+ * A doc da Efí diz que a API de envio em produção começa com teto de R$ 0,30
+ * (Efí Pro) / R$ 1,00 (Efí Empresas) por transferência, e só sobe sob pedido.
+ * Compara valorBaixo (0,01) x valorAlto (5,00) pra mesma chave.
+ */
+async function actionDebugSend(body: any) {
+  const chave: string = body?.chave || "";
+  const valores: string[] = Array.isArray(body?.valores) ? body.valores : ["0.01", "5.00"];
+  const versao: string = body?.versao === "v3" ? "v3" : "v2";
+  if (!chave) throw new Error("informe a chave de destino");
+  const out: Record<string, unknown> = { chavePagador: EFI_PIX_KEY_SEND, destino: chave, versao };
+  for (const valor of valores) {
+    const idEnvio = "DBG" + Math.abs(hashStr(chave + valor + Date.now())).toString(36).slice(0, 20);
+    try {
+      const r = await efiFetch(PIX_BASE, `/${versao}/gn/pix/${idEnvio}`, {
+        method: "PUT",
+        body: {
+          valor,
+          pagador: { chave: EFI_PIX_KEY_SEND, infoPagador: "diagnostico" },
+          favorecido: { chave },
+        },
+      });
+      out[`envio ${valor}`] = { aceito: r?.status, e2e: r?.e2eId, idEnvio };
+      // Espera a Efí processar e reconsulta
+      await new Promise((res) => setTimeout(res, 8000));
+      if (r?.e2eId) {
+        try {
+          const c = await efiFetch(PIX_BASE, `/${versao}/gn/pix/enviados/${r.e2eId}`, { method: "GET" });
+          out[`consulta ${valor}`] = { status: c?.status, favorecido: c?.favorecido ? "resolvido" : "sem favorecido", horario: c?.horario };
+        } catch (e: any) { out[`consulta ${valor}`] = `ERRO ${String(e?.message || e)}`; }
+      }
+    } catch (e: any) {
+      out[`envio ${valor}`] = `RECUSADO NA HORA: ${String(e?.message || e)}`;
+    }
+  }
+  console.log("[Efi][debug_send]", JSON.stringify(out));
+  return { ok: true, logged: true };
+}
+
+function hashStr(s: string): number {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) { h = (h << 5) - h + s.charCodeAt(i); h |= 0; }
+  return h;
 }
 
 // --- SERVER ---
@@ -771,8 +821,8 @@ serve(async (req) => {
         break;
       case "recheck_payout": {
         // Diagnóstico: reconsulta na Efí e grava o motivo em payout_error, sem
-        // alterar status nem saldo. Não devolve o corpo na resposta (o detalhe
-        // fica no banco, onde só quem já enxerga payment_requests lê).
+        // alterar status nem saldo. Só admin.
+        await requireAdmin(req);
         const r = await actionCheckPayout(body.requestId, true);
         result = { ok: true, status: r.status };
         break;
@@ -782,9 +832,22 @@ serve(async (req) => {
         result = await actionEfiBalance();
         break;
       case "debug_sent":
+        // Diagnóstico da conta Efí (saldo, escopos, config, webhook). Só leitura,
+        // mas exige admin - não é pra ficar exposto sem autenticação.
+        await requireAdmin(req);
         result = await actionDebugSent(body);
         break;
+      case "debug_send":
+        // Dispara Pix Envio real (usado no diagnóstico do bug de saque).
+        // SEMPRE atrás de admin: a função não verifica JWT por padrão e isto
+        // move dinheiro.
+        await requireAdmin(req);
+        result = await actionDebugSend(body);
+        break;
       case "setup_webhook":
+        // Registra/atualiza o webhook na chave da conta (URL fixa = esta
+        // função). Config de conta, então atrás de admin.
+        await requireAdmin(req);
         result = await actionSetupWebhook();
         break;
       default:
