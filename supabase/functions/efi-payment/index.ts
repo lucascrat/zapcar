@@ -320,6 +320,48 @@ function buildIdEnvio(requestId: string): string {
   return ("CJ" + String(requestId).replace(/[^a-zA-Z0-9]/g, "")).slice(0, 35);
 }
 
+const VALID_DDD = new Set([
+  11, 12, 13, 14, 15, 16, 17, 18, 19, 21, 22, 24, 27, 28,
+  31, 32, 33, 34, 35, 37, 38, 41, 42, 43, 44, 45, 46, 47, 48, 49,
+  51, 53, 54, 55, 61, 62, 63, 64, 65, 66, 67, 68, 69,
+  71, 73, 74, 75, 77, 79, 81, 82, 83, 84, 85, 86, 87, 88, 89,
+  91, 92, 93, 94, 95, 96, 97, 98, 99,
+]);
+
+function isValidCPF(d: string): boolean {
+  if (d.length !== 11 || /^(\d)\1{10}$/.test(d)) return false;
+  let s = 0;
+  for (let i = 0; i < 9; i++) s += parseInt(d[i]) * (10 - i);
+  let r = (s * 10) % 11; if (r === 10) r = 0;
+  if (r !== parseInt(d[9])) return false;
+  s = 0;
+  for (let i = 0; i < 10; i++) s += parseInt(d[i]) * (11 - i);
+  r = (s * 10) % 11; if (r === 10) r = 0;
+  return r === parseInt(d[10]);
+}
+
+// Última linha de defesa antes de mandar a chave pra Efí. O app já normaliza no
+// cadastro (utils/pixKey.ts), mas motorista antigo pode ter chave salva no
+// formato errado - celular gravado como "85981201088" quando a Efí exige
+// "+5585981201088". Sem isto o envio é recusado DEPOIS do saldo já debitado.
+function normalizePixKeyServer(raw: string): string {
+  const value = (raw || "").trim();
+  if (!value) return "";
+  if (value.includes("@")) return value.toLowerCase();
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)) {
+    return value.toLowerCase();
+  }
+  let d = onlyDigits(value);
+  if (!d) return value;
+  if (d.length === 13 && d.startsWith("55")) d = d.slice(2);
+  if (d.length === 14) return d;                       // CNPJ
+  if (d.length === 11) {
+    if (isValidCPF(d)) return d;                       // CPF
+    if (VALID_DDD.has(Number(d.slice(0, 2))) && d[2] === "9") return `+55${d}`; // celular
+  }
+  return value;
+}
+
 // Confirma que quem chamou é admin de verdade (JWT do Supabase Auth + admin_users
 // via a RPC is_admin, que roda no contexto do usuário). Usado só no "adminForced".
 async function requireAdmin(req: any): Promise<void> {
@@ -409,7 +451,7 @@ async function actionPayout(req: any, body: any) {
     }
   }
 
-  const pixKey = String(reqRow.pix_key || "").trim();
+  const pixKey = normalizePixKeyServer(String(reqRow.pix_key || ""));
   if (!pixKey) return await bailPayout(requestId, "Motorista sem chave PIX cadastrada");
 
   const idEnvio = buildIdEnvio(requestId);

@@ -4,6 +4,8 @@ import { UserProfile, UserRole, WalletTransaction, AppSettings, StoreOrder } fro
 import { fetchWalletTransactions, fetchAppSettings, addCoinsToUser, updateUserProfile, fetchStoreOrders, createPaymentRequest, fetchUserProfile, supabase } from '../services/supabaseClient';
 import { AdMobService } from '../services/adMobService';
 import { formatBRL, convertCoinsToBRL } from '../utils/currency';
+import { PixKeyInput } from './PixKeyInput';
+import { formatPixKeyForDisplay, getPixKeyTypeLabel, repairStoredPixKey } from '../utils/pixKey';
 
 interface WalletScreenProps {
     currentUser: UserProfile;
@@ -27,12 +29,15 @@ export const WalletScreen: React.FC<WalletScreenProps> = ({ currentUser, onClose
     // Withdrawal State
     const [showWithdrawModal, setShowWithdrawModal] = useState(false);
     const [withdrawAmount, setWithdrawAmount] = useState('');
-    const [withdrawPixKey, setWithdrawPixKey] = useState(currentUser.pix_key || '');
-    const [pixType, setPixType] = useState<'cpf' | 'email' | 'phone' | 'random'>('phone');
+    // Chaves PIX aqui já ficam NORMALIZADAS pela PixKeyInput (celular em +55...,
+    // CPF só dígitos) - é o formato que a Efí exige no Pix Envio.
+    const [withdrawPixKey, setWithdrawPixKey] = useState(() => repairStoredPixKey(currentUser.pix_key));
+    const [withdrawPixValid, setWithdrawPixValid] = useState(false);
     const [processingWithdraw, setProcessingWithdraw] = useState(false);
 
     // Edit Form State
     const [pixKey, setPixKey] = useState(currentUser.pix_key || '');
+    const [pixKeyValid, setPixKeyValid] = useState(false);
     const [whatsapp, setWhatsapp] = useState(currentUser.whatsapp || currentUser.phone || '');
     const [updating, setUpdating] = useState(false);
 
@@ -110,6 +115,10 @@ export const WalletScreen: React.FC<WalletScreenProps> = ({ currentUser, onClose
     };
 
     const handleUpdateProfile = async () => {
+        if (!pixKeyValid || !pixKey.trim()) {
+            alert('Confira a chave PIX: ela ainda está incompleta ou inválida.');
+            return;
+        }
         setUpdating(true);
         const success = await updateUserProfile(currentUser.id, {
             pix_key: pixKey,
@@ -154,12 +163,9 @@ export const WalletScreen: React.FC<WalletScreenProps> = ({ currentUser, onClose
 
         setProcessingWithdraw(true);
 
-        let finalPixKey = withdrawPixKey;
-        // Se for cliente, adiciona o tipo de chave para facilitar admin
-        if (currentUser.role === UserRole.CLIENT) {
-             finalPixKey = `[${pixType.toUpperCase()}] ${withdrawPixKey}`;
-        }
-
+        // Grava só a chave, sem prefixo "[PHONE] " como antes: o tipo agora é
+        // derivado da própria chave (getPixKeyTypeLabel) e qualquer texto extra
+        // faria a Efí recusar o envio.
         const type = currentUser.role === UserRole.DRIVER ? 'driver_payout' : 'client_withdrawal';
 
         const result = await createPaymentRequest(
@@ -167,7 +173,7 @@ export const WalletScreen: React.FC<WalletScreenProps> = ({ currentUser, onClose
             type,
             amount,
             amountCoins,
-            finalPixKey
+            withdrawPixKey
         );
 
         if (result.success) {
@@ -415,16 +421,12 @@ export const WalletScreen: React.FC<WalletScreenProps> = ({ currentUser, onClose
                                 </button>
                             </div>
                             <div className="p-6 space-y-5">
-                                <div>
-                                    <label className="text-[10px] font-black uppercase text-gray-500 mb-2 block">Sua Chave PIX</label>
-                                    <input
-                                        type="text"
-                                        placeholder="CPF, E-mail, Celular ou Aleatória"
-                                        value={pixKey}
-                                        onChange={(e) => setPixKey(e.target.value)}
-                                        className="w-full bg-[#0b141a] text-white rounded-xl p-4 border border-white/10 focus:border-whatsapp-green outline-none transition-all"
-                                    />
-                                </div>
+                                <PixKeyInput
+                                    label="Sua Chave PIX"
+                                    value={currentUser.pix_key}
+                                    onChange={setPixKey}
+                                    onValidChange={setPixKeyValid}
+                                />
                                 <div>
                                     <label className="text-[10px] font-black uppercase text-gray-500 mb-2 block">Seu WhatsApp (Somente números)</label>
                                     <input
@@ -439,7 +441,7 @@ export const WalletScreen: React.FC<WalletScreenProps> = ({ currentUser, onClose
 
                                 <button
                                     onClick={handleUpdateProfile}
-                                    disabled={updating}
+                                    disabled={updating || !pixKeyValid}
                                     className="w-full bg-whatsapp-green text-white font-black py-4 rounded-xl flex items-center justify-center gap-2 active:scale-95 transition-all disabled:opacity-50 uppercase text-xs"
                                 >
                                     {updating ? <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div> : "Salvar Alterações"}
@@ -472,28 +474,6 @@ export const WalletScreen: React.FC<WalletScreenProps> = ({ currentUser, onClose
                                     )}
                                 </div>
 
-                                {currentUser.role === UserRole.CLIENT && (
-                                    <div className="mb-4">
-                                        <label className="text-[10px] font-black uppercase text-gray-500 mb-2 block">Tipo de Chave PIX</label>
-                                        <div className="grid grid-cols-2 gap-2">
-                                            {[
-                                                { id: 'cpf', label: 'CPF/CNPJ' },
-                                                { id: 'phone', label: 'Celular' },
-                                                { id: 'email', label: 'E-mail' },
-                                                { id: 'random', label: 'Aleatória' }
-                                            ].map((t) => (
-                                                <button
-                                                    key={t.id}
-                                                    onClick={() => setPixType(t.id as any)}
-                                                    className={`p-3 rounded-xl text-[10px] font-black uppercase transition-all border ${pixType === t.id ? 'bg-whatsapp-green border-whatsapp-green text-white' : 'bg-white/5 border-white/5 text-gray-400 hover:bg-white/10'}`}
-                                                >
-                                                    {t.label}
-                                                </button>
-                                            ))}
-                                        </div>
-                                    </div>
-                                )}
-
                                 <div>
                                     <label className="text-[10px] font-black uppercase text-gray-500 mb-2 block">Valor do Saque (R$)</label>
                                     <input
@@ -505,20 +485,16 @@ export const WalletScreen: React.FC<WalletScreenProps> = ({ currentUser, onClose
                                     />
                                 </div>
 
-                                <div>
-                                    <label className="text-[10px] font-black uppercase text-gray-500 mb-2 block">Chave PIX de Destino</label>
-                                    <input
-                                        type="text"
-                                        placeholder="Sua chave PIX"
-                                        value={withdrawPixKey}
-                                        onChange={(e) => setWithdrawPixKey(e.target.value)}
-                                        className="w-full bg-[#0b141a] text-white rounded-xl p-4 border border-white/10 focus:border-whatsapp-green outline-none transition-all text-center"
-                                    />
-                                </div>
+                                <PixKeyInput
+                                    label="Chave PIX de Destino"
+                                    value={withdrawPixKey}
+                                    onChange={setWithdrawPixKey}
+                                    onValidChange={setWithdrawPixValid}
+                                />
 
                                 <button
                                     onClick={handleWithdrawRequest}
-                                    disabled={processingWithdraw || !withdrawAmount || Number(withdrawAmount) <= 0 || !withdrawPixKey}
+                                    disabled={processingWithdraw || !withdrawAmount || Number(withdrawAmount) <= 0 || !withdrawPixValid}
                                     className="w-full bg-green-600 hover:bg-green-500 text-white font-black py-4 rounded-xl flex items-center justify-center gap-2 active:scale-95 transition-all disabled:opacity-50 disabled:grayscale uppercase text-xs shadow-lg shadow-green-600/20"
                                 >
                                     {processingWithdraw ? (

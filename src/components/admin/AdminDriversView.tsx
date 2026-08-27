@@ -17,6 +17,8 @@ import {
     updateDriverPassword,
     adminAdjustDriverBalance
 } from '../../../services/supabaseClient';
+import { PixKeyInput } from '../../../components/PixKeyInput';
+import { formatPixKeyForDisplay, getPixKeyTypeLabel } from '../../../utils/pixKey';
 import { getMapProviderPromise } from '../../../services/googleMapsLoader';
 import {
     createMap, addNavigationControl, addMarker, removeMarker, fitBounds, panTo, setZoom, onMapReady,
@@ -84,6 +86,7 @@ export const AdminDriversView: React.FC<AdminDriversViewProps> = ({
     const [addBalanceValue, setAddBalanceValue] = useState(50);
     const [balanceReason, setBalanceReason] = useState('');
     const [newPass, setNewPass] = useState('');
+    const [pixKeyValid, setPixKeyValid] = useState(true);
 
     const filteredDrivers = drivers.filter(driver => {
         // Filter by search
@@ -737,7 +740,16 @@ export const AdminDriversView: React.FC<AdminDriversViewProps> = ({
                                     </div>
                                     <div className="admin-detail-row">
                                         <span className="admin-detail-row-label">PIX</span>
-                                        <span className="admin-detail-row-value">{selectedDriver.pix_key || '-'}</span>
+                                        <span className="admin-detail-row-value">
+                                            {selectedDriver.pix_key ? (
+                                                <>
+                                                    {formatPixKeyForDisplay(selectedDriver.pix_key)}
+                                                    <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded-full bg-teal-500/15 text-teal-400 font-bold uppercase">
+                                                        {getPixKeyTypeLabel(selectedDriver.pix_key)}
+                                                    </span>
+                                                </>
+                                            ) : '-'}
+                                        </span>
                                     </div>
                                     <div className="admin-detail-row">
                                         <span className="admin-detail-row-label">Cadastro</span>
@@ -938,10 +950,12 @@ export const AdminDriversView: React.FC<AdminDriversViewProps> = ({
                             onChange={e => setEditData({ ...editData, whatsapp: e.target.value })}
                         />
                         <div className="md:col-span-2">
-                            <Input
+                            <PixKeyInput
                                 label="PIX (Chave)"
-                                value={editData.pix_key || ''}
-                                onChange={e => setEditData({ ...editData, pix_key: e.target.value })}
+                                variant="admin"
+                                value={selectedDriver?.pix_key}
+                                onChange={key => setEditData(prev => ({ ...prev, pix_key: key }))}
+                                onValidChange={setPixKeyValid}
                             />
                         </div>
 
@@ -1000,6 +1014,7 @@ export const AdminDriversView: React.FC<AdminDriversViewProps> = ({
                             variant="primary"
                             onClick={handleSaveEdit}
                             loading={isSaving}
+                            disabled={!pixKeyValid}
                         >
                             Salvar Alterações
                         </Button>

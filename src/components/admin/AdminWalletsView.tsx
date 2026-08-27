@@ -8,6 +8,7 @@ import {
     checkPayoutStatus
 } from '../../../services/supabaseClient';
 import { Card, Button, Badge } from '../../components/shared';
+import { formatPixKeyForDisplay, getPixKeyTypeLabel } from '../../../utils/pixKey';
 
 export const AdminWalletsView: React.FC = () => {
     const [requests, setRequests] = useState<AppPaymentRequest[]>([]);
@@ -225,8 +226,14 @@ export const AdminWalletsView: React.FC = () => {
                                                     )}
                                                 </td>
                                                 <td>
-                                                    <div className="text-xs font-mono bg-gray-800 p-1 rounded border border-gray-700 max-w-[150px] truncate">
-                                                        {req.pix_key}
+                                                    <div
+                                                        className="text-xs font-mono bg-gray-800 p-1 rounded border border-gray-700 max-w-[150px] truncate"
+                                                        title={req.pix_key}
+                                                    >
+                                                        {formatPixKeyForDisplay(req.pix_key)}
+                                                    </div>
+                                                    <div className="text-[9px] text-gray-500 uppercase font-bold mt-0.5">
+                                                        {getPixKeyTypeLabel(req.pix_key)}
                                                     </div>
                                                 </td>
                                                 <td>

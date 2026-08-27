@@ -3,6 +3,8 @@ import React, { useState, useEffect } from 'react';
 import { UserProfile, AppPaymentRequest } from '../types';
 import { updateUserProfile, fetchUserProfile, createPaymentRequest, fetchMyPaymentRequests, uploadFile } from '../services/supabaseClient';
 import { useVehicleCategories } from '../src/contexts/VehicleCategoriesContext';
+import { PixKeyInput } from './PixKeyInput';
+import { formatPixKeyForDisplay, getPixKeyTypeLabel, repairStoredPixKey } from '../utils/pixKey';
 
 interface DriverProfileEditorProps {
     currentUser: UserProfile;
@@ -26,8 +28,10 @@ export const DriverProfileEditor: React.FC<DriverProfileEditorProps> = ({ curren
     const [vehicleColor, setVehicleColor] = useState(currentUser.vehicle_color || '');
     const [vehicleType, setVehicleType] = useState<string>(currentUser.vehicle_type || 'car');
 
-    // PIX Fields
+    // PIX Fields - pixKey guarda a chave já NORMALIZADA pela PixKeyInput
+    // (celular em +55..., CPF só dígitos), que é o formato que a Efí exige.
     const [pixKey, setPixKey] = useState(currentUser.pix_key || '');
+    const [pixKeyValid, setPixKeyValid] = useState(false);
     const [cpf, setCpf] = useState(currentUser.cpf || '');
     const [email, setEmail] = useState(currentUser.email || '');
 
@@ -127,8 +131,10 @@ export const DriverProfileEditor: React.FC<DriverProfileEditorProps> = ({ curren
     };
 
     const handleSavePix = async () => {
-        if (!pixKey.trim()) {
-            alert('Por favor, insira uma chave PIX válida.');
+        // pixKey só tem conteúdo quando a PixKeyInput conseguiu normalizar - uma
+        // chave malformada nunca chega ao banco (era o que quebrava o Pix Envio).
+        if (!pixKeyValid || !pixKey.trim()) {
+            alert('Confira a chave PIX: ela ainda está incompleta ou inválida.');
             return;
         }
 
@@ -180,7 +186,12 @@ export const DriverProfileEditor: React.FC<DriverProfileEditorProps> = ({ curren
             return;
         }
 
-        if (!window.confirm(`Confirma saque de R$ ${amount.toFixed(2)} para a chave PIX:\n${currentUser.pix_key}?`)) {
+        // Motorista cadastrado antes da validação de chave pode ter um celular
+        // salvo sem o +55 - conserta na hora do saque em vez de deixar a Efí
+        // recusar depois de já ter debitado o saldo.
+        const payoutKey = repairStoredPixKey(currentUser.pix_key);
+
+        if (!window.confirm(`Confirma saque de R$ ${amount.toFixed(2)} para a chave PIX:\n${getPixKeyTypeLabel(payoutKey)} ${formatPixKeyForDisplay(payoutKey)}?`)) {
             return;
         }
 
@@ -190,7 +201,7 @@ export const DriverProfileEditor: React.FC<DriverProfileEditorProps> = ({ curren
             'driver_payout',
             amount,
             0,
-            currentUser.pix_key
+            payoutKey
         );
 
         if (result.success) {
@@ -264,7 +275,7 @@ export const DriverProfileEditor: React.FC<DriverProfileEditorProps> = ({ curren
                     {activeTab === 'pix' && (
                         <button
                             onClick={handleSavePix}
-                            disabled={saving}
+                            disabled={saving || !pixKeyValid}
                             className="bg-teal-500 text-white px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider active:scale-95 transition disabled:opacity-50"
                         >
                             {saving ? '...' : 'Salvar'}
@@ -454,16 +465,12 @@ export const DriverProfileEditor: React.FC<DriverProfileEditorProps> = ({ curren
 
                         {/* PIX Settings */}
                         <div className="bg-whatsapp-panel/40 p-5 rounded-2xl border border-white/5 space-y-4">
-                            <div>
-                                <label className="text-[10px] text-gray-500 uppercase font-bold mb-1 block">Chave PIX para Recebimentos</label>
-                                <input
-                                    type="text"
-                                    value={pixKey}
-                                    onChange={(e) => setPixKey(e.target.value)}
-                                    placeholder="CPF, E-mail, Telefone ou Chave Aleatória"
-                                    className="w-full bg-black/30 text-white px-4 py-3 rounded-xl border border-white/10 focus:border-teal-500 outline-none transition"
-                                />
-                            </div>
+                            <PixKeyInput
+                                label="Chave PIX para Recebimentos"
+                                value={currentUser.pix_key}
+                                onChange={setPixKey}
+                                onValidChange={setPixKeyValid}
+                            />
 
                             <div className="pt-2 border-t border-white/5">
                                 <h4 className="text-white font-bold text-sm mb-3">Endereço de Cobrança</h4>
@@ -534,7 +541,7 @@ export const DriverProfileEditor: React.FC<DriverProfileEditorProps> = ({ curren
                             {currentUser.pix_key ? (
                                 <p className="text-xs text-gray-400 mt-2 flex items-center justify-center gap-1">
                                     <span className="material-icons text-xs text-teal-400">pix</span>
-                                    PIX: {currentUser.pix_key}
+                                    {getPixKeyTypeLabel(currentUser.pix_key)}: {formatPixKeyForDisplay(currentUser.pix_key)}
                                 </p>
                             ) : (
                                 <p className="text-xs text-red-400 mt-2">
