@@ -29,8 +29,14 @@ interface AppMapProps {
     userVehicleType?: string;
 }
 
-const CAR_SVG = '<svg xmlns="http://www.w3.org/2000/svg" height="40" viewBox="0 0 24 24" width="40"><path d="M0 0h24v24H0z" fill="none"/><path fill="#25D366" stroke="#111b21" stroke-width="0.5" d="M18.92 6.01C18.72 5.42 18.16 5 17.5 5h-11c-.66 0-1.21.42-1.42 1.01L3 12v8c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h12v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-8l-2.08-5.99zM6.5 16c-.83 0-1.5-.67-1.5-1.5S5.67 13 6.5 13s1.5.67 1.5 1.5S7.33 16 6.5 16zm11 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zM5 11l1.5-4.5h11L19 11H5z"/></svg>';
-const MOTO_SVG = '<svg xmlns="http://www.w3.org/2000/svg" height="40" viewBox="0 0 24 24" width="40"><path d="M0 0h24v24H0z" fill="none"/><path fill="#FFA500" stroke="#111b21" stroke-width="0.5" d="M19 7c0-1.1-.9-2-2-2h-3l-1.4-1.4C12.2 3.2 11.7 3 11.2 3H8C6.9 3 6 3.9 6 5v2H4c-1.1 0-2 .9-2 2v4h2c0 1.66 1.34 3 3 3s3-1.34 3-3h4c0 1.66 1.34 3 3 3s3-1.34 3-3h2v-4l-3-3zM7 14c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm10 0c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1z"/></svg>';
+// Ícones vistos DE CIMA, nariz apontando pra cima (0°) - diferente do ícone
+// "de perfil" (Material Icons directions_car/two_wheeler, visto de lado) usado
+// em painéis estáticos. Todo marcador aqui gira conforme o bearing real do
+// GPS (rotation: bearing/heading) - um ícone de perfil girando fica torto/de
+// lado em qualquer direção que não seja a original; um ícone de cima gira
+// corretamente porque já foi desenhado pra isso.
+const CAR_SVG = '<svg xmlns="http://www.w3.org/2000/svg" height="40" viewBox="0 0 24 24" width="40"><rect x="6.2" y="3" width="11.6" height="18" rx="4" fill="#25D366" stroke="#111b21" stroke-width="0.6"/><path d="M8 8.6 L16 8.6 L14.6 5.8 L9.4 5.8 Z" fill="#0b3d24" opacity="0.4"/><path d="M8 15.6 L16 15.6 L14.8 18.2 L9.2 18.2 Z" fill="#0b3d24" opacity="0.28"/></svg>';
+const MOTO_SVG = '<svg xmlns="http://www.w3.org/2000/svg" height="40" viewBox="0 0 24 24" width="40"><ellipse cx="12" cy="5.3" rx="2.3" ry="2.6" fill="#111b21"/><rect x="10.3" y="6.5" width="3.4" height="11" rx="1.6" fill="#FFA500" stroke="#111b21" stroke-width="0.6"/><ellipse cx="12" cy="18.7" rx="2.3" ry="2.6" fill="#111b21"/></svg>';
 const USER_ARROW_SVG = (color: string) => `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24"><path d="M12,2L4.5,20.29L5.21,21L12,18L18.79,21L19.5,20.29L12,2Z" fill="${color}" stroke="#ffffff" stroke-width="1"/></svg>`;
 const START_PIN_SVG = '<svg width="32" height="32" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="20" cy="20" r="16" fill="#111B21" stroke="#25D366" stroke-width="4"/><circle cx="20" cy="20" r="5" fill="white"/></svg>';
 const END_PIN_SVG = '<svg width="32" height="32" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="4" y="4" width="32" height="32" rx="8" fill="#111B21" stroke="#FF4444" stroke-width="4"/><path d="M14 10V30M14 12C14 12 17 10 20 10C23 10 26 14 29 14V22C29 22 26 18 23 18C20 18 17 22 14 22" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
