@@ -1677,7 +1677,7 @@ export const fetchActiveRide = async (userId: string, role: 'client' | 'driver')
   const field = role === 'client' ? 'client_id' : 'driver_id';
   let query = supabase
     .from('rides')
-    .select('*, driver:driver_id(*), client:client_id(*)')
+    .select(`*, driver:driver_id(${PROFILE_SAFE_COLUMNS}), client:client_id(${PROFILE_SAFE_COLUMNS})`)
     .eq(field, userId)
     .not('status', 'in', '("finished","cancelled")')
     .order('created_at', { ascending: false })
@@ -1703,7 +1703,7 @@ export const fetchActiveRide = async (userId: string, role: 'client' | 'driver')
 export const fetchOpenBroadcastRide = async (vehicleType?: string): Promise<Ride | null> => {
   let query = supabase
     .from('rides')
-    .select('*, driver:driver_id(*), client:client_id(*)')
+    .select(`*, driver:driver_id(${PROFILE_SAFE_COLUMNS}), client:client_id(${PROFILE_SAFE_COLUMNS})`)
     .is('driver_id', null)
     .eq('status', 'searching')
     .eq('is_broadcast', true);
@@ -1908,7 +1908,7 @@ export const fetchRideHeatmapData = async (vehicleType?: 'car' | 'motorcycle'): 
 export const fetchRideById = async (rideId: string): Promise<Ride | null> => {
   const { data, error } = await supabase
     .from('rides')
-    .select('*, driver:driver_id(*), client:client_id(*)')
+    .select(`*, driver:driver_id(${PROFILE_SAFE_COLUMNS}), client:client_id(${PROFILE_SAFE_COLUMNS})`)
     .eq('id', rideId)
     .single();
 
@@ -2137,7 +2137,10 @@ export const createPaymentRequest = async (
 export const fetchPaymentRequests = async (): Promise<AppPaymentRequest[]> => {
   const { data, error } = await supabase
     .from('payment_requests')
-    .select('*, user:user_id(*)')
+    // NUNCA usar (*) em joins com profiles: pede a coluna password (bloqueada
+    // desde 20260819_login_rpc_and_password_lockdown) e o PostgREST derruba a
+    // query INTEIRA com "permission denied for table profiles" - a lista some.
+    .select(`*, user:user_id(${PROFILE_SAFE_COLUMNS})`)
     .order('created_at', { ascending: false });
 
   if (error) {
@@ -2385,7 +2388,7 @@ export const purchaseStoreProduct = async (userId: string, product: StoreProduct
 export const fetchStoreOrders = async (): Promise<StoreOrder[]> => {
   const { data, error } = await supabase
     .from('store_orders')
-    .select('*, product:store_products(*), user:profiles(*)')
+    .select(`*, product:store_products(*), user:profiles(${PROFILE_SAFE_COLUMNS})`)
     .order('created_at', { ascending: false });
 
   if (error) {
@@ -2625,7 +2628,7 @@ export const fetchAllRides = async (limit = 500): Promise<Ride[]> => {
     // Para histórico completo, use paginação com .range().
     const { data, error } = await supabase
       .from('rides')
-      .select('*, driver:driver_id(*), client:client_id(*)')
+      .select(`*, driver:driver_id(${PROFILE_SAFE_COLUMNS}), client:client_id(${PROFILE_SAFE_COLUMNS})`)
       .order('created_at', { ascending: false })
       .limit(limit);
 

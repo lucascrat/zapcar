@@ -470,6 +470,56 @@ async function actionPayout(req: any, body: any) {
   return { status: "processing", e2eId: e2e };
 }
 
+// Cadastra o webhook da chave Pix na Efí - EXIGIDO pela Efí antes de liberar o
+// Pix Envio ("A chave informada não tem webhook cadastrado na conta Efí
+// autenticada"). Idempotente e sem input do chamador: chave e URL são fixas do
+// lado do servidor, então reexecutar só re-registra o mesmo endereço.
+async function actionSetupWebhook() {
+  if (!EFI_PIX_KEY) throw new Error("EFI_PIX_KEY não configurada");
+  const webhookUrl = `${SUPABASE_URL}/functions/v1/efi-payment/webhook`;
+  const token = await getEfiToken(PIX_BASE);
+  const res = await fetch(`${PIX_BASE}/v2/webhook/${encodeURIComponent(EFI_PIX_KEY)}`, {
+    method: "PUT",
+    client: getEfiClient(),
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${token}`,
+      // Sem mTLS do nosso lado (Edge Function não expõe cert de cliente):
+      // a Efí aceita pulando a validação com este header.
+      "x-skip-mtls-checking": "true",
+    },
+    body: JSON.stringify({ webhookUrl }),
+  } as any);
+  if (res.status === 200 || res.status === 204) {
+    return { ok: true, webhookUrl };
+  }
+  const data = await res.json().catch(() => ({}));
+  throw new Error(data.mensagem || (data.violacoes && data.violacoes[0]?.razao) || `Efí retornou ${res.status} ao cadastrar webhook`);
+}
+
+// Notificações da Efí (a validação do cadastro e os avisos de pix chegam aqui;
+// a Efí anexa "/pix" à URL cadastrada). Sempre responde 200 - o polling já
+// cobre a atualização de status, isto é só um acelerador best-effort.
+async function handleEfiWebhook(body: any) {
+  try {
+    const items = Array.isArray(body?.pix) ? body.pix : [];
+    for (const item of items) {
+      const e2e = item?.endToEndId;
+      if (e2e) {
+        const { data: reqRow } = await supabase
+          .from("payment_requests").select("id").eq("efi_e2e_id", e2e).maybeSingle();
+        if (reqRow) await actionCheckPayout(reqRow.id);
+      }
+      if (item?.txid) {
+        await actionCheck(String(item.txid)).catch(() => {});
+      }
+    }
+  } catch (e) {
+    console.error("[Efi] webhook processing error (respondendo 200 mesmo assim):", e);
+  }
+  return { ok: true };
+}
+
 async function actionCheckPayout(requestId: string) {
   const { data: reqRow } = await supabase
     .from("payment_requests").select("*").eq("id", requestId).maybeSingle();
@@ -506,6 +556,18 @@ serve(async (req) => {
     return new Response("ok", { headers: corsHeaders });
   }
 
+  // Endpoint do webhook da Efí (validação do cadastro + notificações de pix).
+  // Precisa responder 200 pra qualquer chamada, senão a Efí rejeita o cadastro.
+  const url = new URL(req.url);
+  if (url.pathname.includes("/webhook")) {
+    const body = await req.json().catch(() => ({}));
+    const result = await handleEfiWebhook(body);
+    return new Response(JSON.stringify(result), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      status: 200,
+    });
+  }
+
   try {
     const body = await req.json();
     const { action } = body;
@@ -529,6 +591,9 @@ serve(async (req) => {
         break;
       case "check_payout":
         result = await actionCheckPayout(body.requestId);
+        break;
+      case "setup_webhook":
+        result = await actionSetupWebhook();
         break;
       default:
         throw new Error("Ação inválida");
