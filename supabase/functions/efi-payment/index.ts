@@ -485,11 +485,12 @@ async function actionPayout(req: any, body: any) {
     return await bailPayout(requestId, String(e?.message || e).slice(0, 400));
   }
 
+  console.log(`[Efi] envio solicitado ${idEnvio}:`, JSON.stringify(efiResp));
   const efiStatus: string = efiResp?.status || "EM_PROCESSAMENTO";
   const e2e: string | null = efiResp?.e2eId || null;
 
   if (efiStatus === "NAO_REALIZADO") {
-    return await refundAndReject(reqRow, "Efí: NAO_REALIZADO");
+    return await refundAndReject(reqRow, describeEfiPayout(efiResp));
   }
 
   if (efiStatus === "REALIZADO") {
@@ -571,6 +572,16 @@ async function handleEfiWebhook(body: any) {
 // corpo cru da Efí, que carrega a chave PIX da empresa. O JSON completo vai pro
 // console.log da função, visível só a quem tem acesso ao projeto Supabase.
 function describeEfiPayout(r: any): string {
+  // Num envio que a Efí conseguiu executar, a consulta traz
+  // favorecido.identificacao com o nome/CPF de quem recebeu. Quando a chave não
+  // existe no DICT (pessoa informou o celular mas nunca cadastrou como chave
+  // PIX no banco), a Efí aceita a ordem, devolve um e2eId e depois marca
+  // NAO_REALIZADO - sem favorecido nenhum no registro. É o sintoma que separa
+  // "chave inexistente" de qualquer outra falha, e a causa mais comum aqui.
+  if (r?.status === "NAO_REALIZADO" && !r?.favorecido) {
+    return "Chave PIX não encontrada em nenhum banco. Confirme com o motorista se ela está mesmo cadastrada como chave PIX (informar o número do celular não basta - ele precisa registrar o celular como chave no app do banco).";
+  }
+
   const parts: string[] = [];
   if (r?.status) parts.push(String(r.status));
   for (const k of ["motivo", "descricao", "rejeicao", "detalhe"]) {
@@ -580,7 +591,7 @@ function describeEfiPayout(r: any): string {
     parts.push(`devolucoes=${JSON.stringify(r.devolucoes).slice(0, 200)}`);
   }
   if (r?.horario?.solicitacao && !r?.horario?.liquidacao) {
-    parts.push('sem liquidação - verifique o saldo da conta Efí');
+    parts.push('enviado mas não liquidado - verifique o saldo da conta Efí');
   }
   return parts.join(' | ').slice(0, 400);
 }
@@ -637,6 +648,47 @@ async function actionEfiBalance() {
   return { saldo };
 }
 
+/**
+ * Diagnóstico: joga no log da função (nunca na resposta HTTP) o saldo e a lista
+ * de Pix enviados no período, que traz o favorecido de cada envio - a consulta
+ * por e2eId sozinha não mostra pra quem o dinheiro foi.
+ */
+async function actionDebugSent(body: any) {
+  const fim = body?.fim || new Date().toISOString();
+  const inicio = body?.inicio || new Date(Date.now() - 24 * 3600 * 1000).toISOString();
+  const out: Record<string, unknown> = {};
+  try {
+    out.saldo = await efiFetch(PIX_BASE, "/v2/gn/saldo", { method: "GET" });
+  } catch (e: any) { out.saldoErro = String(e?.message || e); }
+  try {
+    out.enviados = await efiFetch(
+      PIX_BASE,
+      `/v2/gn/pix/enviados?inicio=${encodeURIComponent(inicio)}&fim=${encodeURIComponent(fim)}`,
+      { method: "GET" },
+    );
+  } catch (e: any) { out.enviadosErro = String(e?.message || e); }
+  // Algum Pix Envio já se realizou nesta conta alguma vez? Se a lista vier
+  // vazia em meses, o problema é configuração da conta na Efí, não o payload.
+  try {
+    const desde = new Date(Date.now() - 90 * 24 * 3600 * 1000).toISOString();
+    const hist = await efiFetch(
+      PIX_BASE,
+      `/v2/gn/pix/enviados?inicio=${encodeURIComponent(desde)}&fim=${encodeURIComponent(fim)}`,
+      { method: "GET" },
+    );
+    out.historico90d = hist?.parametros?.paginacao?.quantidadeTotalDeItens;
+    out.historico90dAmostra = (hist?.pix || []).slice(0, 3);
+  } catch (e: any) { out.historico90dErro = String(e?.message || e); }
+
+  // O webhook realmente ficou associado à chave de origem? Sem ele a Efí recusa
+  // o envio - já aconteceu aqui uma vez ("conta_chave_sem_webhook").
+  try {
+    out.webhook = await efiFetch(PIX_BASE, `/v2/webhook/${encodeURIComponent(EFI_PIX_KEY)}`, { method: "GET" });
+  } catch (e: any) { out.webhookErro = String(e?.message || e); }
+  console.log("[Efi][debug_sent]", JSON.stringify(out));
+  return { ok: true, logged: true };
+}
+
 // --- SERVER ---
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -690,6 +742,9 @@ serve(async (req) => {
       case "efi_balance":
         await requireAdmin(req);
         result = await actionEfiBalance();
+        break;
+      case "debug_sent":
+        result = await actionDebugSent(body);
         break;
       case "setup_webhook":
         result = await actionSetupWebhook();

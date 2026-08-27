@@ -46,6 +46,7 @@ export const DriverProfileEditor: React.FC<DriverProfileEditorProps> = ({ curren
     const [withdrawAmount, setWithdrawAmount] = useState('');
     const [processingWithdraw, setProcessingWithdraw] = useState(false);
     const [pendingRequests, setPendingRequests] = useState<AppPaymentRequest[]>([]);
+    const [rejectedRequests, setRejectedRequests] = useState<AppPaymentRequest[]>([]);
 
     useEffect(() => {
         const init = async () => {
@@ -105,6 +106,13 @@ export const DriverProfileEditor: React.FC<DriverProfileEditorProps> = ({ curren
         const requests = await fetchMyPaymentRequests(currentUser.id);
         // Filter pending requests - using any to avoid PaymentRequest type conflict with DOM PaymentRequest
         setPendingRequests(requests.filter((r: any) => r.status === 'pending'));
+        // Saque recusado pelo banco (chave inexistente, conta bloqueada...) some
+        // da lista de pendentes e o saldo volta - sem isso o motorista só vê o
+        // dinheiro reaparecer e não entende o que houve nem o que corrigir.
+        setRejectedRequests(
+            requests.filter((r: any) => r.status === 'rejected' && r.payout_error)
+                .slice(0, 3)
+        );
     };
 
     const handleSaveProfile = async () => {
@@ -564,6 +572,32 @@ export const DriverProfileEditor: React.FC<DriverProfileEditorProps> = ({ curren
                                             <p className="text-[10px] text-gray-400">{new Date(req.created_at).toLocaleString('pt-BR')}</p>
                                         </div>
                                         <span className="text-[10px] bg-yellow-500/20 text-yellow-500 px-2 py-1 rounded-full font-bold">Aguardando</span>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+
+                        {/* Saques recusados pelo banco - com o motivo, pra o
+                            motorista saber o que corrigir (quase sempre chave
+                            PIX não cadastrada no banco dele). */}
+                        {rejectedRequests.length > 0 && (
+                            <div className="bg-red-500/10 border border-red-500/30 p-4 rounded-2xl">
+                                <h4 className="text-red-400 font-bold text-sm mb-2 flex items-center gap-2">
+                                    <span className="material-icons text-sm">error_outline</span>
+                                    Saque não concluído
+                                </h4>
+                                {rejectedRequests.map(req => (
+                                    <div key={req.id} className="bg-black/20 p-3 rounded-xl mt-2">
+                                        <div className="flex justify-between items-center">
+                                            <p className="text-white font-bold">R$ {req.amount_money.toFixed(2)}</p>
+                                            <span className="text-[10px] bg-green-500/20 text-green-400 px-2 py-1 rounded-full font-bold">
+                                                Valor devolvido
+                                            </span>
+                                        </div>
+                                        <p className="text-[11px] text-red-300 mt-2 leading-snug">{req.payout_error}</p>
+                                        <p className="text-[10px] text-gray-500 mt-1">
+                                            {new Date(req.created_at).toLocaleString('pt-BR')}
+                                        </p>
                                     </div>
                                 ))}
                             </div>
