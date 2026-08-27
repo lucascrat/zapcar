@@ -1194,10 +1194,17 @@ export default function App() {
   };
 
   const handleEnterPip = () => {
-    if ((window as any).Android && (window as any).Android.enterPipMode) {
-      (window as any).Android.enterPipMode();
+    // Bolha flutuante (FloatingBubbleService) no lugar do PiP nativo do Android:
+    // o PiP tem um tamanho mínimo imposto pela plataforma que não dá pra reduzir
+    // (fica grande e quadrado), a bolha desenhada via overlay permite um ícone
+    // pequeno e discreto de verdade, do tamanho que a gente quiser.
+    if ((window as any).Android && (window as any).Android.showFloatingBubble) {
+      (window as any).Android.showFloatingBubble();
+      if (currentUser?.role === UserRole.DRIVER) {
+        updateDriverPipStatus(currentUser.id, true);
+      }
     } else {
-      alert("O modo PiP (janela flutuante) só está disponível no aplicativo Android nativo.");
+      alert("O ícone flutuante só está disponível no aplicativo Android nativo.");
     }
   };
 
@@ -1370,8 +1377,8 @@ export default function App() {
   if (isPipActive) {
     return (
       <div className="h-[100dvh] w-full flex items-center justify-center bg-black">
-        <div className="w-[90vw] h-[90vw] max-w-[200px] max-h-[200px] rounded-full overflow-hidden border-4 border-whatsapp-green shadow-xl animate-pulse bg-white flex items-center justify-center">
-          <img src="/logo.png" alt="ChegoJá" className="w-[85%] h-[85%] object-contain" />
+        <div className="w-[55vw] h-[55vw] max-w-[110px] max-h-[110px] min-w-[56px] min-h-[56px] rounded-full overflow-hidden border-2 border-whatsapp-green shadow-xl animate-pulse bg-whatsapp-green flex items-center justify-center">
+          <span className="material-icons text-white" style={{ fontSize: 'clamp(30px, 30vw, 60px)' }}>directions_car</span>
         </div>
       </div>
     );
