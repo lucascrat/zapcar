@@ -30,17 +30,52 @@
     window.process = window.process || { env: { API_KEY: '' } };
   </script>
   <script>
-    // DEBUG: Show errors on screen
-    window.onerror = function (msg, url, line) {
-      const d = document.getElementById('err-debug') || document.createElement('div');
-      if (!d.id) { d.id = 'err-debug'; d.style.cssText = 'position:fixed;top:0;left:0;width:100%;background:rgba(200,0,0,0.9);color:white;z-index:999999;padding:20px;font-size:14px;pointer-events:none;white-space:pre-wrap;'; document.body.appendChild(d); }
-      d.innerHTML += '<div>[JS ERROR] ' + msg + ' (' + url + ':' + line + ')</div>';
-    };
-    window.addEventListener('unhandledrejection', function (e) {
-      const d = document.getElementById('err-debug') || document.createElement('div');
-      if (!d.id) { d.id = 'err-debug'; d.style.cssText = 'position:fixed;top:0;left:0;width:100%;background:rgba(200,0,0,0.9);color:white;z-index:999999;padding:20px;font-size:14px;pointer-events:none;white-space:pre-wrap;'; document.body.appendChild(d); }
-      d.innerHTML += '<div>[PROMISE] ' + e.reason + '</div>';
-    });
+    // DEBUG: Show errors on screen (com stack trace + dedupe pra achar a origem)
+    (function () {
+      var seen = Object.create(null);
+
+      function panel() {
+        var d = document.getElementById('err-debug');
+        if (!d) {
+          d = document.createElement('div');
+          d.id = 'err-debug';
+          d.style.cssText = 'position:fixed;top:0;left:0;width:100%;max-height:70vh;overflow:auto;background:rgba(200,0,0,0.92);color:#fff;z-index:999999;padding:16px 20px;font:12px/1.45 monospace;white-space:pre-wrap;pointer-events:auto;';
+          d.title = 'Toque para fechar';
+          d.addEventListener('click', function () { d.remove(); });
+          (document.body || document.documentElement).appendChild(d);
+        }
+        return d;
+      }
+
+      function report(tag, text) {
+        text = String(text || '(sem detalhe)');
+        var key = tag + '|' + text.slice(0, 300);
+        var d = panel();
+        if (seen[key]) {
+          seen[key].count++;
+          seen[key].el.firstChild.textContent = '[' + tag + ' x' + seen[key].count + '] ';
+          return;
+        }
+        var row = document.createElement('div');
+        row.style.cssText = 'margin-bottom:10px;border-top:1px solid rgba(255,255,255,.25);padding-top:8px;';
+        var label = document.createElement('strong');
+        label.textContent = '[' + tag + '] ';
+        var body = document.createElement('span');
+        body.textContent = text;
+        row.appendChild(label);
+        row.appendChild(body);
+        d.appendChild(row);
+        seen[key] = { count: 1, el: row };
+      }
+
+      window.onerror = function (msg, url, line, col, err) {
+        report('JS ERROR', (err && err.stack) ? err.stack : (msg + ' (' + url + ':' + line + ':' + col + ')'));
+      };
+      window.addEventListener('unhandledrejection', function (e) {
+        var r = e.reason;
+        report('PROMISE', (r && r.stack) ? r.stack : (r && r.message) ? r.message : r);
+      });
+    })();
   </script>
   <script type="module">
     try {
