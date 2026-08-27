@@ -643,7 +643,7 @@
 
 .admin-detail-stats {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(auto-fit, minmax(72px, 1fr));
     gap: 12px;
     padding: 16px 24px;
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
@@ -655,9 +655,10 @@
 
 .admin-detail-stat-value {
     color: #ffffff;
-    font-size: 18px;
+    font-size: 17px;
     font-weight: 700;
     margin: 0;
+    white-space: nowrap;
 }
 
 .admin-detail-stat-label {

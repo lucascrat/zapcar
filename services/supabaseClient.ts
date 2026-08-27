@@ -2427,6 +2427,50 @@ export const updateDriverBalanceForCoupon = async (driverId: string, amount: num
   }
 };
 
+/**
+ * Ajuste manual do SALDO da carteira do motorista (financial_balance, em R$)
+ * feito pelo painel admin. `amount` positivo credita, negativo debita.
+ *
+ * Usa a mesma RPC atômica das outras operações de saldo
+ * (chegoja.increment_financial_balance) e registra a movimentação em
+ * wallet_transactions pro histórico da carteira do motorista bater.
+ * Falha no registro do histórico não desfaz o ajuste (o saldo já mudou),
+ * só loga um warning - mesmo padrão de addCoinsToUser/updateDriverBalanceForCoupon.
+ */
+export const adminAdjustDriverBalance = async (
+  driverId: string,
+  amount: number,
+  reason: string
+): Promise<{ ok: boolean; newBalance?: number; errorMsg?: string }> => {
+  try {
+    const { data: newBalance, error } = await supabase.rpc('increment_financial_balance', {
+      user_id_param: driverId,
+      amount_param: amount,
+    });
+
+    if (error) {
+      handleDbError(error, 'adminAdjustDriverBalance');
+      return { ok: false, errorMsg: error.message };
+    }
+
+    const cleanReason = (reason || '').trim();
+    const { error: txError } = await supabase.from('wallet_transactions').insert({
+      user_id: driverId,
+      type: amount >= 0 ? 'bonus' : 'payout',
+      amount_money: amount,
+      description: `Ajuste manual (admin)${cleanReason ? ': ' + cleanReason : ''}`,
+    });
+    if (txError) {
+      console.warn('[adminAdjustDriverBalance] saldo ajustado, mas histórico falhou:', txError);
+    }
+
+    return { ok: true, newBalance: Number(newBalance) };
+  } catch (e: any) {
+    console.error('[adminAdjustDriverBalance] Exceção:', e);
+    return { ok: false, errorMsg: e?.message || String(e) };
+  }
+};
+
 // Helper: Send Push Notification via Edge Function
 const sendPushNotification = async (params: {
   title: string;

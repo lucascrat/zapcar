@@ -14,7 +14,8 @@ import {
     updateUserProfile,
     updateDriverVehicle,
     addSubscriptionDays,
-    updateDriverPassword
+    updateDriverPassword,
+    adminAdjustDriverBalance
 } from '../../../services/supabaseClient';
 import { getMapProviderPromise } from '../../../services/googleMapsLoader';
 import {
@@ -76,9 +77,12 @@ export const AdminDriversView: React.FC<AdminDriversViewProps> = ({
     // Edit States
     const [isEditing, setIsEditing] = useState(false);
     const [isAddingDays, setIsAddingDays] = useState(false);
+    const [isAddingBalance, setIsAddingBalance] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     const [editData, setEditData] = useState<Partial<UserProfile>>({});
     const [addDaysValue, setAddDaysValue] = useState(30);
+    const [addBalanceValue, setAddBalanceValue] = useState(50);
+    const [balanceReason, setBalanceReason] = useState('');
     const [newPass, setNewPass] = useState('');
 
     const filteredDrivers = drivers.filter(driver => {
@@ -212,6 +216,41 @@ export const AdminDriversView: React.FC<AdminDriversViewProps> = ({
             }
         } catch (error) {
             console.error("Error adding days:", error);
+            toast.error('Erro ao processar solicitação.');
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    const handleStartAddBalance = () => {
+        setAddBalanceValue(50);
+        setBalanceReason('');
+        setIsAddingBalance(true);
+    };
+
+    const handleConfirmAddBalance = async () => {
+        if (!selectedDriver) return;
+        if (!addBalanceValue || Number.isNaN(addBalanceValue)) {
+            toast.error('Informe um valor.');
+            return;
+        }
+        setIsSaving(true);
+        try {
+            const result = await adminAdjustDriverBalance(selectedDriver.id, addBalanceValue, balanceReason);
+            if (result.ok) {
+                const verb = addBalanceValue >= 0 ? 'adicionado' : 'debitado';
+                toast.success(`R$ ${Math.abs(addBalanceValue).toFixed(2)} ${verb} na carteira.`);
+                setIsAddingBalance(false);
+                if (onRefresh) onRefresh();
+                const newBalance = typeof result.newBalance === 'number'
+                    ? result.newBalance
+                    : (selectedDriver.financial_balance || 0) + addBalanceValue;
+                onSelectDriver({ ...selectedDriver, financial_balance: newBalance });
+            } else {
+                toast.error('Erro ao ajustar saldo: ' + (result.errorMsg || 'tente novamente.'));
+            }
+        } catch (error) {
+            console.error('Error adjusting balance:', error);
             toast.error('Erro ao processar solicitação.');
         } finally {
             setIsSaving(false);
@@ -624,6 +663,12 @@ export const AdminDriversView: React.FC<AdminDriversViewProps> = ({
                             <p className="admin-detail-stat-label">Corridas/Mês</p>
                         </div>
                         <div className="admin-detail-stat">
+                            <p className="admin-detail-stat-value">
+                                R$ {(selectedDriver.financial_balance || 0).toFixed(2)}
+                            </p>
+                            <p className="admin-detail-stat-label">Saldo Carteira</p>
+                        </div>
+                        <div className="admin-detail-stat">
                             <p className="admin-detail-stat-value">{selectedDriver.wallet_coins || 0}</p>
                             <p className="admin-detail-stat-label">Moedas</p>
                         </div>
@@ -833,6 +878,13 @@ export const AdminDriversView: React.FC<AdminDriversViewProps> = ({
                             <span className="material-icons mr-2">add_circle</span>
                             Adicionar Dias
                         </Button>
+                        <Button
+                            variant="secondary"
+                            onClick={handleStartAddBalance}
+                        >
+                            <span className="material-icons mr-2">account_balance_wallet</span>
+                            Adicionar Saldo
+                        </Button>
                         {onOpenChat && (
                             <Button
                                 variant="secondary"
@@ -995,6 +1047,74 @@ export const AdminDriversView: React.FC<AdminDriversViewProps> = ({
                             Cancelar
                         </Button>
                         <Button variant="primary" onClick={handleConfirmAddDays} loading={isSaving}>
+                            Confirmar
+                        </Button>
+                    </div>
+                </div>
+            </Modal>
+
+            {/* Add Balance Modal */}
+            <Modal
+                isOpen={isAddingBalance}
+                onClose={() => setIsAddingBalance(false)}
+                title="Adicionar Saldo na Carteira"
+                subtitle={selectedDriver?.username}
+                size="sm"
+            >
+                <div className="space-y-6 py-4">
+                    <div className="flex items-center justify-between rounded-xl bg-white/5 border border-white/10 px-4 py-3">
+                        <span className="text-sm text-gray-400">Saldo atual</span>
+                        <span className="font-bold text-white">
+                            R$ {(selectedDriver?.financial_balance || 0).toFixed(2)}
+                        </span>
+                    </div>
+
+                    <p className="text-sm text-gray-500">
+                        Valor em reais a creditar na carteira do motorista. Use um valor
+                        negativo para debitar (corrigir um lançamento errado).
+                    </p>
+
+                    <div className="grid grid-cols-4 gap-2">
+                        {[10, 25, 50, 100].map(v => (
+                            <button
+                                key={v}
+                                className={`p-3 rounded-xl border transition-all font-bold ${addBalanceValue === v
+                                    ? 'bg-green-500 border-green-500 text-white shadow-lg shadow-green-500/20'
+                                    : 'bg-white/5 border-white/10 text-gray-400 hover:bg-white/10'}`}
+                                onClick={() => setAddBalanceValue(v)}
+                            >
+                                +{v}
+                            </button>
+                        ))}
+                    </div>
+
+                    <Input
+                        label="Ou digite o valor (R$)"
+                        type="number"
+                        step="0.01"
+                        placeholder="Ex: 35.00"
+                        value={addBalanceValue}
+                        onChange={e => setAddBalanceValue(parseFloat(e.target.value) || 0)}
+                    />
+
+                    <Input
+                        label="Motivo (opcional)"
+                        placeholder="Ex: bônus de campanha, ajuste manual..."
+                        value={balanceReason}
+                        onChange={e => setBalanceReason(e.target.value)}
+                    />
+
+                    {selectedDriver && addBalanceValue < 0 && (
+                        <p className="text-xs font-bold text-yellow-400">
+                            Novo saldo: R$ {((selectedDriver.financial_balance || 0) + addBalanceValue).toFixed(2)}
+                        </p>
+                    )}
+
+                    <div className="flex justify-end gap-3 pt-4">
+                        <Button variant="secondary" onClick={() => setIsAddingBalance(false)} disabled={isSaving}>
+                            Cancelar
+                        </Button>
+                        <Button variant="primary" onClick={handleConfirmAddBalance} loading={isSaving}>
                             Confirmar
                         </Button>
                     </div>
