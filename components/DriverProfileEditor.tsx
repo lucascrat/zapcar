@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { UserProfile, AppPaymentRequest } from '../types';
 import { updateUserProfile, fetchUserProfile, createPaymentRequest, fetchMyPaymentRequests, uploadFile } from '../services/supabaseClient';
+import { useVehicleCategories } from '../src/contexts/VehicleCategoriesContext';
 
 interface DriverProfileEditorProps {
     currentUser: UserProfile;
@@ -15,6 +16,7 @@ export const DriverProfileEditor: React.FC<DriverProfileEditorProps> = ({ curren
     const [saving, setSaving] = useState(false);
     const [uploadingImage, setUploadingImage] = useState(false);
     const [activeTab, setActiveTab] = useState<'profile' | 'pix' | 'withdraw'>(initialTab || 'profile');
+    const { activeCategories } = useVehicleCategories();
 
     // Profile Fields
     const [phone, setPhone] = useState(currentUser.phone || '');
@@ -22,7 +24,7 @@ export const DriverProfileEditor: React.FC<DriverProfileEditorProps> = ({ curren
     const [vehicleModel, setVehicleModel] = useState(currentUser.vehicle_model || '');
     const [vehiclePlate, setVehiclePlate] = useState(currentUser.vehicle_plate || '');
     const [vehicleColor, setVehicleColor] = useState(currentUser.vehicle_color || '');
-    const [vehicleType, setVehicleType] = useState<'car' | 'motorcycle'>(currentUser.vehicle_type || 'car');
+    const [vehicleType, setVehicleType] = useState<string>(currentUser.vehicle_type || 'car');
 
     // PIX Fields
     const [pixKey, setPixKey] = useState(currentUser.pix_key || '');
@@ -376,27 +378,25 @@ export const DriverProfileEditor: React.FC<DriverProfileEditorProps> = ({ curren
 
                             <div>
                                 <label className="text-[10px] text-gray-500 uppercase font-bold mb-2 block">Tipo de Veículo</label>
-                                <div className="flex gap-3">
-                                    <button
-                                        onClick={() => setVehicleType('car')}
-                                        className={`flex-1 py-3 rounded-xl flex items-center justify-center gap-2 font-bold transition ${vehicleType === 'car'
-                                            ? 'bg-accent-500 text-white'
-                                            : 'bg-black/30 text-gray-400 border border-white/10'
-                                            }`}
-                                    >
-                                        <span className="material-icons">directions_car</span>
-                                        Carro
-                                    </button>
-                                    <button
-                                        onClick={() => setVehicleType('motorcycle')}
-                                        className={`flex-1 py-3 rounded-xl flex items-center justify-center gap-2 font-bold transition ${vehicleType === 'motorcycle'
-                                            ? 'bg-orange-500 text-white'
-                                            : 'bg-black/30 text-gray-400 border border-white/10'
-                                            }`}
-                                    >
-                                        <span className="material-icons">two_wheeler</span>
-                                        Moto
-                                    </button>
+                                <div className="flex flex-wrap gap-3">
+                                    {activeCategories.map(category => (
+                                        <button
+                                            key={category.id}
+                                            type="button"
+                                            onClick={() => setVehicleType(category.slug)}
+                                            className={`flex-1 min-w-[100px] py-3 rounded-xl flex items-center justify-center gap-2 font-bold transition ${vehicleType === category.slug
+                                                ? 'bg-accent-500 text-white'
+                                                : 'bg-black/30 text-gray-400 border border-white/10'
+                                                }`}
+                                        >
+                                            {category.icon_url ? (
+                                                <img src={category.icon_url} alt="" className="w-5 h-5 object-contain" />
+                                            ) : (
+                                                <span className="material-icons">{category.slug === 'motorcycle' ? 'two_wheeler' : 'directions_car'}</span>
+                                            )}
+                                            {category.name}
+                                        </button>
+                                    ))}
                                 </div>
                             </div>
 

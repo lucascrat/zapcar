@@ -31,7 +31,7 @@ export interface UserProfile {
   vehicle_model?: string;
   vehicle_plate?: string;
   vehicle_color?: string;
-  vehicle_type?: 'car' | 'motorcycle'; // Novo campo para tipo de veículo
+  vehicle_type?: string; // Slug da categoria de veículo (chegoja.vehicle_categories.slug) - era 'car'|'motorcycle' fixo, agora dinâmico (ver VehicleCategory)
   lat?: number;
   lng?: number;
   location_updated_at?: string; // Última vez que o GPS foi atualizado (motorista "online de verdade")
@@ -214,7 +214,7 @@ export interface Coupon {
   id: string;
   image_url: string;
   discount_value: number;
-  vehicle_type: 'car' | 'motorcycle' | 'all';
+  vehicle_type: string | 'all'; // slug de chegoja.vehicle_categories, ou 'all'
   total_quantity: number;
   used_quantity: number;
   is_active: boolean;
@@ -238,7 +238,7 @@ export interface Ride {
   driver_id?: string;
   status: 'searching' | 'accepted' | 'en_route' | 'arrived' | 'started' | 'waiting_payment' | 'finished' | 'cancelled';
   payment_status?: 'pending' | 'completed';
-  vehicle_type: 'car' | 'motorcycle';
+  vehicle_type: string; // slug de chegoja.vehicle_categories
   origin_lat: number;
   origin_lng: number;
   origin_address?: string;
@@ -281,7 +281,41 @@ export interface Ride {
 }
 
 // Tipo para as abas do Painel Admin
-export type AdminTab = 'overview' | 'clients' | 'details' | 'map' | 'history' | 'settings' | 'chat' | 'bingo' | 'approvals' | 'notifications' | 'plans' | 'banners' | 'coupons' | 'central' | 'wallets' | 'store' | 'drivers' | 'rides' | 'taximeter' | 'bot' | 'rewards' | 'support' | 'performance';
+export type AdminTab = 'overview' | 'clients' | 'details' | 'map' | 'history' | 'settings' | 'chat' | 'bingo' | 'approvals' | 'notifications' | 'plans' | 'banners' | 'coupons' | 'central' | 'wallets' | 'store' | 'drivers' | 'rides' | 'taximeter' | 'bot' | 'rewards' | 'support' | 'performance' | 'categories';
+
+// Categoria de veículo cadastrável pelo admin (chegoja.vehicle_categories) -
+// substitui o antigo par fixo car/motorcycle. Cada faixa de horário (padrão/
+// noite/madrugada) tem tarifa mínima e preço/minuto SEPARADOS de propósito -
+// ver services/pricing.ts pro motivo (bug histórico onde esses dois
+// significados ficavam misturados no mesmo campo).
+export interface VehicleCategory {
+  id: string;
+  slug: string;
+  name: string;
+  description?: string;
+  icon_url?: string;
+  is_active: boolean;
+  sort_order: number;
+
+  base_price: number;
+  price_km: number;
+  price_min_fare: number;
+  price_per_minute: number;
+  start_distance_limit: number;
+
+  night_base_price?: number | null;
+  night_price_km?: number | null;
+  night_price_min_fare?: number | null;
+  night_price_per_minute?: number | null;
+
+  dawn_base_price?: number | null;
+  dawn_price_km?: number | null;
+  dawn_price_min_fare?: number | null;
+  dawn_price_per_minute?: number | null;
+
+  created_at?: string;
+  updated_at?: string;
+}
 
 // ── Sistema de Premiação Semanal ──────────────────────────────────────────────
 export interface RewardTier {

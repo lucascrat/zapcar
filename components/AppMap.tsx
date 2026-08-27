@@ -10,6 +10,7 @@ import {
     MapHandle, MarkerHandle,
 } from '../services/mapAdapter';
 import { UserProfile, AppSettings, DriverStatus } from '../types';
+import { useVehicleCategories } from '../src/contexts/VehicleCategoriesContext';
 
 interface AppMapProps {
     drivers?: UserProfile[];
@@ -25,7 +26,7 @@ interface AppMapProps {
     speak?: boolean;
     followCamera?: boolean;
     onSpeed?: (kmh: number) => void;
-    userVehicleType?: 'car' | 'motorcycle';
+    userVehicleType?: string;
 }
 
 const CAR_SVG = '<svg xmlns="http://www.w3.org/2000/svg" height="40" viewBox="0 0 24 24" width="40"><path d="M0 0h24v24H0z" fill="none"/><path fill="#25D366" stroke="#111b21" stroke-width="0.5" d="M18.92 6.01C18.72 5.42 18.16 5 17.5 5h-11c-.66 0-1.21.42-1.42 1.01L3 12v8c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h12v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-8l-2.08-5.99zM6.5 16c-.83 0-1.5-.67-1.5-1.5S5.67 13 6.5 13s1.5.67 1.5 1.5S7.33 16 6.5 16zm11 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zM5 11l1.5-4.5h11L19 11H5z"/></svg>';
@@ -63,6 +64,7 @@ export const AppMap: React.FC<AppMapProps> = ({
     const driverHeadings = useRef<Map<string, number>>(new Map());
     const animationFrames = useRef<Map<string, number>>(new Map());
     const [heading, setHeading] = useState(0);
+    const { getCategoryMeta } = useVehicleCategories();
     // Incrementa quando o mapa termina de ser criado (agora assíncrono, já
     // que pode depender do carregamento do script do Google). Os efeitos de
     // marcadores/heatmap/rota dependem disso para rodar de novo assim que o
@@ -232,9 +234,13 @@ export const AppMap: React.FC<AppMapProps> = ({
                 driverPositions.current.set(driver.id, newPos);
                 const bearing = driverHeadings.current.get(driver.id) || 0;
 
-                const iconUrl = driver.vehicle_type === 'motorcycle'
-                    ? (settings?.moto_icon_url || null)
-                    : (settings?.car_icon_url || null);
+                // Ícone da categoria de veículo (chegoja.vehicle_categories) - com
+                // fallback pros campos antigos de app_settings (legado) e depois
+                // pro SVG genérico, cobrindo categoria sem ícone próprio ainda.
+                const categoryMeta = getCategoryMeta(driver.vehicle_type);
+                const iconUrl = categoryMeta.icon_url
+                    || (driver.vehicle_type === 'motorcycle' ? settings?.moto_icon_url : settings?.car_icon_url)
+                    || null;
                 const fallbackSvg = driver.vehicle_type === 'motorcycle' ? MOTO_SVG : CAR_SVG;
 
                 if (marker) {
@@ -258,7 +264,7 @@ export const AppMap: React.FC<AppMapProps> = ({
             }
         });
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [drivers, settings, mapReadyTick]);
+    }, [drivers, settings, mapReadyTick, getCategoryMeta]);
 
     const animateMarkerTo = (marker: MarkerHandle, targetPos: { lat: number; lng: number }, driverId: string) => {
         const prevFrame = animationFrames.current.get(driverId);
@@ -411,9 +417,12 @@ export const AppMap: React.FC<AppMapProps> = ({
         if (userMarker.current) {
             updateMarker(userMarker.current, { lat: userLocation.lat, lng: userLocation.lng, rotation: heading });
         } else {
-            const svg = userVehicleType
-                ? (userVehicleType === 'motorcycle' ? MOTO_SVG : CAR_SVG)
-                : USER_ARROW_SVG('#2563eb');
+            const categoryIconUrl = userVehicleType ? getCategoryMeta(userVehicleType).icon_url : undefined;
+            const svg = categoryIconUrl
+                ? `<img src="${categoryIconUrl}" style="width:100%;height:100%;object-fit:contain;" />`
+                : userVehicleType
+                    ? (userVehicleType === 'motorcycle' ? MOTO_SVG : CAR_SVG)
+                    : USER_ARROW_SVG('#2563eb');
             const el = buildIconMarker(svg, userVehicleType ? 40 : 28);
             userMarker.current = addMarker(handle, { lat: userLocation.lat, lng: userLocation.lng, element: el, rotation: heading });
         }

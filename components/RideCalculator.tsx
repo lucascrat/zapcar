@@ -8,6 +8,8 @@ import {
     createMap, destroyMap, addNavigationControl, addMarker, removeMarker, drawRoute, fitBounds, panTo, setZoom,
     MapHandle, MarkerHandle,
 } from '../services/mapAdapter';
+import { calculateCategoryPrice } from '../services/pricing';
+import { useVehicleCategories } from '../src/contexts/VehicleCategoriesContext';
 
 interface RideCalculatorProps {
     currentUser: UserProfile;
@@ -26,8 +28,9 @@ export const RideCalculator: React.FC<RideCalculatorProps> = ({ currentUser, onC
     const [originCoords, setOriginCoords] = useState<{ lat: number; lng: number } | null>(null);
     const [destCoords, setDestCoords] = useState<{ lat: number; lng: number } | null>(null);
     const [proximity, setProximity] = useState<[number, number] | undefined>(undefined);
-    const [vehicleType, setVehicleType] = useState<'car' | 'motorcycle'>('car');
+    const [vehicleType, setVehicleType] = useState<string>('car');
     const [settings, setSettings] = useState<AppSettings | null>(null);
+    const { categories: vehicleCategories } = useVehicleCategories();
 
     const [result, setResult] = useState<{
         distanceKm: number;
@@ -169,70 +172,21 @@ export const RideCalculator: React.FC<RideCalculatorProps> = ({ currentUser, onC
             const distanceKm = distanceMeters / 1000;
             const durationMin = durationSeconds / 60;
 
-            // Calculate Price based on current time
-            const now = new Date();
-            const currentTime = now.getHours() * 60 + now.getMinutes();
-
-            const parseTime = (timeStr?: string) => {
-                if (!timeStr) return 0;
-                const [h, m] = timeStr.split(':').map(Number);
-                return h * 60 + m;
-            };
-
-            const nightStart = parseTime(settings.night_start_time || '19:00');
-            const nightEnd = parseTime(settings.night_end_time || '23:59');
-            const dawnStart = parseTime(settings.dawn_start_time || '00:00');
-            const dawnEnd = parseTime(settings.dawn_end_time || '05:00');
-
-            let base = settings.car_base_price;
-            let perKm = settings.car_price_km;
-            let perMin = settings.car_price_per_minute || 0;
-            let startDistLimit = settings.car_start_distance_limit || 0;
-            let minFare = settings.car_price_min || 0; // Use car_price_min as Minimum Fare
-
-            if (vehicleType === 'motorcycle') {
-                base = settings.moto_base_price;
-                perKm = settings.moto_price_km;
-                perMin = settings.moto_price_per_minute || 0;
-                startDistLimit = settings.moto_start_distance_limit || 0;
-                minFare = settings.moto_price_min || 0;
+            // Preço via services/pricing.ts (fonte única - ver comentário no
+            // topo daquele arquivo sobre o bug histórico de tarifa mínima/
+            // preço por minuto noturno-madrugada que essa troca corrige).
+            const category = vehicleCategories.find(c => c.slug === vehicleType);
+            if (!category) {
+                alert("Categoria de veículo não encontrada.");
+                setLoading(false);
+                return;
             }
-
-            // Apply Dynamic Pricing
-            const isNight = (nightStart < nightEnd)
-                ? (currentTime >= nightStart && currentTime <= nightEnd)
-                : (currentTime >= nightStart || currentTime <= nightEnd); // Handles bridge over midnight
-
-            const isDawn = (dawnStart < dawnEnd)
-                ? (currentTime >= dawnStart && currentTime <= dawnEnd)
-                : (currentTime >= dawnStart || currentTime <= dawnEnd);
-
-            if (isDawn) {
-                if (vehicleType === 'car') {
-                    base = settings.dawn_car_base_price ?? base;
-                    perKm = settings.dawn_car_price_km ?? perKm;
-                    perMin = settings.dawn_car_price_min ?? perMin;
-                } else {
-                    base = settings.dawn_moto_base_price ?? base;
-                    perKm = settings.dawn_moto_price_km ?? perKm;
-                    perMin = settings.dawn_moto_price_min ?? perMin;
-                }
-            } else if (isNight) {
-                if (vehicleType === 'car') {
-                    base = settings.night_car_base_price ?? base;
-                    perKm = settings.night_car_price_km ?? perKm;
-                    perMin = settings.night_car_price_min ?? perMin;
-                } else {
-                    base = settings.night_moto_base_price ?? base;
-                    perKm = settings.night_moto_price_km ?? perKm;
-                    perMin = settings.night_moto_price_min ?? perMin;
-                }
-            }
-
-            const chargeableDistance = Math.max(0, distanceKm - startDistLimit);
-            // Logic: Base + DistPrice + TimePrice
-            const calculatedPrice = base + (chargeableDistance * perKm) + (durationMin * perMin);
-            const finalPrice = Math.max(calculatedPrice, minFare);
+            const { price: finalPrice } = calculateCategoryPrice(category, distanceKm, durationMin, new Date(), {
+                nightStartTime: settings.night_start_time,
+                nightEndTime: settings.night_end_time,
+                dawnStartTime: settings.dawn_start_time,
+                dawnEndTime: settings.dawn_end_time,
+            });
 
             setResult({
                 distanceKm,

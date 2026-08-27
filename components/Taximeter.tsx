@@ -2,6 +2,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { UserProfile, AppSettings } from '../types';
 import { fetchAppSettings } from '../services/supabaseClient';
+import { calculateCategoryPrice } from '../services/pricing';
+import { useVehicleCategories } from '../src/contexts/VehicleCategoriesContext';
 
 
 interface TaximeterProps {
@@ -12,6 +14,7 @@ interface TaximeterProps {
 export const Taximeter: React.FC<TaximeterProps> = ({ currentUser, onClose }) => {
   const [isRunning, setIsRunning] = useState(false);
   const [settings, setSettings] = useState<AppSettings | null>(null);
+  const { categories: vehicleCategories } = useVehicleCategories();
 
   const [elapsedTime, setElapsedTime] = useState(0); // Seconds
   const [distance, setDistance] = useState(0); // Kilometers
@@ -74,79 +77,25 @@ export const Taximeter: React.FC<TaximeterProps> = ({ currentUser, onClose }) =>
     };
   }, [isRunning, lastPos]);
 
-  // Fare Calculation
+  // Fare Calculation via services/pricing.ts (fonte única). Antes, esse
+  // efeito tinha um bug real: usava car_price_min/moto_price_min como PREÇO
+  // POR MINUTO (nunca existiu um campo de preço/minuto separado aqui) e não
+  // aplicava tarifa mínima nenhuma (só o "base" como piso) - agora usa os
+  // campos corretos e sem ambiguidade de VehicleCategory.
   useEffect(() => {
     if (!settings) return;
+    const category = vehicleCategories.find(c => c.slug === (currentUser.vehicle_type || 'car'));
+    if (!category) return;
 
-    // Calculate Price based on vehicle type and time
-    const now = new Date();
-    const currentTime = now.getHours() * 60 + now.getMinutes();
-
-    const parseTime = (timeStr?: string) => {
-      if (!timeStr) return 0;
-      const [h, m] = timeStr.split(':').map(Number);
-      return h * 60 + m;
-    };
-
-    const nightStart = parseTime(settings.night_start_time || '19:00');
-    const nightEnd = parseTime(settings.night_end_time || '23:59');
-    const dawnStart = parseTime(settings.dawn_start_time || '00:00');
-    const dawnEnd = parseTime(settings.dawn_end_time || '05:00');
-
-    let base = settings.car_base_price;
-    let perKm = settings.car_price_km;
-    let perMin = settings.car_price_min;
-    let startDistLimit = settings.car_start_distance_limit || 0;
-
-    if (currentUser.vehicle_type === 'motorcycle') {
-      base = settings.moto_base_price;
-      perKm = settings.moto_price_km;
-      perMin = settings.moto_price_min;
-      startDistLimit = settings.moto_start_distance_limit || 0;
-    }
-
-    // Apply Dynamic Pricing
-    const isNight = (nightStart < nightEnd)
-      ? (currentTime >= nightStart && currentTime <= nightEnd)
-      : (currentTime >= nightStart || currentTime <= nightEnd);
-
-    const isDawn = (dawnStart < dawnEnd)
-      ? (currentTime >= dawnStart && currentTime <= dawnEnd)
-      : (currentTime >= dawnStart || currentTime <= dawnEnd);
-
-    if (isDawn) {
-      if (currentUser.vehicle_type === 'car' || !currentUser.vehicle_type) {
-        base = settings.dawn_car_base_price ?? base;
-        perKm = settings.dawn_car_price_km ?? perKm;
-        perMin = settings.dawn_car_price_min ?? perMin;
-      } else {
-        base = settings.dawn_moto_base_price ?? base;
-        perKm = settings.dawn_moto_price_km ?? perKm;
-        perMin = settings.dawn_moto_price_min ?? perMin;
-      }
-    } else if (isNight) {
-      if (currentUser.vehicle_type === 'car' || !currentUser.vehicle_type) {
-        base = settings.night_car_base_price ?? base;
-        perKm = settings.night_car_price_km ?? perKm;
-        perMin = settings.night_car_price_min ?? perMin;
-      } else {
-        base = settings.night_moto_base_price ?? base;
-        perKm = settings.night_moto_price_km ?? perKm;
-        perMin = settings.night_moto_price_min ?? perMin;
-      }
-    }
-
-    // Formula: Base + ((Distance - StartLimit) * Rate) + (Min * Rate)
     const timeInMin = elapsedTime / 60;
-
-    // Calcula a distância cobrável (apenas o que excede o limite inicial)
-    const chargeableDistance = Math.max(0, distance - startDistLimit);
-
-    const total = base + (chargeableDistance * perKm) + (timeInMin * perMin);
-
-    // Ensure total never drops below base
-    setFare(Math.max(base, total));
-  }, [elapsedTime, distance, settings, currentUser.vehicle_type]);
+    const { price } = calculateCategoryPrice(category, distance, timeInMin, new Date(), {
+      nightStartTime: settings.night_start_time,
+      nightEndTime: settings.night_end_time,
+      dawnStartTime: settings.dawn_start_time,
+      dawnEndTime: settings.dawn_end_time,
+    });
+    setFare(price);
+  }, [elapsedTime, distance, settings, currentUser.vehicle_type, vehicleCategories]);
 
   const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
     const R = 6371; // km

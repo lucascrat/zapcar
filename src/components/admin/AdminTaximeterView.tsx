@@ -1,83 +1,56 @@
 import React, { useState, useEffect } from 'react';
 import { AppSettings } from '../../../types';
 import { fetchAppSettings } from '../../../services/supabaseClient';
-import { Card, Button, Input, Badge } from '../../components/shared';
+import { calculateCategoryPrice, PriceBreakdown } from '../../../services/pricing';
+import { useVehicleCategories } from '../../contexts/VehicleCategoriesContext';
+import { Card, Button, Badge } from '../../components/shared';
 
 export const AdminTaximeterView: React.FC = () => {
     const [settings, setSettings] = useState<AppSettings | null>(null);
+    const { categories } = useVehicleCategories();
     const [distance, setDistance] = useState(5.0); // km
     const [time, setTime] = useState(10); // min
-    const [vehicle, setVehicle] = useState<'car' | 'motorcycle'>('car');
-    const [period, setPeriod] = useState<'standard' | 'night' | 'dawn'>('standard');
-    const [result, setResult] = useState<number | null>(null);
+    const [vehicleSlug, setVehicleSlug] = useState('car');
+    const [simulatedNow, setSimulatedNow] = useState<'now' | 'standard' | 'night' | 'dawn'>('now');
+    const [result, setResult] = useState<PriceBreakdown | null>(null);
 
     useEffect(() => {
-        loadSettings();
+        fetchAppSettings().then(setSettings);
     }, []);
 
-    const loadSettings = async () => {
-        const data = await fetchAppSettings();
-        setSettings(data);
+    useEffect(() => {
+        if (categories.length > 0 && !categories.some(c => c.slug === vehicleSlug)) {
+            setVehicleSlug(categories[0].slug);
+        }
+    }, [categories, vehicleSlug]);
+
+    // Pra simular um horário específico sem depender do relógio de verdade,
+    // usa uma data fixa dentro (ou fora) das janelas configuradas.
+    const resolveSimulationDate = (): Date => {
+        if (simulatedNow === 'now' || !settings) return new Date();
+        const windowStart = simulatedNow === 'night' ? settings.night_start_time : simulatedNow === 'dawn' ? settings.dawn_start_time : '12:00';
+        const [h, m] = (windowStart || '12:00').split(':').map(Number);
+        const d = new Date();
+        d.setHours(h || 12, (m || 0) + 1, 0, 0); // +1min pra garantir que caia dentro da janela
+        return d;
     };
 
     const calculate = () => {
         if (!settings) return;
+        const category = categories.find(c => c.slug === vehicleSlug);
+        if (!category) return;
 
-        let base = 0;
-        let pKm = 0;
-        let pMin = 0; // Price Per Minute
-        let minFare = 0; // Minimum Fare
-        let startLimit = 0;
-
-        if (vehicle === 'car') {
-            if (period === 'standard') {
-                base = settings.car_base_price;
-                pKm = settings.car_price_km;
-                pMin = settings.car_price_per_minute || 0;
-                minFare = settings.car_price_min;
-                startLimit = settings.car_start_distance_limit || 0;
-            } else if (period === 'night') {
-                base = settings.night_car_base_price || settings.car_base_price;
-                pKm = settings.night_car_price_km || settings.car_price_km;
-                minFare = settings.night_car_price_min || settings.car_price_min;
-                // Dynamic per-minute not supported yet, fallback to standard
-                pMin = settings.car_price_per_minute || 0;
-                startLimit = settings.car_start_distance_limit || 0;
-            } else {
-                base = settings.dawn_car_base_price || settings.car_base_price;
-                pKm = settings.dawn_car_price_km || settings.car_price_km;
-                minFare = settings.dawn_car_price_min || settings.car_price_min;
-                pMin = settings.car_price_per_minute || 0;
-                startLimit = settings.car_start_distance_limit || 0;
-            }
-        } else {
-            if (period === 'standard') {
-                base = settings.moto_base_price;
-                pKm = settings.moto_price_km;
-                pMin = settings.moto_price_per_minute || 0;
-                minFare = settings.moto_price_min;
-                startLimit = settings.moto_start_distance_limit || 0;
-            } else if (period === 'night') {
-                base = settings.night_moto_base_price || settings.moto_base_price;
-                pKm = settings.night_moto_price_km || settings.moto_price_km;
-                minFare = settings.night_moto_price_min || settings.moto_price_min;
-                pMin = settings.moto_price_per_minute || 0;
-                startLimit = settings.moto_start_distance_limit || 0;
-            } else {
-                base = settings.dawn_moto_base_price || settings.moto_base_price;
-                pKm = settings.dawn_moto_price_km || settings.moto_price_km;
-                minFare = settings.dawn_moto_price_min || settings.moto_price_min;
-                pMin = settings.moto_price_per_minute || 0;
-                startLimit = settings.moto_start_distance_limit || 0;
-            }
-        }
-
-        const chargeableDist = Math.max(0, distance - startLimit);
-        const totalCalculated = base + (chargeableDist * pKm) + (time * pMin);
-        const finalPrice = Math.max(totalCalculated, minFare);
-
-        setResult(finalPrice);
+        const breakdown = calculateCategoryPrice(category, distance, time, resolveSimulationDate(), {
+            nightStartTime: settings.night_start_time,
+            nightEndTime: settings.night_end_time,
+            dawnStartTime: settings.dawn_start_time,
+            dawnEndTime: settings.dawn_end_time,
+        });
+        setResult(breakdown);
     };
+
+    const tierLabel: Record<PriceBreakdown['tier'], string> = { standard: 'Padrão', night: 'Noite', dawn: 'Madrugada' };
+    const tierBadge: Record<PriceBreakdown['tier'], 'info' | 'warning'> = { standard: 'info', night: 'warning', dawn: 'warning' };
 
     if (!settings) return <div className="admin-loading">Carregando parâmetros...</div>;
 
@@ -85,7 +58,7 @@ export const AdminTaximeterView: React.FC = () => {
         <div className="space-y-6">
             <div>
                 <h2 className="text-2xl font-bold text-white">Simulador de Taxímetro</h2>
-                <p className="text-sm text-gray-400 mt-1">Teste o cálculo de preços do aplicativo com diferentes parâmetros</p>
+                <p className="text-sm text-gray-400 mt-1">Teste o cálculo de preços do aplicativo com diferentes parâmetros - usa a mesma fórmula real (services/pricing.ts)</p>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -96,23 +69,25 @@ export const AdminTaximeterView: React.FC = () => {
                     <div className="admin-card-body space-y-6">
                         <div className="grid grid-cols-2 gap-4">
                             <div className="admin-form-group">
-                                <label className="admin-form-label">Tipo de Veículo</label>
+                                <label className="admin-form-label">Categoria</label>
                                 <select
                                     className="admin-form-input"
-                                    value={vehicle}
-                                    onChange={e => setVehicle(e.target.value as any)}
+                                    value={vehicleSlug}
+                                    onChange={e => setVehicleSlug(e.target.value)}
                                 >
-                                    <option value="car">🚗 Carro</option>
-                                    <option value="motorcycle">🏍️ Moto</option>
+                                    {categories.map(c => (
+                                        <option key={c.id} value={c.slug}>{c.name}</option>
+                                    ))}
                                 </select>
                             </div>
                             <div className="admin-form-group">
-                                <label className="admin-form-label">Período / Bandeira</label>
+                                <label className="admin-form-label">Horário</label>
                                 <select
                                     className="admin-form-input"
-                                    value={period}
-                                    onChange={e => setPeriod(e.target.value as any)}
+                                    value={simulatedNow}
+                                    onChange={e => setSimulatedNow(e.target.value as any)}
                                 >
+                                    <option value="now">🕐 Agora</option>
                                     <option value="standard">☀️ Padrão</option>
                                     <option value="night">🌙 Noite</option>
                                     <option value="dawn">🦇 Madrugada</option>
@@ -165,18 +140,27 @@ export const AdminTaximeterView: React.FC = () => {
                 <Card className="flex flex-col justify-center items-center py-10">
                     {result !== null ? (
                         <div className="text-center animate-in fade-in duration-500">
-                            <h4 className="text-gray-400 uppercase tracking-widest text-sm mb-2 font-bold">Valor Estimado da Corrida</h4>
+                            <Badge variant={tierBadge[result.tier]}>{tierLabel[result.tier]}</Badge>
+                            <h4 className="text-gray-400 uppercase tracking-widest text-sm mt-3 mb-2 font-bold">Valor Estimado da Corrida</h4>
                             <div className="text-7xl font-black text-white mb-6">
-                                R$ {result.toFixed(2)}
+                                R$ {result.price.toFixed(2)}
                             </div>
                             <div className="flex flex-wrap justify-center gap-4 text-left">
-                                <div className="p-4 bg-white/5 rounded-xl border border-white/10 w-40">
+                                <div className="p-4 bg-white/5 rounded-xl border border-white/10 w-36">
                                     <div className="text-[10px] text-gray-500 uppercase font-bold">Tarifa Base</div>
-                                    <div className="text-lg font-bold text-white">R$ {(vehicle === 'car' ? (period === 'standard' ? settings.car_base_price : (period === 'night' ? settings.night_car_base_price : settings.dawn_car_base_price)) : (period === 'standard' ? settings.moto_base_price : (period === 'night' ? settings.night_moto_base_price : settings.dawn_moto_base_price)))?.toFixed(2)}</div>
+                                    <div className="text-lg font-bold text-white">R$ {result.base.toFixed(2)}</div>
                                 </div>
-                                <div className="p-4 bg-white/5 rounded-xl border border-white/10 w-40">
+                                <div className="p-4 bg-white/5 rounded-xl border border-white/10 w-36">
                                     <div className="text-[10px] text-gray-500 uppercase font-bold">Por KM</div>
-                                    <div className="text-lg font-bold text-white">R$ {(vehicle === 'car' ? (period === 'standard' ? settings.car_price_km : (period === 'night' ? settings.night_car_price_km : settings.dawn_car_price_km)) : (period === 'standard' ? settings.moto_price_km : (period === 'night' ? settings.night_moto_price_km : settings.dawn_moto_price_km)))?.toFixed(2)}</div>
+                                    <div className="text-lg font-bold text-white">R$ {result.perKm.toFixed(2)}</div>
+                                </div>
+                                <div className="p-4 bg-white/5 rounded-xl border border-white/10 w-36">
+                                    <div className="text-[10px] text-gray-500 uppercase font-bold">Por Minuto</div>
+                                    <div className="text-lg font-bold text-white">R$ {result.perMinute.toFixed(2)}</div>
+                                </div>
+                                <div className="p-4 bg-white/5 rounded-xl border border-white/10 w-36">
+                                    <div className="text-[10px] text-gray-500 uppercase font-bold">Tarifa Mínima</div>
+                                    <div className="text-lg font-bold text-white">R$ {result.minFare.toFixed(2)}</div>
                                 </div>
                             </div>
                             <p className="mt-10 text-xs text-gray-500 max-w-[300px] mx-auto">
@@ -203,7 +187,6 @@ export const AdminTaximeterView: React.FC = () => {
                         <thead>
                             <tr>
                                 <th>Categoria</th>
-                                <th>Período</th>
                                 <th>Base</th>
                                 <th>KM</th>
                                 <th>Minuto</th>
@@ -212,42 +195,24 @@ export const AdminTaximeterView: React.FC = () => {
                             </tr>
                         </thead>
                         <tbody>
-                            <tr>
-                                <td className="font-bold text-white">🚗 Carro</td>
-                                <td><Badge variant="info">Padrão</Badge></td>
-                                <td>R$ {settings.car_base_price.toFixed(2)}</td>
-                                <td>R$ {settings.car_price_km.toFixed(2)}</td>
-                                <td>R$ {(settings.car_price_per_minute || 0).toFixed(2)}</td>
-                                <td>R$ {settings.car_price_min.toFixed(2)}</td>
-                                <td>{settings.car_start_distance_limit || 0} km</td>
-                            </tr>
-                            <tr>
-                                <td className="font-bold text-white">🚗 Carro</td>
-                                <td><Badge variant="warning">Noite</Badge></td>
-                                <td>R$ {(settings.night_car_base_price || 0).toFixed(2)}</td>
-                                <td>R$ {(settings.night_car_price_km || 0).toFixed(2)}</td>
-                                <td>-</td>
-                                <td>R$ {(settings.night_car_price_min || 0).toFixed(2)}</td>
-                                <td>{settings.car_start_distance_limit || 0} km</td>
-                            </tr>
-                            <tr>
-                                <td className="font-bold text-white">🏍️ Moto</td>
-                                <td><Badge variant="info">Padrão</Badge></td>
-                                <td>R$ {settings.moto_base_price.toFixed(2)}</td>
-                                <td>R$ {settings.moto_price_km.toFixed(2)}</td>
-                                <td>R$ {(settings.moto_price_per_minute || 0).toFixed(2)}</td>
-                                <td>R$ {settings.moto_price_min.toFixed(2)}</td>
-                                <td>{settings.moto_start_distance_limit || 0} km</td>
-                            </tr>
-                            <tr>
-                                <td className="font-bold text-white">🏍️ Moto</td>
-                                <td><Badge variant="warning">Noite</Badge></td>
-                                <td>R$ {(settings.night_moto_base_price || 0).toFixed(2)}</td>
-                                <td>R$ {(settings.night_moto_price_km || 0).toFixed(2)}</td>
-                                <td>-</td>
-                                <td>R$ {(settings.night_moto_price_min || 0).toFixed(2)}</td>
-                                <td>{settings.moto_start_distance_limit || 0} km</td>
-                            </tr>
+                            {categories.map(c => (
+                                <tr key={c.id}>
+                                    <td className="font-bold text-white flex items-center gap-2">
+                                        {c.icon_url ? (
+                                            <img src={c.icon_url} alt={c.name} style={{ width: 20, height: 20, objectFit: 'contain' }} />
+                                        ) : (
+                                            <span className="material-icons" style={{ fontSize: 18 }}>directions_car</span>
+                                        )}
+                                        {c.name}
+                                        {!c.is_active && <Badge variant="secondary">Inativa</Badge>}
+                                    </td>
+                                    <td>R$ {c.base_price.toFixed(2)}</td>
+                                    <td>R$ {c.price_km.toFixed(2)}</td>
+                                    <td>R$ {c.price_per_minute.toFixed(2)}</td>
+                                    <td>R$ {c.price_min_fare.toFixed(2)}</td>
+                                    <td>{c.start_distance_limit || 0} km</td>
+                                </tr>
+                            ))}
                         </tbody>
                     </table>
                 </div>

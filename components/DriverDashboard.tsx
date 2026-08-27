@@ -9,6 +9,8 @@ import { ChatWindow } from './ChatWindow';
 import { DriverHistory } from './DriverHistory';
 import { DriverRewardsScreen } from './DriverRewardsScreen';
 import { soundService } from '../services/soundService';
+import { calculateCategoryPrice } from '../services/pricing';
+import { useVehicleCategories } from '../src/contexts/VehicleCategoriesContext';
 
 interface DriverDashboardProps {
     currentUser: UserProfile;
@@ -30,6 +32,7 @@ export const DriverDashboard: React.FC<DriverDashboardProps> = ({
     onUpdateUser
 }) => {
     const [settings, setSettings] = useState<AppSettings | null>(null);
+    const { categories: vehicleCategories } = useVehicleCategories();
     const [showMenu, setShowMenu] = useState(false);
     const [showChat, setShowChat] = useState(false);
     const [showHistory, setShowHistory] = useState(false);
@@ -243,72 +246,22 @@ export const DriverDashboard: React.FC<DriverDashboardProps> = ({
         };
     }, [taximeterActive]);
 
-    // Fare Calculation
+    // Fare Calculation via services/pricing.ts (fonte única - ver comentário
+    // em Taximeter.tsx sobre o bug que essa troca corrige).
     useEffect(() => {
         if (!settings) return;
-
-        const now = new Date();
-        const currentTime = now.getHours() * 60 + now.getMinutes();
-
-        const parseTime = (timeStr?: string) => {
-            if (!timeStr) return 0;
-            const [h, m] = timeStr.split(':').map(Number);
-            return h * 60 + m;
-        };
-
-        const nightStart = parseTime(settings.night_start_time || '19:00');
-        const nightEnd = parseTime(settings.night_end_time || '23:59');
-        const dawnStart = parseTime(settings.dawn_start_time || '00:00');
-        const dawnEnd = parseTime(settings.dawn_end_time || '05:00');
-
-        let base = settings.car_base_price;
-        let perKm = settings.car_price_km;
-        let perMin = settings.car_price_min;
-        let startDistLimit = settings.car_start_distance_limit || 0;
-
-        if (currentUser.vehicle_type === 'motorcycle') {
-            base = settings.moto_base_price;
-            perKm = settings.moto_price_km;
-            perMin = settings.moto_price_min;
-            startDistLimit = settings.moto_start_distance_limit || 0;
-        }
-
-        const isNight = (nightStart < nightEnd)
-            ? (currentTime >= nightStart && currentTime <= nightEnd)
-            : (currentTime >= nightStart || currentTime <= nightEnd);
-
-        const isDawn = (dawnStart < dawnEnd)
-            ? (currentTime >= dawnStart && currentTime <= dawnEnd)
-            : (currentTime >= dawnStart || currentTime <= dawnEnd);
-
-        if (isDawn) {
-            if (currentUser.vehicle_type !== 'motorcycle') {
-                base = settings.dawn_car_base_price ?? base;
-                perKm = settings.dawn_car_price_km ?? perKm;
-                perMin = settings.dawn_car_price_min ?? perMin;
-            } else {
-                base = settings.dawn_moto_base_price ?? base;
-                perKm = settings.dawn_moto_price_km ?? perKm;
-                perMin = settings.dawn_moto_price_min ?? perMin;
-            }
-        } else if (isNight) {
-            if (currentUser.vehicle_type !== 'motorcycle') {
-                base = settings.night_car_base_price ?? base;
-                perKm = settings.night_car_price_km ?? perKm;
-                perMin = settings.night_car_price_min ?? perMin;
-            } else {
-                base = settings.night_moto_base_price ?? base;
-                perKm = settings.night_moto_price_km ?? perKm;
-                perMin = settings.night_moto_price_min ?? perMin;
-            }
-        }
+        const category = vehicleCategories.find(c => c.slug === (currentUser.vehicle_type || 'car'));
+        if (!category) return;
 
         const timeInMin = elapsedTime / 60;
-        const chargeableDistance = Math.max(0, distance - startDistLimit);
-        const total = base + (chargeableDistance * perKm) + (timeInMin * perMin);
-
-        setFare(Math.max(base, total));
-    }, [elapsedTime, distance, settings, currentUser.vehicle_type]);
+        const { price } = calculateCategoryPrice(category, distance, timeInMin, new Date(), {
+            nightStartTime: settings.night_start_time,
+            nightEndTime: settings.night_end_time,
+            dawnStartTime: settings.dawn_start_time,
+            dawnEndTime: settings.dawn_end_time,
+        });
+        setFare(price);
+    }, [elapsedTime, distance, settings, currentUser.vehicle_type, vehicleCategories]);
 
     const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
         const R = 6371;

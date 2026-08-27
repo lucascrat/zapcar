@@ -2,6 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { Ride } from '../types';
 import { AdMobService } from '../services/adMobService';
+import { useVehicleCategories } from '../src/contexts/VehicleCategoriesContext';
 
 interface DriverRideCallProps {
     ride: Ride;
@@ -18,6 +19,8 @@ const CALL_TIMEOUT_SECONDS = 30;
 
 export const DriverRideCall: React.FC<DriverRideCallProps> = ({ ride, onAccept, onReject }) => {
     const [timeLeft, setTimeLeft] = useState(CALL_TIMEOUT_SECONDS);
+    const { getCategoryMeta } = useVehicleCategories();
+    const categoryMeta = getCategoryMeta(ride.vehicle_type);
 
     // Hide banner during incoming call
     useEffect(() => {
@@ -62,9 +65,13 @@ export const DriverRideCall: React.FC<DriverRideCallProps> = ({ ride, onAccept, 
                     <div className="relative w-28 h-28 mx-auto mb-6 mt-2">
                         <div className="absolute inset-0 bg-[#00a884] rounded-full animate-ping opacity-20"></div>
                         <div className="absolute inset-3 bg-gradient-to-br from-[#202c33] to-[#111b21] rounded-full flex items-center justify-center shadow-inner border border-white/5">
-                            <span className="material-icons text-5xl text-[#00a884] drop-shadow-[0_0_10px_rgba(0,168,132,0.5)]">
-                                {ride.vehicle_type === 'motorcycle' ? 'two_wheeler' : 'directions_car'}
-                            </span>
+                            {categoryMeta.icon_url ? (
+                                <img src={categoryMeta.icon_url} alt={categoryMeta.name} className="w-12 h-12 object-contain drop-shadow-[0_0_10px_rgba(0,168,132,0.5)]" />
+                            ) : (
+                                <span className="material-icons text-5xl text-[#00a884] drop-shadow-[0_0_10px_rgba(0,168,132,0.5)]">
+                                    {ride.vehicle_type === 'motorcycle' ? 'two_wheeler' : 'directions_car'}
+                                </span>
+                            )}
                         </div>
                         <svg className="absolute inset-0 w-full h-full -rotate-90 drop-shadow-lg">
                             <defs>

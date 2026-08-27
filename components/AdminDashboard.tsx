@@ -136,7 +136,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onL
         model: '',
         plate: '',
         color: '',
-        type: 'car' as 'car' | 'motorcycle',
+        type: 'car' as string,
         phone: '',
         pix_key: '',
         cpf: '',

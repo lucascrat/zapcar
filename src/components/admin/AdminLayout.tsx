@@ -92,6 +92,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
 
         // Tools
         { id: 'settings', icon: 'settings', label: 'Configurações', section: 'tools' },
+        { id: 'categories', icon: 'category', label: 'Categorias de Veículo', section: 'tools' },
         { id: 'plans', icon: 'monetization_on', label: 'Planos', section: 'tools' },
         { id: 'taximeter', icon: 'speed', label: 'Simulador', section: 'tools' },
         { id: 'chat', icon: 'smart_toy', label: 'Bot WhatsApp', section: 'tools' },

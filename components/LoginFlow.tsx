@@ -10,6 +10,7 @@ import {
     supabase
 } from '../services/supabaseClient';
 import { APP_NAME } from '../constants';
+import { useVehicleCategories } from '../src/contexts/VehicleCategoriesContext';
 
 const APP_VERSION = "6.2 (Stable)";
 
@@ -25,7 +26,8 @@ export const LoginFlow: React.FC<LoginFlowProps> = ({ onLoginSuccess }) => {
     const [entryAvatarFile, setEntryAvatarFile] = useState<File | null>(null);
     const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
 
-    const [entryVehicleType, setEntryVehicleType] = useState<'car' | 'motorcycle'>('car');
+    const { activeCategories } = useVehicleCategories();
+    const [entryVehicleType, setEntryVehicleType] = useState<string>('car');
     const [entryVehicleModel, setEntryVehicleModel] = useState('');
     const [entryVehiclePlate, setEntryVehiclePlate] = useState('');
     const [entryVehicleColor, setEntryVehicleColor] = useState('');
@@ -391,19 +393,22 @@ export const LoginFlow: React.FC<LoginFlowProps> = ({ onLoginSuccess }) => {
                                 </button>
                             </div>
 
-                            <div className="flex gap-3 w-full">
-                                <button
-                                    onClick={() => setEntryVehicleType('car')}
-                                    className={`flex-1 h-12 rounded-xl border flex items-center justify-center gap-2 font-bold text-sm transition-all active:scale-95 ${entryVehicleType === 'car' ? 'bg-whatsapp-green text-white border-whatsapp-green shadow-sm' : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'}`}
-                                >
-                                    <span className="material-icons text-lg">directions_car</span> Carro
-                                </button>
-                                <button
-                                    onClick={() => setEntryVehicleType('motorcycle')}
-                                    className={`flex-1 h-12 rounded-xl border flex items-center justify-center gap-2 font-bold text-sm transition-all active:scale-95 ${entryVehicleType === 'motorcycle' ? 'bg-whatsapp-green text-white border-whatsapp-green shadow-sm' : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'}`}
-                                >
-                                    <span className="material-icons text-lg">two_wheeler</span> Moto
-                                </button>
+                            <div className="flex flex-wrap gap-3 w-full">
+                                {activeCategories.map(category => (
+                                    <button
+                                        key={category.id}
+                                        type="button"
+                                        onClick={() => setEntryVehicleType(category.slug)}
+                                        className={`flex-1 min-w-[100px] h-12 rounded-xl border flex items-center justify-center gap-2 font-bold text-sm transition-all active:scale-95 ${entryVehicleType === category.slug ? 'bg-whatsapp-green text-white border-whatsapp-green shadow-sm' : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'}`}
+                                    >
+                                        {category.icon_url ? (
+                                            <img src={category.icon_url} alt="" className="w-5 h-5 object-contain" />
+                                        ) : (
+                                            <span className="material-icons text-lg">{category.slug === 'motorcycle' ? 'two_wheeler' : 'directions_car'}</span>
+                                        )}
+                                        {category.name}
+                                    </button>
+                                ))}
                             </div>
 
                             <div className="grid grid-cols-2 gap-3 w-full">

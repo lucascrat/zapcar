@@ -5,6 +5,7 @@ import { updateRidePayment, supabase } from '../services/supabaseClient';
 import { RidePaymentModal } from './RidePaymentModal';
 import { SUPABASE_SCHEMA } from '../constants';
 import { getDirections } from '../services/placesService';
+import { useVehicleCategories } from '../src/contexts/VehicleCategoriesContext';
 
 interface RideStatusOverlayProps {
     ride: Ride;
@@ -15,6 +16,7 @@ interface RideStatusOverlayProps {
 }
 
 export const RideStatusOverlay: React.FC<RideStatusOverlayProps> = ({ ride, onCancel, onChat, settings, currentUser }) => {
+    const { getCategoryMeta } = useVehicleCategories();
     const [eta, setEta] = useState(Math.floor(ride.estimated_time || 5));
     const [liveDriverPos, setLiveDriverPos] = useState<{ lat: number; lng: number } | null>(
         ride.driver?.lat && ride.driver?.lng ? { lat: ride.driver.lat, lng: ride.driver.lng } : null
@@ -178,8 +180,12 @@ export const RideStatusOverlay: React.FC<RideStatusOverlayProps> = ({ ride, onCa
                                     <div>
                                         <h4 className="text-xl font-black text-white leading-tight uppercase tracking-tight">{ride.driver.username}</h4>
                                         <p className="text-whatsapp-green text-sm font-bold flex items-center gap-1">
-                                            <span className="material-icons text-sm">{ride.driver.vehicle_type === 'motorcycle' ? 'two_wheeler' : 'directions_car'}</span>
-                                            {ride.driver.vehicle_type === 'motorcycle' ? 'Moto Ativa' : 'Carro Ativo'}
+                                            {getCategoryMeta(ride.driver.vehicle_type).icon_url ? (
+                                                <img src={getCategoryMeta(ride.driver.vehicle_type).icon_url} alt="" className="w-4 h-4 object-contain" />
+                                            ) : (
+                                                <span className="material-icons text-sm">{ride.driver.vehicle_type === 'motorcycle' ? 'two_wheeler' : 'directions_car'}</span>
+                                            )}
+                                            {getCategoryMeta(ride.driver.vehicle_type).name}
                                         </p>
                                     </div>
                                 </div>

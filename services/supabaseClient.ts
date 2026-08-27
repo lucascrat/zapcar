@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SCHEMA } from '../constants';
-import { Message, UserProfile, UserRole, DriverStatus, AppSettings, BingoSettings, BingoCard, BingoRankingUser, BroadcastMessage, DriverPlan, Ride, Banner, Coupon, StoreProduct, WalletTransaction, StoreOrder, AppPaymentRequest, RewardTier, RewardsConfig, DriverRankingEntry, ChatContact } from '../types';
+import { Message, UserProfile, UserRole, DriverStatus, AppSettings, BingoSettings, BingoCard, BingoRankingUser, BroadcastMessage, DriverPlan, Ride, Banner, Coupon, StoreProduct, WalletTransaction, StoreOrder, AppPaymentRequest, RewardTier, RewardsConfig, DriverRankingEntry, ChatContact, VehicleCategory } from '../types';
 import { hashPassword } from '../utils/passwordHash';
 
 // Colunas de `profiles` seguras para devolver ao cliente depois de um INSERT/UPDATE.
@@ -1094,7 +1094,7 @@ export const registerClientWithPhoto = async (username: string, phone: string, a
 export const registerDriver = async (
   username: string,
   password?: string,
-  vehicleType?: 'car' | 'motorcycle',
+  vehicleType?: string,
   vehicleModel?: string,
   vehiclePlate?: string,
   vehicleColor?: string,
@@ -2764,67 +2764,50 @@ export const uploadStoreProductImage = async (file: File): Promise<string | null
 };
 
 /**
- * DINAMIC PRICING UTILITIES
+ * CATEGORIAS DE VEÍCULO (chegoja.vehicle_categories) - substitui o antigo par
+ * fixo car/motorcycle por uma lista cadastrável pelo admin. Ver types.ts
+ * (VehicleCategory) e services/pricing.ts (cálculo de preço unificado).
  */
+export const fetchVehicleCategories = async (activeOnly: boolean = true): Promise<VehicleCategory[]> => {
+  let query = supabase.from('vehicle_categories').select('*').order('sort_order', { ascending: true });
+  if (activeOnly) query = query.eq('is_active', true);
 
-export const getTariffForTime = (settings: AppSettings, vehicleType: 'car' | 'motorcycle') => {
-  const now = new Date();
-  const hours = now.getHours();
+  const { data, error } = await query;
+  if (error) {
+    handleDbError(error, "fetchVehicleCategories");
+    return [];
+  }
+  return data as VehicleCategory[];
+};
 
-  // Dawn: 00:00 - 05:00
-  if (hours >= 0 && hours < 5) {
-    if (vehicleType === 'car') {
-      return {
-        base: settings.dawn_car_base_price || settings.car_base_price,
-        perKm: settings.dawn_car_price_km || settings.car_price_km,
-        perMin: settings.dawn_car_price_min || settings.car_price_min,
-        label: "Madrugada"
-      };
-    } else {
-      return {
-        base: settings.dawn_moto_base_price || settings.moto_base_price,
-        perKm: settings.dawn_moto_price_km || settings.moto_price_km,
-        perMin: settings.dawn_moto_price_min || settings.moto_price_min,
-        label: "Madrugada"
-      };
-    }
+export const createVehicleCategory = async (category: Partial<VehicleCategory>): Promise<string | null> => {
+  const { error } = await supabase.from('vehicle_categories').insert([category]);
+  if (error) return handleDbError(error, "createVehicleCategory");
+  return null;
+};
+
+export const updateVehicleCategory = async (id: string, updates: Partial<VehicleCategory>): Promise<string | null> => {
+  const { error } = await supabase.from('vehicle_categories').update(updates).eq('id', id);
+  if (error) return handleDbError(error, "updateVehicleCategory");
+  return null;
+};
+
+// Nunca deixa motorista/corrida "órfão" apontando pra uma categoria que não
+// existe mais: se houver motorista cadastrado ou corrida (mesmo histórica)
+// usando o slug, bloqueia a exclusão e sugere desativar em vez de excluir.
+export const deleteVehicleCategory = async (id: string, slug: string): Promise<string | null> => {
+  const [{ count: driverCount }, { count: rideCount }] = await Promise.all([
+    supabase.from('profiles').select('id', { count: 'exact', head: true }).eq('vehicle_type', slug),
+    supabase.from('rides').select('id', { count: 'exact', head: true }).eq('vehicle_type', slug),
+  ]);
+
+  if ((driverCount || 0) > 0 || (rideCount || 0) > 0) {
+    return `Não é possível excluir: ${driverCount || 0} motorista(s) e ${rideCount || 0} corrida(s) usam essa categoria. Desative em vez de excluir.`;
   }
 
-  // Night: 20:00 - 23:59
-  if (hours >= 20 && hours <= 23) {
-    if (vehicleType === 'car') {
-      return {
-        base: settings.night_car_base_price || settings.car_base_price,
-        perKm: settings.night_car_price_km || settings.car_price_km,
-        perMin: settings.night_car_price_min || settings.car_price_min,
-        label: "Noite"
-      };
-    } else {
-      return {
-        base: settings.night_moto_base_price || settings.moto_base_price,
-        perKm: settings.night_moto_price_km || settings.moto_price_km,
-        perMin: settings.night_moto_price_min || settings.moto_price_min,
-        label: "Noite"
-      };
-    }
-  }
-
-  // Standard
-  if (vehicleType === 'car') {
-    return {
-      base: settings.car_base_price,
-      perKm: settings.car_price_km,
-      perMin: settings.car_price_min,
-      label: "Padrão"
-    };
-  } else {
-    return {
-      base: settings.moto_base_price,
-      perKm: settings.moto_price_km,
-      perMin: settings.moto_price_min,
-      label: "Padrão"
-    };
-  }
+  const { error } = await supabase.from('vehicle_categories').delete().eq('id', id);
+  if (error) return handleDbError(error, "deleteVehicleCategory");
+  return null;
 };
 
 /**

@@ -14,6 +14,8 @@ import { sendNotification } from '../services/notificationSender';
 import { RewardsHub } from './RewardsHub';
 import { geocodeForward, geocodeReverse, getDirections } from '../services/placesService';
 import { soundService } from '../services/soundService';
+import { calculateCategoryPrice } from '../services/pricing';
+import { useVehicleCategories } from '../src/contexts/VehicleCategoriesContext';
 
 interface ClientDashboardProps {
     currentUser: UserProfile;
@@ -38,9 +40,10 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
 }) => {
     const [drivers, setDrivers] = useState<UserProfile[]>([]);
     const [settings, setSettings] = useState<AppSettings | null>(null);
+    const { categories: vehicleCategories } = useVehicleCategories();
     const [coupons, setCoupons] = useState<Coupon[]>([]);
     const [selectedCoupon, setSelectedCoupon] = useState<Coupon | null>(null);
-    const [selectedVehicleType, setSelectedVehicleType] = useState<'car' | 'motorcycle'>('car');
+    const [selectedVehicleType, setSelectedVehicleType] = useState<string>('car');
     // Inicializa com a última localização conhecida do cliente (salva no banco
     // pelo rastreamento contínuo em App.tsx), igual já funciona no dashboard
     // do motorista — evita que o mapa comece numa cidade errada (hardcoded)
@@ -189,68 +192,27 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
         }
     }, [viewState, activeField]);
 
-    // ... calculatePrices logic restored ...
+    // Preço calculado via services/pricing.ts (fonte única, corrige o bug
+    // histórico de tarifa mínima/preço por minuto noturno-madrugada
+    // ambíguos - ver comentário no topo daquele arquivo). Ainda devolve só
+    // {car, motorcycle} porque o seletor de veículo aqui embaixo continua
+    // fixo nesses dois por enquanto - vira N categorias dinâmicas numa
+    // atualização futura isolada, dado o tamanho da reescrita de UI que isso
+    // exige.
     const calculatePrices = (distanceKm: number, timeMin: number) => {
-        if (!settings) return null;
-        const now = new Date();
-        const currentTime = now.getHours() * 60 + now.getMinutes();
+        const carCategory = vehicleCategories.find(c => c.slug === 'car');
+        const motoCategory = vehicleCategories.find(c => c.slug === 'motorcycle');
+        if (!carCategory || !motoCategory) return null;
 
-        const parseTime = (timeStr?: string) => {
-            if (!timeStr) return 0;
-            const [h, m] = timeStr.split(':').map(Number);
-            return h * 60 + m;
-        };
+        const windows = settings ? {
+            nightStartTime: settings.night_start_time,
+            nightEndTime: settings.night_end_time,
+            dawnStartTime: settings.dawn_start_time,
+            dawnEndTime: settings.dawn_end_time,
+        } : undefined;
 
-        const nightStart = parseTime(settings.night_start_time || '19:00');
-        const nightEnd = parseTime(settings.night_end_time || '23:59');
-        const dawnStart = parseTime(settings.dawn_start_time || '00:00');
-        const dawnEnd = parseTime(settings.dawn_end_time || '05:00');
-
-        let carBase = settings.car_base_price;
-        let carPerKm = settings.car_price_km;
-        let carPerMin = settings.car_price_per_minute || 0; // Use explicit per-minute setting
-        let carStartDistLimit = settings.car_start_distance_limit || 0;
-        let carMinFare = settings.car_price_min || 0; // Minimum Ride Price
-
-        let motoBase = settings.moto_base_price;
-        let motoPerKm = settings.moto_price_km;
-        let motoPerMin = settings.moto_price_per_minute || 0;
-        let motoStartDistLimit = settings.moto_start_distance_limit || 0;
-        let motoMinFare = settings.moto_price_min || 0;
-
-        const isNight = (nightStart < nightEnd)
-            ? (currentTime >= nightStart && currentTime <= nightEnd)
-            : (currentTime >= nightStart || currentTime <= nightEnd);
-
-        const isDawn = (dawnStart < dawnEnd)
-            ? (currentTime >= dawnStart && currentTime <= dawnEnd)
-            : (currentTime >= dawnStart || currentTime <= dawnEnd);
-
-        if (isDawn) {
-            carBase = settings.dawn_car_base_price ?? carBase;
-            carPerKm = settings.dawn_car_price_km ?? carPerKm;
-            carPerMin = settings.dawn_car_price_min ?? carPerMin;
-            motoBase = settings.dawn_moto_base_price ?? motoBase;
-            motoPerKm = settings.dawn_moto_price_km ?? motoPerKm;
-            motoPerMin = settings.dawn_moto_price_min ?? motoPerMin;
-        } else if (isNight) {
-            carBase = settings.night_car_base_price ?? carBase;
-            carPerKm = settings.night_car_price_km ?? carPerKm;
-            carPerMin = settings.night_car_price_min ?? carPerMin;
-            motoBase = settings.night_moto_base_price ?? motoBase;
-            motoPerKm = settings.night_moto_price_km ?? motoPerKm;
-            motoPerMin = settings.night_moto_price_min ?? motoPerMin;
-        }
-
-        const carExtraKm = Math.max(0, distanceKm - carStartDistLimit);
-        // Logic: Base + DistPrice + TimePrice
-        // Charge Time ALWAYS (even within limit), unlike previous logic.
-        const carCalculated = carBase + (carExtraKm * carPerKm) + (timeMin * carPerMin);
-        const carPrice = Math.max(carCalculated, carMinFare);
-
-        const motoExtraKm = Math.max(0, distanceKm - motoStartDistLimit);
-        const motoCalculated = motoBase + (motoExtraKm * motoPerKm) + (timeMin * motoPerMin);
-        const motoPrice = Math.max(motoCalculated, motoMinFare);
+        const carPrice = calculateCategoryPrice(carCategory, distanceKm, timeMin, new Date(), windows).price;
+        const motoPrice = calculateCategoryPrice(motoCategory, distanceKm, timeMin, new Date(), windows).price;
 
         return {
             car: carPrice,
@@ -515,7 +477,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
         }
     };
 
-    const handleRequestRide = async (type: 'car' | 'motorcycle') => {
+    const handleRequestRide = async (type: string) => {
         try {
             if (!userLocation) {
                 notify("GPS desligado ou sem sinal. Ative a localização e aguarde um momento.");
@@ -568,7 +530,11 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
                 coupon_id: selectedCoupon?.id,
                 discount_amount: discountAmount,
                 is_direct: false,
-                is_delivery: serviceMode === 'delivery'
+                // Pedir pela categoria "Entregas" conta como entrega automaticamente,
+                // mesmo sem passar pelo toggle Corrida/Entrega - telas do motorista
+                // que já leem is_delivery (DriverRideCall/DriverRideScreen) continuam
+                // funcionando sem mudança nenhuma nelas.
+                is_delivery: serviceMode === 'delivery' || type === 'entregas'
             });
 
             if (newRide) {
