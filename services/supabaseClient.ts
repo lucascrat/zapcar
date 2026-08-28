@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js';
 import { SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SCHEMA } from '../constants';
 import { Message, UserProfile, UserRole, DriverStatus, AppSettings, BingoSettings, BingoCard, BingoRankingUser, BroadcastMessage, DriverPlan, Ride, Banner, Coupon, StoreProduct, WalletTransaction, StoreOrder, AppPaymentRequest, RewardTier, RewardsConfig, DriverRankingEntry, ChatContact, VehicleCategory } from '../types';
 import { hashPassword } from '../utils/passwordHash';
+import { sendNotification } from './notificationSender';
 
 // ATENÇÃO AO ADICIONAR COLUNA AQUI: `chegoja.profiles` tem GRANT por COLUNA, não
 // por tabela (consequência do lockdown de `password`). Coluna nova NÃO herda os
@@ -2235,13 +2236,49 @@ export const updatePaymentRequestStatus = async (
 
     const { error } = await supabase
       .from('payment_requests')
-      .update({ status, admin_note: adminNote, updated_at: new Date().toISOString() })
+      .update({
+        status,
+        admin_note: adminNote,
+        paid_at: status === 'paid' ? new Date().toISOString() : null,
+        updated_at: new Date().toISOString(),
+      })
       .eq('id', requestId);
 
     if (error) {
       handleDbError(error, "updatePaymentRequestStatus");
       return false;
     }
+
+    // Avisa o motorista/cliente. É o unico retorno que ele tem: quando o admin
+    // marca como pago, o pedido some da lista de "pendentes" e o dinheiro (que
+    // ja saiu do saldo na solicitacao) nao volta - sem a notificacao ele fica
+    // sem saber se caiu ou nao.
+    try {
+      const valor = Number(request.amount_money || 0);
+      const isDriver = request.type === 'driver_payout';
+      if (status === 'paid') {
+        await sendNotification(
+          'Saque pago! 💸',
+          isDriver
+            ? `Seu saque de R$ ${valor.toFixed(2)} foi enviado via PIX. Confira sua conta.`
+            : `Seu resgate de ${request.amount_coins} moedas foi pago via PIX. Confira sua conta.`,
+          'user',
+          { targetUserId: request.user_id, data: { type: 'payout_paid', request_id: requestId } },
+        );
+      } else if (status === 'rejected') {
+        await sendNotification(
+          'Saque não realizado',
+          `Seu saque${isDriver ? ` de R$ ${valor.toFixed(2)}` : ''} não foi concluído` +
+            (adminNote ? ` (${adminNote})` : '') +
+            `. O valor foi devolvido para o seu saldo.`,
+          'user',
+          { targetUserId: request.user_id, data: { type: 'payout_rejected', request_id: requestId } },
+        );
+      }
+    } catch (notifyErr) {
+      console.warn('[updatePaymentRequestStatus] status atualizado, notificação falhou:', notifyErr);
+    }
+
     return true;
   } catch (e) {
     console.error("Exception updatePaymentRequestStatus", e);

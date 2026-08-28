@@ -6,7 +6,8 @@ import {
     fetchAllWalletTransactions,
     adminForcePayout,
     checkPayoutStatus,
-    fetchEfiBalance
+    fetchEfiBalance,
+    fetchAppSettings
 } from '../../../services/supabaseClient';
 import { Card, Button, Badge } from '../../components/shared';
 import { formatPixKeyForDisplay, getPixKeyTypeLabel } from '../../../utils/pixKey';
@@ -18,6 +19,9 @@ export const AdminWalletsView: React.FC = () => {
     const [filter, setFilter] = useState<'all' | 'pending' | 'paid' | 'rejected'>('pending');
     const [processingId, setProcessingId] = useState<string | null>(null);
     const [efiBalance, setEfiBalance] = useState<{ total?: number; blocked?: number; error?: string } | null>(null);
+    // Enquanto o Pix Envio da Efí não está liberado, o pagamento é manual: o
+    // botão ⚡ (enviar pelo app) só aparece quando o admin liga o automático.
+    const [autoPayoutOn, setAutoPayoutOn] = useState(false);
 
     useEffect(() => {
         loadData();
@@ -32,7 +36,8 @@ export const AdminWalletsView: React.FC = () => {
             ]);
             setRequests(reqs);
             setTransactions(txs as any);
-            fetchEfiBalance().then(setEfiBalance);
+            fetchAppSettings().then(s => setAutoPayoutOn(s.auto_payout_enabled === true)).catch(() => {});
+            if (reqs.some(r => (r as any).efi_e2e_id)) fetchEfiBalance().then(setEfiBalance);
 
             // Saques que a Efí devolveu como EM_PROCESSAMENTO ficam 'pending' com
             // e2eId: consulta o status atual e, se já concluiu/recusou, o próprio
@@ -69,14 +74,28 @@ export const AdminWalletsView: React.FC = () => {
     };
 
     const handleStatusUpdate = async (id: string, status: 'paid' | 'rejected') => {
-        const note = status === 'rejected' ? prompt("Motivo da rejeição:") || "" : "";
-        if (status === 'rejected' && !note) return;
+        const req = requests.find(r => r.id === id);
+        let note = '';
+        if (status === 'rejected') {
+            note = prompt("Motivo da rejeição (o motorista vê isso):") || "";
+            if (!note) return;
+        } else {
+            const chave = req ? formatPixKeyForDisplay(req.pix_key) : '';
+            const ok = window.confirm(
+                `Confirmar que você JÁ ENVIOU o PIX de R$ ${(req?.amount_money || 0).toFixed(2)}` +
+                (chave ? ` para ${chave}` : '') + '?\n\n' +
+                'O motorista vai receber a notificação "Saque pago". Só confirme depois de fazer a transferência.'
+            );
+            if (!ok) return;
+        }
 
         setProcessingId(id);
         try {
             const success = await updatePaymentRequestStatus(id, status, note);
             if (success) {
-                alert(`Solicitação ${status === 'paid' ? 'aprovada' : 'rejeitada'} com sucesso!`);
+                alert(status === 'paid'
+                    ? 'Marcado como pago. O motorista foi notificado.'
+                    : 'Saque rejeitado e valor estornado. O motorista foi notificado.');
                 await loadData();
             } else {
                 alert("Erro ao atualizar status.");
@@ -296,11 +315,11 @@ export const AdminWalletsView: React.FC = () => {
                                                 </td>
                                                 <td>
                                                     {req.status === 'pending' && (
-                                                        <div className="flex gap-2">
-                                                            {req.type === 'driver_payout' && (
+                                                        <div className="flex gap-2 items-center">
+                                                            {autoPayoutOn && req.type === 'driver_payout' && (
                                                                 <button
                                                                     className="admin-action-btn info"
-                                                                    title="Pagar via PIX agora (Efí)"
+                                                                    title="Enviar o PIX agora pela Efí (automático)"
                                                                     onClick={() => handleForcePayout(req.id)}
                                                                     disabled={!!processingId}
                                                                 >
@@ -308,16 +327,17 @@ export const AdminWalletsView: React.FC = () => {
                                                                 </button>
                                                             )}
                                                             <button
-                                                                className="admin-action-btn success"
-                                                                title="Marcar como pago (você já transferiu na mão)"
+                                                                className="px-2.5 py-1.5 rounded-lg bg-green-600 hover:bg-green-500 text-white text-xs font-bold flex items-center gap-1 disabled:opacity-50"
+                                                                title="Já enviei o PIX na mão - confirmar e notificar o motorista"
                                                                 onClick={() => handleStatusUpdate(req.id, 'paid')}
                                                                 disabled={!!processingId}
                                                             >
-                                                                <span className="material-icons">check</span>
+                                                                <span className="material-icons" style={{ fontSize: 16 }}>check</span>
+                                                                Já paguei
                                                             </button>
                                                             <button
                                                                 className="admin-action-btn danger"
-                                                                title="Rejeitar e Estornar"
+                                                                title="Rejeitar e estornar (o motorista é notificado com o motivo)"
                                                                 onClick={() => handleStatusUpdate(req.id, 'rejected')}
                                                                 disabled={!!processingId}
                                                             >

@@ -49,6 +49,7 @@ export const DriverProfileEditor: React.FC<DriverProfileEditorProps> = ({ curren
     const [processingWithdraw, setProcessingWithdraw] = useState(false);
     const [pendingRequests, setPendingRequests] = useState<AppPaymentRequest[]>([]);
     const [rejectedRequests, setRejectedRequests] = useState<AppPaymentRequest[]>([]);
+    const [paidRequests, setPaidRequests] = useState<AppPaymentRequest[]>([]);
 
     useEffect(() => {
         const init = async () => {
@@ -122,6 +123,13 @@ export const DriverProfileEditor: React.FC<DriverProfileEditorProps> = ({ curren
         // dinheiro reaparecer e não entende o que houve nem o que corrigir.
         setRejectedRequests(
             requests.filter((r: any) => r.status === 'rejected' && r.payout_error)
+                .slice(0, 3)
+        );
+        // Pagos nas últimas 48h - confirmação visual no app, além do push.
+        const cutoff = Date.now() - 48 * 3600 * 1000;
+        setPaidRequests(
+            requests.filter((r: any) => r.status === 'paid'
+                && new Date(r.paid_at || r.updated_at).getTime() > cutoff)
                 .slice(0, 3)
         );
     };
@@ -654,6 +662,29 @@ export const DriverProfileEditor: React.FC<DriverProfileEditorProps> = ({ curren
                                 </button>
                             )}
                         </div>
+
+                        {/* Saques pagos recentemente */}
+                        {paidRequests.length > 0 && (
+                            <div className="bg-green-500/10 border border-green-500/30 p-4 rounded-2xl">
+                                <h4 className="text-green-400 font-bold text-sm mb-2 flex items-center gap-2">
+                                    <span className="material-icons text-sm">check_circle</span>
+                                    Saque pago
+                                </h4>
+                                {paidRequests.map(req => (
+                                    <div key={req.id} className="flex justify-between items-center bg-black/20 p-3 rounded-xl mt-2">
+                                        <div>
+                                            <p className="text-white font-bold">R$ {req.amount_money.toFixed(2)}</p>
+                                            <p className="text-[10px] text-gray-400">
+                                                {new Date((req as any).paid_at || req.updated_at).toLocaleString('pt-BR')}
+                                            </p>
+                                        </div>
+                                        <span className="text-[10px] bg-green-500/20 text-green-400 px-2 py-1 rounded-full font-bold">
+                                            Pago via PIX
+                                        </span>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
 
                         {/* Pending Requests */}
                         {pendingRequests.length > 0 && (
