@@ -54,7 +54,7 @@ import { AdMobService } from './services/adMobService';
 import { pushService } from './services/pushService';
 import { sendNotification } from './services/notificationSender';
 
-const APP_VERSION = "6.2 (Stable)";
+const APP_VERSION = "6.2.3 (Stable)";
 
 export default function App() {
   // DEBUG MOUNT

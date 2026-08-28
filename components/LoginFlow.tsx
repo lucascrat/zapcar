@@ -12,7 +12,7 @@ import {
 import { APP_NAME } from '../constants';
 import { useVehicleCategories } from '../src/contexts/VehicleCategoriesContext';
 
-const APP_VERSION = "6.2 (Stable)";
+const APP_VERSION = "6.2.3 (Stable)";
 
 interface LoginFlowProps {
     onLoginSuccess: (user: UserProfile) => void;
