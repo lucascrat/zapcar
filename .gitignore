@@ -37,3 +37,6 @@ android_old/
 
 # Supabase CLI local cache/state
 supabase/.temp/
+
+# Gradle internal caches (nunca versionar)
+android/.gradle/
